@@ -32,6 +32,12 @@ SOURCE_ADAPTERS: dict[str, SourceAdapter] = {
         indicator_key="validacao_20m",
         parser=parse_toa_validation,
     ),
+    "toa_indicators": SourceAdapter(
+        key="toa_indicators",
+        label="Indicadores TOA",
+        indicator_key="validacao_20m",
+        parser=parse_toa_validation,
+    ),
 }
 
 

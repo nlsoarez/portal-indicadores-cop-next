@@ -4,10 +4,19 @@ import os
 import sqlite3
 from contextlib import contextmanager
 from pathlib import Path
+from typing import Any, Iterable
 
+
+DATABASE_URL = (
+    os.environ.get("DATABASE_URL")
+    or os.environ.get("POSTGRES_URL")
+    or os.environ.get("POSTGRES_URL_NON_POOLING")
+    or ""
+).strip()
 DB_PATH = Path(os.environ.get("COP_PORTAL_DB", "data/portal.db"))
 
-SCHEMA = """
+
+SQLITE_SCHEMA = """
 PRAGMA foreign_keys = ON;
 
 CREATE TABLE IF NOT EXISTS users (
@@ -114,12 +123,187 @@ CREATE INDEX IF NOT EXISTS idx_perf_segment ON user_performance_segments(segment
 """
 
 
-def connect() -> sqlite3.Connection:
+POSTGRES_SCHEMA = """
+CREATE TABLE IF NOT EXISTS users (
+    id BIGSERIAL PRIMARY KEY,
+    login TEXT NOT NULL UNIQUE,
+    full_name TEXT NOT NULL,
+    display_name TEXT NOT NULL,
+    password_hash TEXT NOT NULL,
+    password_salt TEXT NOT NULL,
+    must_change_password INTEGER NOT NULL DEFAULT 1,
+    active INTEGER NOT NULL DEFAULT 1,
+    created_at TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP
+);
+
+CREATE TABLE IF NOT EXISTS roles (
+    id BIGSERIAL PRIMARY KEY,
+    code TEXT NOT NULL UNIQUE,
+    name TEXT NOT NULL
+);
+
+CREATE TABLE IF NOT EXISTS user_roles (
+    user_id BIGINT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+    role_id BIGINT NOT NULL REFERENCES roles(id) ON DELETE CASCADE,
+    PRIMARY KEY (user_id, role_id)
+);
+
+CREATE TABLE IF NOT EXISTS segments (
+    id BIGSERIAL PRIMARY KEY,
+    slug TEXT NOT NULL UNIQUE,
+    name TEXT NOT NULL,
+    active INTEGER NOT NULL DEFAULT 1,
+    created_at TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP
+);
+
+CREATE TABLE IF NOT EXISTS user_segments (
+    user_id BIGINT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+    segment_id BIGINT NOT NULL REFERENCES segments(id) ON DELETE CASCADE,
+    PRIMARY KEY (user_id, segment_id)
+);
+
+CREATE TABLE IF NOT EXISTS user_performance_segments (
+    user_id BIGINT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+    segment_id BIGINT NOT NULL REFERENCES segments(id) ON DELETE CASCADE,
+    PRIMARY KEY (user_id, segment_id)
+);
+
+CREATE TABLE IF NOT EXISTS indicator_definitions (
+    id BIGSERIAL PRIMARY KEY,
+    segment_id BIGINT NOT NULL REFERENCES segments(id) ON DELETE CASCADE,
+    indicator_key TEXT NOT NULL,
+    name TEXT NOT NULL,
+    target_value DOUBLE PRECISION,
+    direction TEXT NOT NULL DEFAULT 'higher_is_better',
+    unit TEXT NOT NULL DEFAULT 'percent',
+    active INTEGER NOT NULL DEFAULT 1,
+    UNIQUE(segment_id, indicator_key)
+);
+
+CREATE TABLE IF NOT EXISTS indicator_results (
+    id BIGSERIAL PRIMARY KEY,
+    segment_id BIGINT NOT NULL REFERENCES segments(id) ON DELETE CASCADE,
+    user_id BIGINT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+    indicator_definition_id BIGINT NOT NULL REFERENCES indicator_definitions(id) ON DELETE CASCADE,
+    period TEXT NOT NULL,
+    data_month TEXT NOT NULL,
+    value DOUBLE PRECISION,
+    volume INTEGER NOT NULL DEFAULT 0,
+    created_at TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    UNIQUE(segment_id, user_id, indicator_definition_id, data_month, period)
+);
+
+CREATE TABLE IF NOT EXISTS uploads (
+    id BIGSERIAL PRIMARY KEY,
+    segment_id BIGINT NOT NULL REFERENCES segments(id) ON DELETE CASCADE,
+    source_key TEXT NOT NULL,
+    filename TEXT NOT NULL,
+    uploaded_by BIGINT NOT NULL REFERENCES users(id),
+    created_at TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP
+);
+
+CREATE TABLE IF NOT EXISTS indicator_freshness (
+    segment_id BIGINT NOT NULL REFERENCES segments(id) ON DELETE CASCADE,
+    indicator_definition_id BIGINT NOT NULL REFERENCES indicator_definitions(id) ON DELETE CASCADE,
+    data_through TEXT NOT NULL,
+    source_key TEXT NOT NULL,
+    upload_id BIGINT REFERENCES uploads(id) ON DELETE SET NULL,
+    refreshed_at TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    PRIMARY KEY (segment_id, indicator_definition_id)
+);
+
+CREATE TABLE IF NOT EXISTS access_logs (
+    id BIGSERIAL PRIMARY KEY,
+    user_id BIGINT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+    event_type TEXT NOT NULL,
+    created_at TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP
+);
+
+CREATE INDEX IF NOT EXISTS idx_results_segment_period ON indicator_results(segment_id, period);
+CREATE INDEX IF NOT EXISTS idx_results_user_segment ON indicator_results(user_id, segment_id);
+CREATE INDEX IF NOT EXISTS idx_results_segment_month ON indicator_results(segment_id, data_month);
+CREATE INDEX IF NOT EXISTS idx_uploads_segment_created ON uploads(segment_id, created_at DESC);
+CREATE INDEX IF NOT EXISTS idx_freshness_segment ON indicator_freshness(segment_id);
+CREATE INDEX IF NOT EXISTS idx_access_user_created ON access_logs(user_id, created_at DESC);
+CREATE INDEX IF NOT EXISTS idx_perf_segment ON user_performance_segments(segment_id, user_id);
+"""
+
+
+def using_postgres() -> bool:
+    return bool(DATABASE_URL)
+
+
+def database_backend() -> str:
+    return "postgresql" if using_postgres() else "sqlite"
+
+
+def database_is_persistent() -> bool:
+    if using_postgres():
+        return True
+    return not (os.environ.get("VERCEL") == "1" or str(DB_PATH).startswith("/tmp/"))
+
+
+def _postgres_sql(sql: str) -> str:
+    return sql.replace("?", "%s")
+
+
+class ConnectionAdapter:
+    def __init__(self, raw: Any, backend: str):
+        self.raw = raw
+        self.backend = backend
+
+    def execute(self, sql: str, params: Iterable[Any] | None = None):
+        values = tuple(params or ())
+        if self.backend == "postgresql":
+            return self.raw.execute(_postgres_sql(sql), values)
+        return self.raw.execute(sql, values)
+
+    def executemany(self, sql: str, rows: Iterable[Iterable[Any]]):
+        if self.backend == "postgresql":
+            with self.raw.cursor() as cur:
+                cur.executemany(_postgres_sql(sql), rows)
+                return cur
+        return self.raw.executemany(sql, rows)
+
+    def executescript(self, sql: str) -> None:
+        if self.backend == "postgresql":
+            for statement in _split_statements(sql):
+                self.raw.execute(statement)
+            return
+        self.raw.executescript(sql)
+
+    def commit(self) -> None:
+        self.raw.commit()
+
+    def rollback(self) -> None:
+        self.raw.rollback()
+
+    def close(self) -> None:
+        self.raw.close()
+
+
+def _split_statements(script: str) -> list[str]:
+    return [part.strip() for part in script.split(";") if part.strip()]
+
+
+def connect() -> ConnectionAdapter:
+    if using_postgres():
+        try:
+            import psycopg
+            from psycopg.rows import dict_row
+        except ImportError as exc:
+            raise RuntimeError(
+                "DATABASE_URL foi configurada, mas o driver PostgreSQL não está instalado"
+            ) from exc
+
+        raw = psycopg.connect(DATABASE_URL, row_factory=dict_row)
+        return ConnectionAdapter(raw, "postgresql")
+
     DB_PATH.parent.mkdir(parents=True, exist_ok=True)
-    conn = sqlite3.connect(DB_PATH)
-    conn.row_factory = sqlite3.Row
-    conn.execute("PRAGMA foreign_keys = ON")
-    return conn
+    raw = sqlite3.connect(DB_PATH)
+    raw.row_factory = sqlite3.Row
+    raw.execute("PRAGMA foreign_keys = ON")
+    return ConnectionAdapter(raw, "sqlite")
 
 
 @contextmanager
@@ -144,25 +328,60 @@ def transaction():
         conn.close()
 
 
+def insert_returning_id(conn: ConnectionAdapter, sql: str, params: Iterable[Any]) -> int:
+    if conn.backend == "postgresql":
+        row = conn.execute(sql.rstrip().rstrip(";") + " RETURNING id", params).fetchone()
+        if not row:
+            raise RuntimeError("INSERT não retornou id")
+        return int(row["id"])
+
+    cur = conn.execute(sql, params)
+    return int(cur.lastrowid)
+
+
 def initialize_database() -> None:
+    if using_postgres():
+        with transaction() as conn:
+            conn.executescript(POSTGRES_SCHEMA)
+            conn.execute("DROP TABLE IF EXISTS scales")
+            conn.execute(
+                "ALTER TABLE indicator_definitions ADD COLUMN IF NOT EXISTS unit TEXT NOT NULL DEFAULT 'percent'"
+            )
+            conn.execute(
+                "ALTER TABLE indicator_results ADD COLUMN IF NOT EXISTS data_month TEXT NOT NULL DEFAULT ''"
+            )
+            conn.execute(
+                "UPDATE indicator_results SET data_month=substring(period from 1 for 7) "
+                "WHERE data_month='' OR data_month IS NULL"
+            )
+            conn.execute(
+                "CREATE UNIQUE INDEX IF NOT EXISTS uq_indicator_results_competence "
+                "ON indicator_results(segment_id, user_id, indicator_definition_id, data_month, period)"
+            )
+        return
+
     with transaction() as conn:
-        conn.executescript(SCHEMA)
-        # Resíduo de uma versão inicial que não faz parte do escopo atual.
+        conn.executescript(SQLITE_SCHEMA)
         conn.execute("DROP TABLE IF EXISTS scales")
-        _ensure_column(conn, "indicator_definitions", "unit", "TEXT NOT NULL DEFAULT 'percent'")
-        _ensure_column(conn, "indicator_results", "data_month", "TEXT NOT NULL DEFAULT ''")
-        conn.execute("UPDATE indicator_results SET data_month=substr(period,1,7) WHERE data_month='' OR data_month IS NULL")
-        _migrate_indicator_results_unique(conn)
-        _ensure_result_indexes(conn)
+        _ensure_column_sqlite(conn, "indicator_definitions", "unit", "TEXT NOT NULL DEFAULT 'percent'")
+        _ensure_column_sqlite(conn, "indicator_results", "data_month", "TEXT NOT NULL DEFAULT ''")
+        conn.execute(
+            "UPDATE indicator_results SET data_month=substr(period,1,7) "
+            "WHERE data_month='' OR data_month IS NULL"
+        )
+        _migrate_indicator_results_unique_sqlite(conn)
+        _ensure_result_indexes_sqlite(conn)
 
 
-def _ensure_column(conn: sqlite3.Connection, table: str, column: str, definition: str) -> None:
+def _ensure_column_sqlite(
+    conn: ConnectionAdapter, table: str, column: str, definition: str
+) -> None:
     columns = {row["name"] for row in conn.execute(f"PRAGMA table_info({table})").fetchall()}
     if column not in columns:
         conn.execute(f"ALTER TABLE {table} ADD COLUMN {column} {definition}")
 
 
-def _migrate_indicator_results_unique(conn: sqlite3.Connection) -> None:
+def _migrate_indicator_results_unique_sqlite(conn: ConnectionAdapter) -> None:
     row = conn.execute(
         "SELECT sql FROM sqlite_master WHERE type='table' AND name='indicator_results'"
     ).fetchone()
@@ -203,7 +422,7 @@ def _migrate_indicator_results_unique(conn: sqlite3.Connection) -> None:
     conn.execute("ALTER TABLE indicator_results_v2 RENAME TO indicator_results")
 
 
-def _ensure_result_indexes(conn: sqlite3.Connection) -> None:
+def _ensure_result_indexes_sqlite(conn: ConnectionAdapter) -> None:
     conn.execute(
         "CREATE INDEX IF NOT EXISTS idx_results_segment_period ON indicator_results(segment_id, period)"
     )

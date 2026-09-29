@@ -20,21 +20,21 @@ RESIDENTIAL_INDICATORS: tuple[dict, ...] = (
     {
         "indicator_key": "res_etit_gpon",
         "name": "ETIT GPON",
-        "target_value": None,
+        "target_value": 90.0,
         "direction": "higher_is_better",
         "unit": "percent",
     },
     {
         "indicator_key": "res_assert_fibra_hfc",
         "name": "Assertividade Acionamento Fibra HFC",
-        "target_value": None,
+        "target_value": 85.0,
         "direction": "higher_is_better",
         "unit": "percent",
     },
     {
         "indicator_key": "res_assert_gpon",
         "name": "Assertividade Acionamento GPON",
-        "target_value": None,
+        "target_value": 85.0,
         "direction": "higher_is_better",
         "unit": "percent",
     },
@@ -56,7 +56,7 @@ RESIDENTIAL_INDICATORS: tuple[dict, ...] = (
     {
         "indicator_key": "toa_cancellation_rate",
         "name": "Tarefas Canceladas",
-        "target_value": 10.0,
+        "target_value": 15.0,
         "direction": "lower_is_better",
         "unit": "percent",
     },

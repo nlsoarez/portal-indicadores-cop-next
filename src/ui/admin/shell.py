@@ -15,7 +15,8 @@ from src.features.ingestion.source_catalog import UPLOAD_SOURCES
 from src.infrastructure.database import database_backend, database_is_persistent, persistence_diagnostics
 from src.infrastructure.repositories import IndicatorRepository, UploadRepository, UserRepository
 from src.ui.shared.chunked_upload import chunked_file_uploader, clear_chunked_upload
-from src.ui.shared.freshness import freshness_table_rows, render_indicator_freshness
+from src.ui.shared.freshness import render_indicator_freshness
+from src.ui.shared.management_indicators import render_management_indicators
 from src.ui.shared.person_performance import render_person_performance
 
 
@@ -35,24 +36,37 @@ class AdminShell:
     def render(self, ctx: AccessContext, segments: list[Segment]) -> None:
         st.sidebar.markdown("<span class='cop-role-admin'>ADMIN</span>", unsafe_allow_html=True)
         st.sidebar.markdown(f"### {ctx.user.display_name}")
-        segment = st.sidebar.selectbox(
-            "Segmento", segments, format_func=lambda item: item.name, key="admin_segment_selector"
-        )
-        switch_segment_state(st.session_state, segment.id)
         page = st.sidebar.radio(
             "Navegação",
-            ["Visão geral", "Analistas", "Líderes", "Indicadores", "Uploads", "Auditoria"],
+            ["Indicadores", "Visão geral", "Analistas", "Líderes", "Uploads", "Auditoria"],
             label_visibility="collapsed",
         )
+        segment = st.sidebar.selectbox(
+            "Segmento para as demais telas",
+            segments,
+            format_func=lambda item: item.name,
+            key="admin_segment_selector",
+        )
+        switch_segment_state(st.session_state, segment.id)
 
         st.markdown("<div class='cop-eyebrow'>Gestão operacional</div>", unsafe_allow_html=True)
-        st.markdown(f"<div class='cop-title'>{segment.name}</div>", unsafe_allow_html=True)
-        st.markdown(
-            "<div class='cop-subtitle'>Visão gerencial, indicadores e administração do portal.</div>",
-            unsafe_allow_html=True,
-        )
+        if page == "Indicadores":
+            st.markdown("<div class='cop-title'>Indicadores</div>", unsafe_allow_html=True)
+            st.markdown(
+                "<div class='cop-subtitle'>Visão consolidada geral, por setor e por analista.</div>",
+                unsafe_allow_html=True,
+            )
+        else:
+            st.markdown(f"<div class='cop-title'>{segment.name}</div>", unsafe_allow_html=True)
+            st.markdown(
+                "<div class='cop-subtitle'>Visão gerencial, indicadores e administração do portal.</div>",
+                unsafe_allow_html=True,
+            )
 
-        if page == "Visão geral":
+        if page == "Indicadores":
+            render_management_indicators(ctx, segments, self.dashboard)
+
+        elif page == "Visão geral":
             analysts = self.access.visible_users(ctx, segment.id)
             freshness = self.indicators.freshness(segment.id)
             c1, c2, c3 = st.columns(3)
@@ -106,20 +120,6 @@ class AdminShell:
                 current = next((row for row in access_rows if int(row["id"]) == leader.id), None)
                 if current:
                     st.caption(f"Último acesso: {current.get('last_access') or 'Nunca acessou'}")
-
-        elif page == "Indicadores":
-            definitions = self.indicators.definitions(segment.id)
-            freshness = self.indicators.freshness(segment.id)
-            if definitions:
-                st.dataframe(pd.DataFrame(definitions), use_container_width=True, hide_index=True)
-                st.markdown("#### Cobertura atual dos dados")
-                st.dataframe(
-                    pd.DataFrame(freshness_table_rows(freshness)),
-                    use_container_width=True,
-                    hide_index=True,
-                )
-            else:
-                st.info("Nenhum indicador foi configurado para este segmento ainda.")
 
         elif page == "Uploads":
             self._render_uploads(ctx)

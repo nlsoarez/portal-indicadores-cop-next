@@ -8,7 +8,8 @@ from src.application.dashboard_service import DashboardService
 from src.application.segment_context import switch_segment_state
 from src.domain.entities import AccessContext, Segment
 from src.infrastructure.repositories import IndicatorRepository, UserRepository
-from src.ui.shared.freshness import freshness_table_rows, render_indicator_freshness
+from src.ui.shared.freshness import render_indicator_freshness
+from src.ui.shared.management_indicators import render_management_indicators
 from src.ui.shared.person_performance import render_person_performance
 
 
@@ -27,17 +28,26 @@ class SubadminShell:
         )
         switch_segment_state(st.session_state, segment.id)
         page = st.sidebar.radio(
-            "Navegação", ["Visão geral", "Analistas", "Indicadores"], label_visibility="collapsed"
+            "Navegação", ["Indicadores", "Visão geral", "Analistas"], label_visibility="collapsed"
         )
 
         st.markdown("<div class='cop-eyebrow'>Visão de liderança</div>", unsafe_allow_html=True)
-        st.markdown(f"<div class='cop-title'>{segment.name}</div>", unsafe_allow_html=True)
-        st.markdown(
-            "<div class='cop-subtitle'>Consulta gerencial dos analistas. Uploads são exclusivos do Admin.</div>",
-            unsafe_allow_html=True,
-        )
+        if page == "Indicadores":
+            st.markdown("<div class='cop-title'>Indicadores</div>", unsafe_allow_html=True)
+            st.markdown(
+                "<div class='cop-subtitle'>Visão consolidada geral, por setor e por analista.</div>",
+                unsafe_allow_html=True,
+            )
+        else:
+            st.markdown(f"<div class='cop-title'>{segment.name}</div>", unsafe_allow_html=True)
+            st.markdown(
+                "<div class='cop-subtitle'>Consulta gerencial dos analistas. Uploads são exclusivos do Admin.</div>",
+                unsafe_allow_html=True,
+            )
 
-        if page == "Visão geral":
+        if page == "Indicadores":
+            render_management_indicators(ctx, segments, self.dashboard)
+        elif page == "Visão geral":
             analysts = self.access.visible_users(ctx, segment.id)
             freshness = self.indicators.freshness(segment.id)
             c1, c2 = st.columns(2)
@@ -62,16 +72,3 @@ class SubadminShell:
                 key=f"subadmin_analyst:{segment.id}",
             )
             render_person_performance(ctx, segment.id, target, self.dashboard)
-        else:
-            definitions = self.indicators.definitions(segment.id)
-            freshness = self.indicators.freshness(segment.id)
-            if definitions:
-                st.dataframe(pd.DataFrame(definitions), use_container_width=True, hide_index=True)
-                st.markdown("#### Cobertura atual dos dados")
-                st.dataframe(
-                    pd.DataFrame(freshness_table_rows(freshness)),
-                    use_container_width=True,
-                    hide_index=True,
-                )
-            else:
-                st.info("Nenhum indicador configurado para este segmento.")

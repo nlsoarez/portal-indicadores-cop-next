@@ -13,6 +13,7 @@ from src.domain.entities import AccessContext, Segment
 from src.features.ingestion.excel import ImportValidationError
 from src.features.ingestion.source_catalog import UPLOAD_SOURCES
 from src.infrastructure.repositories import IndicatorRepository, UploadRepository, UserRepository
+from src.ui.shared.chunked_upload import chunked_file_uploader, clear_chunked_upload
 from src.ui.shared.freshness import freshness_table_rows, render_indicator_freshness
 from src.ui.shared.person_performance import render_person_performance
 
@@ -152,12 +153,15 @@ class AdminShell:
                 else:
                     st.caption("Nenhum processamento registrado ainda.")
 
-                uploaded = st.file_uploader(
-                    f"Selecionar {source.label}",
-                    type=["xlsx", "xls"],
-                    key=f"global-upload:{source.key}",
-                    label_visibility="collapsed",
-                )
+                upload_key = f"global-upload:{source.key}"
+                uploaded = chunked_file_uploader(key=upload_key)
+
+                if uploaded is not None:
+                    size_mb = uploaded.size / (1024 * 1024)
+                    st.caption(
+                        f"Arquivo recebido: {uploaded.filename} · {size_mb:.1f} MB · pronto para processar."
+                    )
+
                 if st.button(
                     f"Processar {source.label}",
                     type="primary",
@@ -169,7 +173,7 @@ class AdminShell:
                         results = self.processing.process_global_source(
                             ctx,
                             source.key,
-                            uploaded.name,
+                            uploaded.filename,
                             uploaded.getvalue(),
                         )
                     except (ImportValidationError, ValueError, PermissionError) as exc:
@@ -179,5 +183,6 @@ class AdminShell:
                         for slug, result in results:
                             date_label = datetime.fromisoformat(result.data_through).strftime("%d/%m/%Y")
                             summary.append(f"{slug}: {result.indicator_name} · dados até {date_label}")
+                        clear_chunked_upload(upload_key)
                         st.success("Processamento concluído — " + " | ".join(summary))
                         st.rerun()

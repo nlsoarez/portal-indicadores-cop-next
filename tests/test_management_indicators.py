@@ -196,6 +196,75 @@ class ManagementIndicatorsTest(unittest.TestCase):
             })),
         )
 
+    def test_management_payload_exposes_analyst_category_breakdowns(self):
+        from src.infrastructure.repositories import IndicatorRepository, SegmentRepository, UserRepository
+
+        indicators = IndicatorRepository()
+        segment = SegmentRepository().get_by_slug("empresarial")
+        user = UserRepository().get_by_login("N0189105")
+        definition = indicators.get_definition(segment.id, "emp_etit_event")
+
+        indicators.replace_results_for_months(
+            segment_id=segment.id,
+            indicator_definition_id=int(definition["id"]),
+            login_to_user_id={"N0189105": user.id},
+            rows=({
+                "login": "N0189105",
+                "period": "2026-09-29",
+                "data_month": "2026-09",
+                "value": 80.0,
+                "volume": 10,
+            },),
+            months=("2026-09",),
+        )
+        indicators.replace_breakdowns_for_months(
+            segment_id=segment.id,
+            indicator_definition_id=int(definition["id"]),
+            months=("2026-09",),
+            rows=({
+                "scope": "team",
+                "login": "N0189105",
+                "period": "2026-09-29",
+                "data_month": "2026-09",
+                "dimension": "demand",
+                "dimension_value": "RAL",
+                "value": 80.0,
+                "volume": 10,
+                "successes": 8,
+                "losses": 2,
+            },),
+        )
+
+        payload = indicators.management_payload([segment.id])
+        self.assertEqual(1, len(payload["analyst_breakdowns"]))
+        row = payload["analyst_breakdowns"][0]
+        self.assertEqual("RAL", row["dimension_value"])
+        self.assertEqual("N0189105", row["login"])
+        self.assertEqual(8, row["successes"])
+        self.assertEqual(2, row["losses"])
+
+    def test_team_average_stats_zero_fills_missing_category(self):
+        from src.ui.shared.management_indicators import _team_average_stats
+
+        people = pd.DataFrame({"login": ["A", "B"]})
+        rows = pd.DataFrame({
+            "login": ["A", "B"],
+            "dimension_value": ["RAL", "REC"],
+            "successes": [8, 4],
+            "losses": [2, 1],
+            "volume": [10, 5],
+        })
+
+        stats = _team_average_stats(people, rows, ("RAL", "REC"))
+        by_category = {row["category"]: row for row in stats}
+
+        self.assertEqual(4.0, by_category["RAL"]["avg_successes"])
+        self.assertEqual(1.0, by_category["RAL"]["avg_losses"])
+        self.assertEqual(2.0, by_category["REC"]["avg_successes"])
+        self.assertEqual(0.5, by_category["REC"]["avg_losses"])
+        self.assertEqual(80.0, by_category["RAL"]["adherence"])
+        self.assertEqual(80.0, by_category["REC"]["adherence"])
+
     def test_chat_parser_keeps_hour_zero_and_external_night_record(self):
         from src.features.ingestion.chat_toa import parse_chat_toa
 

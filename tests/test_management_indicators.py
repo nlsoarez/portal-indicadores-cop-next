@@ -148,6 +148,20 @@ class ManagementIndicatorsTest(unittest.TestCase):
         self.assertIn(("service__group", "BROWNFIELD|||Rio e ES"), dimensions)
         self.assertIn(("service__city", "GREENFIELD|||RIO DE JANEIRO/RJ"), dimensions)
 
+    def test_scope_frame_handles_legacy_empty_breakdown(self):
+        from src.ui.shared.management_indicators import _scope_frame
+
+        self.assertTrue(_scope_frame(pd.DataFrame(), "Residencial").empty)
+        self.assertTrue(_scope_frame(pd.DataFrame({"period": ["2026-09-29"]}), "Residencial").empty)
+
+        frame = pd.DataFrame({
+            "segment_name": ["Residencial", "Empresarial"],
+            "value": [90.0, 80.0],
+        })
+        scoped = _scope_frame(frame, "Residencial")
+        self.assertEqual(1, len(scoped))
+        self.assertEqual("Residencial", scoped.iloc[0]["segment_name"])
+
     def test_chat_parser_keeps_hour_zero_and_external_night_record(self):
         from src.features.ingestion.chat_toa import parse_chat_toa
 

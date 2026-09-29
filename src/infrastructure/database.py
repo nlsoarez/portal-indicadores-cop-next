@@ -255,6 +255,21 @@ def database_is_persistent() -> bool:
     return not (os.environ.get("VERCEL") == "1" or str(DB_PATH).startswith("/tmp/"))
 
 
+def persistence_diagnostics() -> dict[str, str | bool]:
+    return {
+        "backend": database_backend(),
+        "persistent": database_is_persistent(),
+        "database_url_detected": bool(os.environ.get("DATABASE_URL", "").strip()),
+        "postgres_url_detected": bool(os.environ.get("POSTGRES_URL", "").strip()),
+        "postgres_non_pooling_detected": bool(
+            os.environ.get("POSTGRES_URL_NON_POOLING", "").strip()
+        ),
+        "vercel": os.environ.get("VERCEL") == "1",
+        "vercel_env": os.environ.get("VERCEL_ENV", ""),
+        "commit": os.environ.get("VERCEL_GIT_COMMIT_SHA", "")[:12],
+    }
+
+
 def _postgres_sql(sql: str) -> str:
     return sql.replace("?", "%s")
 

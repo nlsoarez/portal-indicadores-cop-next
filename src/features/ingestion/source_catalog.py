@@ -63,7 +63,7 @@ UPLOAD_SOURCES: tuple[UploadSource, ...] = (
         "Chat TOA",
         "Analítico TOA Chat",
         "Aderência do indicador Chat 10 min.",
-        ("preventiva",),
+        ("residencial", "preventiva"),
         "chat_toa",
     ),
     UploadSource(

@@ -13,6 +13,7 @@ DEFAULT_PASSWORD = "claro123"
 def seed_foundation() -> None:
     with transaction() as conn:
         conn.execute("INSERT OR IGNORE INTO roles(code, name) VALUES ('admin', 'Administrador')")
+        conn.execute("INSERT OR IGNORE INTO roles(code, name) VALUES ('subadmin', 'Subadministrador')")
         conn.execute("INSERT OR IGNORE INTO roles(code, name) VALUES ('analyst', 'Analista')")
         for segment in SEGMENTS:
             conn.execute(
@@ -25,18 +26,21 @@ def seed_foundation() -> None:
         residencial_id = conn.execute("SELECT id FROM segments WHERE slug='residencial'").fetchone()["id"]
         active_segment_ids = conn.execute("SELECT id FROM segments WHERE active=1").fetchall()
 
-        admin_accounts = [("ADMIN", "Administrador", "Administrador"), *LEADER_ADMINS]
-        for login, full_name, display_name in admin_accounts:
-            admin_id = _ensure_user(conn, login, full_name, display_name, "admin")
-            analyst_role_id = conn.execute("SELECT id FROM roles WHERE code='analyst'").fetchone()["id"]
+        admin_id = _ensure_user(conn, "ADMIN", "Administrador", "Administrador", "admin")
+        _set_single_role(conn, admin_id, "admin")
+        for segment_row in active_segment_ids:
             conn.execute(
-                "DELETE FROM user_roles WHERE user_id=? AND role_id=?",
-                (admin_id, analyst_role_id),
+                "INSERT OR IGNORE INTO user_segments(user_id, segment_id) VALUES (?, ?)",
+                (admin_id, int(segment_row["id"])),
             )
+
+        for login, full_name, display_name in LEADER_ADMINS:
+            leader_id = _ensure_user(conn, login, full_name, display_name, "subadmin")
+            _set_single_role(conn, leader_id, "subadmin")
             for segment_row in active_segment_ids:
                 conn.execute(
                     "INSERT OR IGNORE INTO user_segments(user_id, segment_id) VALUES (?, ?)",
-                    (admin_id, int(segment_row["id"])),
+                    (leader_id, int(segment_row["id"])),
                 )
 
         for login, full_name, display_name in PREVENTIVA_ANALYSTS:
@@ -106,3 +110,12 @@ def _ensure_user(conn, login: str, full_name: str, display_name: str, role_code:
         (user_id, role_id),
     )
     return user_id
+
+
+def _set_single_role(conn, user_id: int, role_code: str) -> None:
+    role_id = conn.execute("SELECT id FROM roles WHERE code=?", (role_code,)).fetchone()["id"]
+    conn.execute("DELETE FROM user_roles WHERE user_id=?", (user_id,))
+    conn.execute(
+        "INSERT INTO user_roles(user_id, role_id) VALUES (?, ?)",
+        (user_id, role_id),
+    )

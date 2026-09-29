@@ -71,7 +71,7 @@ UPLOAD_SOURCES: tuple[UploadSource, ...] = (
         "Indicadores TOA",
         "Analitico Indicadores TOA",
         "Tempo de Validação do Formulário e Tarefas Canceladas.",
-        ("preventiva",),
+        ("residencial", "empresarial", "preventiva"),
         "toa_indicators",
     ),
 )

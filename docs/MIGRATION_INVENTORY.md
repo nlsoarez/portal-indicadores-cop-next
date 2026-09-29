@@ -38,3 +38,11 @@
 - Estado de UI segment-scoped com limpeza na troca de segmento.
 - Preventiva com Daniel, Rosana, Carlos e Maristella.
 - Testes server-side de isolamento entre analistas.
+
+
+## MIGRADO
+
+- Chat TOA -> adapter `src/features/ingestion/chat_toa.py`.
+- Tempo de Validação do Formulário -> adapter `src/features/ingestion/toa_validation.py`.
+- Upload administrativo dessas duas fontes.
+- Resultados diários, resumo mensal ponderado, média de equipe e data de cobertura por indicador.

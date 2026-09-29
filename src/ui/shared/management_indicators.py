@@ -427,7 +427,7 @@ def _render_operational_details(
             category_tabs = st.tabs([label for label, _ in available_categories])
             for category_tab, (_, dimensions) in zip(category_tabs, available_categories):
                 with category_tab:
-                    dimension_tabs = st.tabs([DIMENSION_LABELS[dimension] for dimension in dimensions])
+                    dimension_tabs = st.tabs([DIMENSION_LABELS.get(dimension, dimension) for dimension in dimensions])
                     for dimension_tab, dimension in zip(dimension_tabs, dimensions):
                         with dimension_tab:
                             part = _dimension_rows(scoped, dimension)
@@ -444,8 +444,8 @@ def _render_time_details(
     indicator_key: str,
     indicator_rows: pd.DataFrame,
 ) -> None:
-    segment_names = sorted(indicator_rows["segment_name"].dropna().astype(str).unique())
-    scopes = ["Geral", *segment_names] if len(segment_names) > 1 else segment_names
+    segment_names = _segment_names(indicator_rows)
+    scopes = ["Geral", *segment_names] if len(segment_names) > 1 else (segment_names or ["Geral"])
     scope_tabs = st.tabs(scopes)
 
     for scope_tab, scope in zip(scope_tabs, scopes):

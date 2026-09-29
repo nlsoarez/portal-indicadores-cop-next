@@ -89,6 +89,16 @@ CREATE TABLE IF NOT EXISTS uploads (
     created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
 );
 
+CREATE TABLE IF NOT EXISTS indicator_freshness (
+    segment_id INTEGER NOT NULL REFERENCES segments(id) ON DELETE CASCADE,
+    indicator_definition_id INTEGER NOT NULL REFERENCES indicator_definitions(id) ON DELETE CASCADE,
+    data_through TEXT NOT NULL,
+    source_key TEXT NOT NULL,
+    upload_id INTEGER REFERENCES uploads(id) ON DELETE SET NULL,
+    refreshed_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    PRIMARY KEY (segment_id, indicator_definition_id)
+);
+
 CREATE TABLE IF NOT EXISTS access_logs (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
     user_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
@@ -99,6 +109,8 @@ CREATE TABLE IF NOT EXISTS access_logs (
 CREATE INDEX IF NOT EXISTS idx_results_segment_period ON indicator_results(segment_id, period);
 CREATE INDEX IF NOT EXISTS idx_results_user_segment ON indicator_results(user_id, segment_id);
 CREATE INDEX IF NOT EXISTS idx_scale_segment_date ON scales(segment_id, work_date);
+CREATE INDEX IF NOT EXISTS idx_uploads_segment_created ON uploads(segment_id, created_at DESC);
+CREATE INDEX IF NOT EXISTS idx_freshness_segment ON indicator_freshness(segment_id);
 CREATE INDEX IF NOT EXISTS idx_access_user_created ON access_logs(user_id, created_at DESC);
 """
 

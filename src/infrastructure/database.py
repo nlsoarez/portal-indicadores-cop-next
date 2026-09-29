@@ -334,7 +334,7 @@ def _postgres_pool():
             "DATABASE_URL foi configurada, mas o pool PostgreSQL não está instalado"
         ) from exc
 
-    return ConnectionPool(
+    pool = ConnectionPool(
         conninfo=DATABASE_URL,
         min_size=0,
         max_size=POSTGRES_POOL_MAX_SIZE,
@@ -347,8 +347,10 @@ def _postgres_pool():
             "application_name": "portal-indicadores-cop",
             "connect_timeout": 10,
         },
-        open=True,
+        open=False,
     )
+    pool.open()
+    return pool
 
 
 def connect() -> ConnectionAdapter:
@@ -360,7 +362,10 @@ def connect() -> ConnectionAdapter:
             # Supavisor em transaction mode (porta 6543).
             raw.execute("SET LOCAL search_path TO cop_portal, public")
         except Exception:
-            pool.putconn(raw)
+            try:
+                raw.rollback()
+            finally:
+                pool.putconn(raw)
             raise
         return ConnectionAdapter(raw, "postgresql", release=pool.putconn)
 

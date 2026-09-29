@@ -1,8 +1,10 @@
 from __future__ import annotations
 
 from src.application.security import hash_password
+from src.config.leaders import LEADER_ADMINS
 from src.features.segments.catalog import SEGMENTS
 from src.features.segments.preventiva import PREVENTIVA_ANALYSTS, PREVENTIVA_INDICATORS
+from src.features.segments.residencial import RESIDENTIAL_ANALYSTS
 from src.infrastructure.database import transaction
 
 DEFAULT_PASSWORD = "claro123"
@@ -20,19 +22,43 @@ def seed_foundation() -> None:
 
         _ensure_user(conn, "ADMIN", "Administrador", "Administrador", "admin")
         preventiva_id = conn.execute("SELECT id FROM segments WHERE slug='preventiva'").fetchone()["id"]
-        admin_id = conn.execute("SELECT id FROM users WHERE login='ADMIN'").fetchone()["id"]
+        residencial_id = conn.execute("SELECT id FROM segments WHERE slug='residencial'").fetchone()["id"]
         active_segment_ids = conn.execute("SELECT id FROM segments WHERE active=1").fetchall()
-        for segment_row in active_segment_ids:
+
+        admin_accounts = [("ADMIN", "Administrador", "Administrador"), *LEADER_ADMINS]
+        for login, full_name, display_name in admin_accounts:
+            admin_id = _ensure_user(conn, login, full_name, display_name, "admin")
+            analyst_role_id = conn.execute("SELECT id FROM roles WHERE code='analyst'").fetchone()["id"]
             conn.execute(
-                "INSERT OR IGNORE INTO user_segments(user_id, segment_id) VALUES (?, ?)",
-                (admin_id, int(segment_row["id"])),
+                "DELETE FROM user_roles WHERE user_id=? AND role_id=?",
+                (admin_id, analyst_role_id),
             )
+            for segment_row in active_segment_ids:
+                conn.execute(
+                    "INSERT OR IGNORE INTO user_segments(user_id, segment_id) VALUES (?, ?)",
+                    (admin_id, int(segment_row["id"])),
+                )
 
         for login, full_name, display_name in PREVENTIVA_ANALYSTS:
             user_id = _ensure_user(conn, login, full_name, display_name, "analyst")
             conn.execute(
                 "INSERT OR IGNORE INTO user_segments(user_id, segment_id) VALUES (?, ?)",
                 (user_id, preventiva_id),
+            )
+
+        for login, full_name, display_name in RESIDENTIAL_ANALYSTS:
+            user_id = _ensure_user(conn, login, full_name, display_name, "analyst")
+            conn.execute(
+                "INSERT OR IGNORE INTO user_segments(user_id, segment_id) VALUES (?, ?)",
+                (user_id, residencial_id),
+            )
+
+        # Maristella pertence somente à Preventiva neste portal.
+        maristella = conn.execute("SELECT id FROM users WHERE login='N5577565'").fetchone()
+        if maristella:
+            conn.execute(
+                "DELETE FROM user_segments WHERE user_id=? AND segment_id=?",
+                (int(maristella["id"]), residencial_id),
             )
 
         for indicator in PREVENTIVA_INDICATORS:
@@ -62,6 +88,10 @@ def _ensure_user(conn, login: str, full_name: str, display_name: str, role_code:
     existing = conn.execute("SELECT id FROM users WHERE login=?", (login,)).fetchone()
     if existing:
         user_id = int(existing["id"])
+        conn.execute(
+            "UPDATE users SET full_name=?, display_name=?, active=1 WHERE id=?",
+            (full_name, display_name, user_id),
+        )
     else:
         password_hash, salt = hash_password(DEFAULT_PASSWORD)
         cur = conn.execute(

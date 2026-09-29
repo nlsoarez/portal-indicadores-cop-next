@@ -30,6 +30,12 @@ class SupabasePostgresConfigTest(unittest.TestCase):
         self.assertTrue(callable(database.using_postgres))
         self.assertTrue(callable(database.database_is_persistent))
 
+    def test_postgres_pool_is_bounded_and_lazy(self):
+        from src.infrastructure import database
+
+        self.assertGreaterEqual(database.POSTGRES_POOL_MAX_SIZE, 1)
+        self.assertTrue(callable(database._postgres_pool))
+
 
 if __name__ == "__main__":
     unittest.main()

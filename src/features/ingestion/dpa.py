@@ -42,6 +42,17 @@ def parse_dpa(raw_bytes: bytes, allowed_logins: set[str]) -> tuple[ParsedIndicat
             key = (anomes, login, period)
             aggregates[key][0] += usage
             aggregates[key][1] += journey
+            add_ratio(
+                breakdowns,
+                anomes=anomes,
+                scope="team",
+                login=login,
+                period=period,
+                dimension="overall",
+                dimension_value="Total",
+                successes=usage,
+                volume=journey,
+            )
         else:
             add_ratio(
                 breakdowns, anomes=anomes, scope="external", login=login, period=period,

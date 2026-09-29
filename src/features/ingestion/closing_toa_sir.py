@@ -46,7 +46,7 @@ def parse_closing_toa_sir(raw_bytes: bytes, allowed_logins: set[str]) -> tuple[P
             aggregates[(anomes, login, day)][0] += assertive
             aggregates[(anomes, login, day)][1] += volume
             for dimension, dimension_value in (
-                ("region", region), ("group", record.get("IN_GRUPO")), ("turn", turn),
+                ("overall", "Total"), ("region", region), ("group", record.get("IN_GRUPO")), ("turn", turn),
                 ("demand", record.get("DEMANDA")), ("cause_toa", record.get("CAUSA_TOA")),
                 ("cause_sir", record.get("CAUSA_SIR")),
             ):

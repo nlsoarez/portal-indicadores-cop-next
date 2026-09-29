@@ -2,7 +2,14 @@ from __future__ import annotations
 
 from collections import defaultdict
 
-from src.features.ingestion.breakdowns import add_ratio, is_night, materialize, new_bucket
+from src.features.ingestion.breakdowns import (
+    add_ratio,
+    decimal_hours_to_seconds,
+    is_night,
+    materialize,
+    new_bucket,
+    turn_from_hour,
+)
 from src.features.ingestion.models import ParsedIndicatorBatch
 from src.features.ingestion.xlsx_stream import as_float, as_int, excel_date, excel_hour, iter_rows, normalize_login
 
@@ -33,7 +40,8 @@ def parse_residential_indicators(raw_bytes: bytes, allowed_logins: set[str]) -> 
     latest_anomes = 0
     optional = {
         COL_LOGIN_UNIFIED, COL_LOGIN_FO, COL_LOGIN_GPON,
-        "IN_GRUPO", "TURNO", "NATUREZA", "SOLUCAO", "IMPACTO",
+        "IN_GRUPO", "TURNO", "SERVICO", "NATUREZA", "SOLUCAO", "IMPACTO",
+        "TMA", "TMR",
     }
     required = {COL_INDICATOR, COL_VOLUME, COL_VALUE, COL_REGIONAL, COL_DATE, COL_ANOMES}
 
@@ -52,39 +60,71 @@ def parse_residential_indicators(raw_bytes: bytes, allowed_logins: set[str]) -> 
         region = str(row.get(COL_REGIONAL) or "").strip()
         if region.upper() != "LESTE":
             continue
-        login = normalize_login(row.get(COL_LOGIN_UNIFIED))
+
+        primary_login_col = COL_LOGIN_FO if indicator in HFC_INDICATORS else COL_LOGIN_GPON
+        login = normalize_login(row.get(primary_login_col))
         if not login:
-            login = normalize_login(row.get(COL_LOGIN_FO if indicator in HFC_INDICATORS else COL_LOGIN_GPON))
+            login = normalize_login(row.get(COL_LOGIN_UNIFIED))
         if not login:
-            continue
-        anomes = as_int(row.get(COL_ANOMES))
-        period = excel_date(row.get(COL_DATE))
-        value = as_float(row.get(COL_VALUE), -1)
-        volume = as_float(row.get(COL_VOLUME), 0)
-        if anomes <= 0 or not period or value not in (0.0, 1.0) or volume <= 0:
             continue
 
-        success = value * volume
+        anomes = as_int(row.get(COL_ANOMES))
+        period = excel_date(row.get(COL_DATE))
+        metric = as_float(row.get(COL_VALUE), -1)
+        volume = as_float(row.get(COL_VOLUME), 0)
+        if anomes <= 0 or not period or metric not in (0.0, 1.0) or volume <= 0:
+            continue
+
+        success = metric * volume
         hour = excel_hour(row.get(COL_DATE))
-        turn = row.get("TURNO")
+        turn = turn_from_hour(hour)
+        tma_seconds = decimal_hours_to_seconds(row.get("TMA"))
+        tmr_seconds = decimal_hours_to_seconds(row.get("TMR"))
         bucket = breakdowns_by_indicator[indicator_key]
+
         if login in allowed:
             latest_anomes = max(latest_anomes, anomes)
             key = (anomes, indicator_key, login, period)
             aggregates[key][0] += success
             aggregates[key][1] += volume
             for dimension, dimension_value in (
-                ("region", region), ("group", row.get("IN_GRUPO")),
-                ("hour", hour), ("nature", row.get("NATUREZA")),
-                ("solution", row.get("SOLUCAO")), ("impact", row.get("IMPACTO")),
+                ("overall", "Total"),
+                ("region", region),
+                ("group", row.get("IN_GRUPO")),
+                ("turn", turn),
+                ("hour", hour),
+                ("service", row.get("SERVICO")),
+                ("nature", row.get("NATUREZA")),
+                ("solution", row.get("SOLUCAO")),
+                ("impact", row.get("IMPACTO")),
             ):
-                add_ratio(bucket, anomes=anomes, scope="team", login=login, period=period,
-                          dimension=dimension, dimension_value=dimension_value,
-                          successes=success, volume=volume)
+                add_ratio(
+                    bucket,
+                    anomes=anomes,
+                    scope="team",
+                    login=login,
+                    period=period,
+                    dimension=dimension,
+                    dimension_value=dimension_value,
+                    successes=success,
+                    volume=volume,
+                    tma_seconds=tma_seconds,
+                    tmr_seconds=tmr_seconds,
+                )
         elif is_night(hour, turn):
-            add_ratio(bucket, anomes=anomes, scope="external", login=login, period=period,
-                      dimension="external_hour", dimension_value=hour if hour is not None else "Madrugada",
-                      successes=success, volume=volume)
+            add_ratio(
+                bucket,
+                anomes=anomes,
+                scope="external",
+                login=login,
+                period=period,
+                dimension="external_hour",
+                dimension_value=hour if hour is not None else "Madrugada",
+                successes=success,
+                volume=volume,
+                tma_seconds=tma_seconds,
+                tmr_seconds=tmr_seconds,
+            )
 
     if latest_anomes <= 0:
         return ()
@@ -96,12 +136,22 @@ def parse_residential_indicators(raw_bytes: bytes, allowed_logins: set[str]) -> 
         for (anomes, key, login, period), (gain, volume) in sorted(aggregates.items()):
             if anomes != latest_anomes or key != indicator_key or volume <= 0:
                 continue
-            rows.append({"login": login, "period": period, "data_month": data_month, "value": round(gain / volume * 100, 1), "volume": int(round(volume))})
+            rows.append({
+                "login": login,
+                "period": period,
+                "data_month": data_month,
+                "value": round(gain / volume * 100, 1),
+                "volume": int(round(volume)),
+            })
         if rows:
             batches.append(
                 ParsedIndicatorBatch(
-                    SOURCE_KEY, indicator_key, max(r["period"] for r in rows), tuple(rows),
-                    (data_month,), materialize(breakdowns_by_indicator[indicator_key], latest_anomes),
+                    SOURCE_KEY,
+                    indicator_key,
+                    max(r["period"] for r in rows),
+                    tuple(rows),
+                    (data_month,),
+                    materialize(breakdowns_by_indicator[indicator_key], latest_anomes),
                 )
             )
     return tuple(batches)

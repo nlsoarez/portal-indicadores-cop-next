@@ -444,10 +444,18 @@ def initialize_database() -> None:
                     volume INTEGER NOT NULL DEFAULT 0,
                     successes INTEGER NOT NULL DEFAULT 0,
                     losses INTEGER NOT NULL DEFAULT 0,
+                    tma_seconds_sum DOUBLE PRECISION NOT NULL DEFAULT 0,
+                    tma_count INTEGER NOT NULL DEFAULT 0,
+                    tmr_seconds_sum DOUBLE PRECISION NOT NULL DEFAULT 0,
+                    tmr_count INTEGER NOT NULL DEFAULT 0,
                     created_at TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP
                 )
                 """
             )
+            conn.execute("ALTER TABLE indicator_breakdowns ADD COLUMN IF NOT EXISTS tma_seconds_sum DOUBLE PRECISION NOT NULL DEFAULT 0")
+            conn.execute("ALTER TABLE indicator_breakdowns ADD COLUMN IF NOT EXISTS tma_count INTEGER NOT NULL DEFAULT 0")
+            conn.execute("ALTER TABLE indicator_breakdowns ADD COLUMN IF NOT EXISTS tmr_seconds_sum DOUBLE PRECISION NOT NULL DEFAULT 0")
+            conn.execute("ALTER TABLE indicator_breakdowns ADD COLUMN IF NOT EXISTS tmr_count INTEGER NOT NULL DEFAULT 0")
             conn.execute(
                 "CREATE INDEX IF NOT EXISTS idx_breakdowns_segment_month "
                 "ON indicator_breakdowns(segment_id, indicator_definition_id, data_month)"
@@ -491,10 +499,18 @@ def initialize_database() -> None:
                 volume INTEGER NOT NULL DEFAULT 0,
                 successes INTEGER NOT NULL DEFAULT 0,
                 losses INTEGER NOT NULL DEFAULT 0,
+                tma_seconds_sum REAL NOT NULL DEFAULT 0,
+                tma_count INTEGER NOT NULL DEFAULT 0,
+                tmr_seconds_sum REAL NOT NULL DEFAULT 0,
+                tmr_count INTEGER NOT NULL DEFAULT 0,
                 created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
             )
             """
         )
+        _ensure_column_sqlite(conn, "indicator_breakdowns", "tma_seconds_sum", "REAL NOT NULL DEFAULT 0")
+        _ensure_column_sqlite(conn, "indicator_breakdowns", "tma_count", "INTEGER NOT NULL DEFAULT 0")
+        _ensure_column_sqlite(conn, "indicator_breakdowns", "tmr_seconds_sum", "REAL NOT NULL DEFAULT 0")
+        _ensure_column_sqlite(conn, "indicator_breakdowns", "tmr_count", "INTEGER NOT NULL DEFAULT 0")
         conn.execute(
             "CREATE INDEX IF NOT EXISTS idx_breakdowns_segment_month "
             "ON indicator_breakdowns(segment_id, indicator_definition_id, data_month)"

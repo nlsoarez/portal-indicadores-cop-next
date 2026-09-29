@@ -5,7 +5,7 @@ import streamlit as st
 from src.application.access_service import AccessService
 from src.application.auth_service import AuthService
 from src.config.seed import seed_foundation
-from src.infrastructure.database import initialize_database
+from src.infrastructure.database import database_is_persistent, initialize_database, persistence_diagnostics
 from src.infrastructure.repositories import SegmentRepository
 from src.ui.admin.shell import AdminShell
 from src.ui.analyst.shell import AnalystShell
@@ -38,6 +38,28 @@ def _login() -> None:
 
 def _change_password(user_id: int) -> None:
     st.warning("Troca de senha obrigatória no primeiro acesso.")
+
+    if not database_is_persistent():
+        diag = persistence_diagnostics()
+        st.error(
+            "A troca de senha foi bloqueada porque este deployment ainda não está conectado "
+            "ao PostgreSQL persistente."
+        )
+        st.code(
+            "Backend: {backend}\n"
+            "DATABASE_URL detectada: {database_url}\n"
+            "POSTGRES_URL detectada: {postgres_url}\n"
+            "Ambiente Vercel: {vercel_env}\n"
+            "Commit: {commit}".format(
+                backend=diag["backend"],
+                database_url="SIM" if diag["database_url_detected"] else "NÃO",
+                postgres_url="SIM" if diag["postgres_url_detected"] else "NÃO",
+                vercel_env=diag["vercel_env"] or "não informado",
+                commit=diag["commit"] or "não informado",
+            )
+        )
+        return
+
     with st.form("change-password"):
         p1 = st.text_input("Nova senha", type="password")
         p2 = st.text_input("Confirme a nova senha", type="password")

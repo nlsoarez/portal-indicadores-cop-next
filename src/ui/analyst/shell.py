@@ -205,8 +205,8 @@ class AnalystShell:
                 losses = int(item.get("losses") or 0)
                 if losses <= 0:
                     continue
-                value = _number(item.get("value"))
-                team_avg = _team_value(team_details, dimension, str(item.get("dimension_value")))
+                value = _detail_value(item, indicator_key)
+                team_avg = _team_value(team_details, dimension, str(item.get("dimension_value")), indicator_key)
                 candidates.append({
                     "Foco": DIMENSION_LABELS.get(dimension, dimension),
                     "Onde": str(item.get("dimension_value") or "—"),
@@ -297,9 +297,9 @@ class AnalystShell:
 
             rows = []
             for _, item in mine.iterrows():
-                value = _number(item.get("value"))
+                value = _detail_value(item, indicator_key)
                 category = str(item.get("dimension_value") or "—")
-                team_avg = _team_value(team_details, dimension, category)
+                team_avg = _team_value(team_details, dimension, category, indicator_key)
                 rows.append({
                     DIMENSION_LABELS.get(dimension, dimension): category,
                     "Meu resultado": _format_ptbr_metric(value, "percent"),
@@ -414,11 +414,33 @@ def _dimension_rows(frame: pd.DataFrame, dimension: str) -> pd.DataFrame:
     return frame[frame["dimension"].astype(str) == dimension].copy()
 
 
-def _team_value(team_details: pd.DataFrame, dimension: str, value: str) -> float | None:
+def _detail_value(row: pd.Series, indicator_key: str) -> float | None:
+    if indicator_key == "toa_cancellation_rate":
+        volume = _number(row.get("volume"))
+        losses = _number(row.get("losses"))
+        if volume is None or volume <= 0 or losses is None:
+            return None
+        return losses / volume * 100
+    return _number(row.get("value"))
+
+
+def _team_value(
+    team_details: pd.DataFrame,
+    dimension: str,
+    value: str,
+    indicator_key: str | None = None,
+) -> float | None:
     rows = _dimension_rows(team_details, dimension)
     if rows.empty or "dimension_value" not in rows.columns:
         return None
     rows = rows[rows["dimension_value"].astype(str) == str(value)]
+    if rows.empty:
+        return None
+    if indicator_key == "toa_cancellation_rate":
+        volumes = pd.to_numeric(rows["team_volume"], errors="coerce").fillna(0)
+        losses = pd.to_numeric(rows["team_losses"], errors="coerce").fillna(0)
+        total_volume = float(volumes.sum())
+        return None if total_volume <= 0 else float(losses.sum()) / total_volume * 100
     return _weighted_team_avg(rows)
 
 

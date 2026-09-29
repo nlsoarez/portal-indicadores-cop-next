@@ -6,6 +6,7 @@ import pandas as pd
 import streamlit as st
 
 from src.application.access_service import AccessService
+from src.application.dashboard_service import DashboardService
 from src.application.segment_context import switch_segment_state
 from src.application.upload_service import UploadProcessingService
 from src.domain.entities import AccessContext, Segment
@@ -13,6 +14,7 @@ from src.features.ingestion.excel import ImportValidationError
 from src.features.ingestion.registry import sources_for_indicator_keys
 from src.infrastructure.repositories import IndicatorRepository, UploadRepository, UserRepository
 from src.ui.shared.freshness import freshness_table_rows, render_indicator_freshness
+from src.ui.shared.person_performance import render_person_performance
 
 
 class AdminShell:
@@ -20,6 +22,7 @@ class AdminShell:
         self.access = AccessService()
         self.users = UserRepository()
         self.indicators = IndicatorRepository()
+        self.dashboard = DashboardService(access=self.access, indicators=self.indicators)
         self.uploads = UploadRepository()
         self.processing = UploadProcessingService(
             access=self.access,
@@ -39,7 +42,7 @@ class AdminShell:
         switch_segment_state(st.session_state, segment.id)
         page = st.sidebar.radio(
             "Navegação",
-            ["Visão geral", "Analistas", "Indicadores", "Uploads", "Auditoria"],
+            ["Visão geral", "Analistas", "Líderes", "Indicadores", "Uploads", "Auditoria"],
             label_visibility="collapsed",
         )
 
@@ -62,13 +65,44 @@ class AdminShell:
             st.dataframe(pd.DataFrame(last_access), use_container_width=True, hide_index=True)
 
         elif page == "Analistas":
-            st.dataframe(
-                pd.DataFrame(
-                    [{"login": u.login, "nome": u.display_name, "nome_completo": u.full_name} for u in analysts]
-                ),
-                use_container_width=True,
-                hide_index=True,
-            )
+            if not analysts:
+                st.info("Nenhum analista cadastrado neste segmento.")
+            else:
+                target = st.selectbox(
+                    "Analista",
+                    analysts,
+                    format_func=lambda user: f"{user.display_name} · {user.login}",
+                    key=f"admin_analyst:{segment.id}",
+                )
+                render_person_performance(ctx, segment.id, target, self.dashboard)
+
+        elif page == "Líderes":
+            leaders = self.access.visible_subadmins(ctx, segment.id)
+            st.caption("Área exclusiva do Admin. Líderes não aparecem na lista de analistas.")
+            if not leaders:
+                st.info("Nenhum líder cadastrado neste segmento.")
+            else:
+                leader = st.selectbox(
+                    "Líder",
+                    leaders,
+                    format_func=lambda user: f"{user.display_name} · {user.login}",
+                    key=f"admin_leader:{segment.id}",
+                )
+                render_person_performance(
+                    ctx,
+                    segment.id,
+                    leader,
+                    self.dashboard,
+                    comparison_label="média dos analistas",
+                )
+
+                leader_access = self.users.last_access_for_subadmins(segment.id)
+                current_access = next(
+                    (row for row in leader_access if int(row["id"]) == leader.id),
+                    None,
+                )
+                if current_access:
+                    st.caption(f"Último acesso: {current_access.get('last_access') or 'Nunca acessou'}")
 
         elif page == "Indicadores":
             definitions = self.indicators.definitions(segment.id)

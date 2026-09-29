@@ -265,6 +265,75 @@ class ManagementIndicatorsTest(unittest.TestCase):
         self.assertEqual(80.0, by_category["RAL"]["adherence"])
         self.assertEqual(80.0, by_category["REC"]["adherence"])
 
+    def test_analyst_payload_exposes_only_aggregate_team_breakdowns(self):
+        from src.infrastructure.repositories import IndicatorRepository, SegmentRepository, UserRepository
+
+        indicators = IndicatorRepository()
+        segment = SegmentRepository().get_by_slug("empresarial")
+        user = UserRepository().get_by_login("N0189105")
+        definition = indicators.get_definition(segment.id, "emp_etit_event")
+
+        indicators.replace_results_for_months(
+            segment_id=segment.id,
+            indicator_definition_id=int(definition["id"]),
+            login_to_user_id={user.login: user.id},
+            rows=({
+                "login": user.login,
+                "period": "2026-09-29",
+                "data_month": "2026-09",
+                "value": 80.0,
+                "volume": 10,
+            },),
+            months=("2026-09",),
+        )
+        indicators.replace_breakdowns_for_months(
+            segment_id=segment.id,
+            indicator_definition_id=int(definition["id"]),
+            months=("2026-09",),
+            rows=(
+                {
+                    "scope": "team", "login": user.login, "period": "2026-09-29",
+                    "data_month": "2026-09", "dimension": "demand", "dimension_value": "RAL",
+                    "value": 80.0, "volume": 10, "successes": 8, "losses": 2,
+                },
+                {
+                    "scope": "team", "login": user.login, "period": "2026-09-29",
+                    "data_month": "2026-09", "dimension": "incident", "dimension_value": "RAL|||INC123",
+                    "value": 0.0, "volume": 1, "successes": 0, "losses": 1,
+                },
+            ),
+        )
+
+        payload = indicators.dashboard_payload(segment.id, user.id)
+        self.assertEqual("RAL", payload["team_breakdowns"][0]["dimension_value"])
+        self.assertNotIn("login", payload["team_breakdowns"][0])
+        self.assertTrue(all(row["dimension"] != "incident" for row in payload["team_breakdowns"]))
+
+    def test_enterprise_parser_keeps_ral_rec_reference_from_nota(self):
+        from src.features.ingestion.enterprise_indicators import parse_enterprise_indicators
+
+        df = pd.DataFrame({
+            "INDICADOR_NOME": ["ETIT POR EVENTO"],
+            "LOGIN_ACIONAMENTO": ["N0189105"],
+            "VOLUME": [1],
+            "INDICADOR": [0],
+            "IN_REGIONAL": ["Leste"],
+            "DT_INICIO": ["2026-09-29 23:10:00"],
+            "ANOMES": [202609],
+            "DEMANDA": ["RAL"],
+            "NOTA": ["INC000123"],
+        })
+        raw = io.BytesIO()
+        with pd.ExcelWriter(raw, engine="openpyxl") as writer:
+            df.to_excel(writer, sheet_name="Empresarial", index=False)
+
+        batch = parse_enterprise_indicators(raw.getvalue(), {"N0189105"})[0]
+        refs = [
+            row for row in batch.breakdowns
+            if row["dimension"] == "incident" and row["losses"] > 0
+        ]
+        self.assertEqual("RAL|||INC000123", refs[0]["dimension_value"])
+
     def test_chat_parser_keeps_hour_zero_and_external_night_record(self):
         from src.features.ingestion.chat_toa import parse_chat_toa
 

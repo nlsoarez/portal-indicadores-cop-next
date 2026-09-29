@@ -828,6 +828,35 @@ class IndicatorRepository:
                 (segment_id,),
             ).fetchall()
 
+            team_breakdowns = conn.execute(
+                """
+                SELECT
+                    b.data_month AS period,
+                    d.indicator_key,
+                    d.name,
+                    d.unit,
+                    b.dimension,
+                    b.dimension_value,
+                    ROUND(CAST(SUM(b.value * b.volume) AS NUMERIC) / NULLIF(SUM(b.volume), 0), 1) AS team_avg,
+                    SUM(b.volume) AS team_volume,
+                    SUM(b.successes) AS team_successes,
+                    SUM(b.losses) AS team_losses
+                FROM indicator_breakdowns b
+                JOIN indicator_definitions d ON d.id=b.indicator_definition_id
+                WHERE b.segment_id=? AND b.scope='team' AND d.active=1
+                  AND b.dimension IN (
+                    'group', 'service', 'demand', 'cause', 'cause_toa', 'cause_sir',
+                    'area', 'area_involved', 'network', 'activity_type', 'incident_type',
+                    'aging', 'hour', 'base', 'queue', 'queue_type', 'productivity_component',
+                    'nature', 'impact', 'solution', 'city', 'technology', 'type'
+                  )
+                GROUP BY b.data_month, d.indicator_key, d.name, d.unit,
+                         b.dimension, b.dimension_value
+                ORDER BY d.name, b.data_month DESC, b.dimension, b.dimension_value
+                """,
+                (segment_id,),
+            ).fetchall()
+
             analyst_breakdowns = []
             if login:
                 analyst_breakdowns = conn.execute(
@@ -879,6 +908,7 @@ class IndicatorRepository:
             "summary": [dict(row) for row in summary],
             "team_averages": [dict(row) for row in team_averages],
             "team_daily": [dict(row) for row in team_daily],
+            "team_breakdowns": [dict(row) for row in team_breakdowns],
             "breakdowns": [dict(row) for row in analyst_breakdowns],
             "freshness": [dict(row) for row in freshness],
         }

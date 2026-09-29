@@ -22,7 +22,7 @@ def parse_enterprise_indicators(raw_bytes: bytes, allowed_logins: set[str]) -> t
     required = {"INDICADOR_NOME", "LOGIN_ACIONAMENTO", "VOLUME", "INDICADOR", "IN_REGIONAL", "DT_INICIO", "ANOMES"}
     optional = {
         "DT_ACIONAMENTO", "IN_GRUPO", "IN_CIDADE_UF", "IN_UF", "TURNO",
-        "DEMANDA", "TIPO", "AREA_ENVOLVIDA", "CAUSA", "TMA", "TMR",
+        "DEMANDA", "TIPO", "AREA_ENVOLVIDA", "CAUSA", "TMA", "TMR", "NOTA",
         "ID_ATIVIDADE", "ID_MOSTRA", "INCIDENTE", "ID_INCIDENTE", "NUMERO_INCIDENTE",
     }
     aggregates: dict[tuple[int, str, str], list[float]] = defaultdict(lambda: [0.0, 0.0])
@@ -58,7 +58,14 @@ def parse_enterprise_indicators(raw_bytes: bytes, allowed_logins: set[str]) -> t
         turn = str(row.get("TURNO") or "").strip() or turn_from_hour(hour)
         tma_seconds = decimal_hours_to_seconds(row.get("TMA"))
         tmr_seconds = decimal_hours_to_seconds(row.get("TMR"))
-        incident_id = next((row.get(key) for key in ("ID_ATIVIDADE", "ID_MOSTRA", "INCIDENTE", "ID_INCIDENTE", "NUMERO_INCIDENTE") if row.get(key)), None)
+        incident_id = next(
+            (
+                row.get(key)
+                for key in ("NOTA", "ID_ATIVIDADE", "ID_MOSTRA", "INCIDENTE", "ID_INCIDENTE", "NUMERO_INCIDENTE")
+                if row.get(key)
+            ),
+            None,
+        )
 
         if login in allowed:
             latest_anomes = max(latest_anomes, anomes)
@@ -66,7 +73,6 @@ def parse_enterprise_indicators(raw_bytes: bytes, allowed_logins: set[str]) -> t
             aggregates[(anomes, login, period)][1] += volume
             for dimension, dimension_value in (
                 ("overall", "Total"),
-                ("incident", incident_id),
                 ("region", region),
                 ("group", row.get("IN_GRUPO")),
                 ("city", row.get("IN_CIDADE_UF")),
@@ -86,6 +92,21 @@ def parse_enterprise_indicators(raw_bytes: bytes, allowed_logins: set[str]) -> t
                     period=period,
                     dimension=dimension,
                     dimension_value=dimension_value,
+                    successes=success,
+                    volume=volume,
+                    tma_seconds=tma_seconds,
+                    tmr_seconds=tmr_seconds,
+                )
+
+            if incident_id and success < volume:
+                add_ratio(
+                    breakdowns,
+                    anomes=anomes,
+                    scope="team",
+                    login=login,
+                    period=period,
+                    dimension="incident",
+                    dimension_value=_incident_reference(row.get("DEMANDA"), incident_id),
                     successes=success,
                     volume=volume,
                     tma_seconds=tma_seconds,
@@ -132,3 +153,11 @@ def parse_enterprise_indicators(raw_bytes: bytes, allowed_logins: set[str]) -> t
             materialize(breakdowns, latest_anomes),
         ),
     )
+
+
+def _incident_reference(demand: object | None, incident_id: object) -> str:
+    demand_value = str(demand or "").strip().upper()
+    incident_value = str(incident_id or "").strip()
+    if demand_value:
+        return f"{demand_value}|||{incident_value}"
+    return incident_value

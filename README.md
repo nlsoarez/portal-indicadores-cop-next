@@ -73,7 +73,7 @@ As sete fontes possuem adapter funcional. O backend identifica os usuários auto
 
 ## Banco e segurança
 
-- Usuários, roles, segmentos, memberships, indicadores, resultados, uploads, cobertura dos dados e logs de acesso ficam no banco relacional.
+- Usuários, roles, segmentos, memberships, indicadores, resultados, uploads, cobertura dos dados e logs de acesso ficam no banco relacional. Em Vercel, configure `DATABASE_URL` para PostgreSQL persistente; SQLite fica apenas como fallback local/teste.
 - Existe uma separação entre segmento que o usuário pode **consultar** e segmento em que seu próprio **desempenho** deve ser contabilizado.
 - Senha inicial `claro123`, persistida somente como hash PBKDF2, com troca obrigatória no primeiro acesso.
 - Autorização é validada no backend (`AccessService`); esconder um controle na interface não é usado como proteção de acesso.
@@ -110,3 +110,17 @@ No Vercel:
 6. Clique em **Deploy**.
 
 A integração Git do Vercel publica novos pushes diretamente, sem GitHub Actions.
+
+
+### Persistência no Vercel
+
+O container do Vercel não deve usar SQLite em `/tmp` como banco definitivo. O portal aceita, em ordem:
+
+1. `DATABASE_URL`
+2. `POSTGRES_URL`
+3. `POSTGRES_URL_NON_POOLING`
+4. SQLite via `COP_PORTAL_DB` apenas como fallback
+
+Para uso real, conecte um PostgreSQL/Neon ao projeto no Vercel e disponibilize `DATABASE_URL` para Production e Preview. O schema é criado automaticamente na inicialização.
+
+As planilhas Excel originais **não são arquivadas permanentemente** pelo portal. Elas são remontadas temporariamente durante o upload, processadas e removidas. O banco persiste os resultados normalizados, metadados do upload, cobertura dos indicadores, usuários, senhas e logs. Se for necessário manter cópia dos arquivos-fonte para auditoria, deve ser adicionada uma camada de object storage.

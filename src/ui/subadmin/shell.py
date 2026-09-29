@@ -37,10 +37,9 @@ class SubadminShell:
             unsafe_allow_html=True,
         )
 
-        analysts = self.access.visible_users(ctx, segment.id)
-        freshness = self.indicators.freshness(segment.id)
-
         if page == "Visão geral":
+            analysts = self.access.visible_users(ctx, segment.id)
+            freshness = self.indicators.freshness(segment.id)
             c1, c2 = st.columns(2)
             c1.metric("Analistas", len(analysts))
             c2.metric("Indicadores configurados", len(self.indicators.definitions(segment.id)))
@@ -52,6 +51,7 @@ class SubadminShell:
                 hide_index=True,
             )
         elif page == "Analistas":
+            analysts = self.access.visible_users(ctx, segment.id)
             if not analysts:
                 st.info("Nenhum analista cadastrado neste segmento.")
                 return
@@ -64,6 +64,7 @@ class SubadminShell:
             render_person_performance(ctx, segment.id, target, self.dashboard)
         else:
             definitions = self.indicators.definitions(segment.id)
+            freshness = self.indicators.freshness(segment.id)
             if definitions:
                 st.dataframe(pd.DataFrame(definitions), use_container_width=True, hide_index=True)
                 st.markdown("#### Cobertura atual dos dados")

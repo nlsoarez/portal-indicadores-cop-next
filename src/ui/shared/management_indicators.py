@@ -1220,23 +1220,43 @@ def _render_kpis(
     c4.metric("Analistas", analysts)
 
 
-def _sector_table(rows: pd.DataFrame, indicator_key: str, breakdown_df: pd.DataFrame) -> pd.DataFrame:
+def _sector_table(
+    rows: pd.DataFrame,
+    indicator_key: str,
+    breakdown_df: pd.DataFrame,
+    *,
+    target=None,
+    direction: str = "higher_is_better",
+) -> pd.DataFrame:
+    if rows is None or rows.empty:
+        return pd.DataFrame()
+
     output = []
     overall = _weighted_value(rows)
     total_volume = float(pd.to_numeric(rows["volume"], errors="coerce").fillna(0).sum())
-    output.append({
+    general = {
         "Setor": "Geral",
         "Resultado": _format_indicator_result(indicator_key, overall),
         "Base": _format_base(indicator_key, total_volume),
         "Analistas": _int(pd.to_numeric(rows["analysts"], errors="coerce").fillna(0).sum()),
-    })
+    }
+    gap = _format_gap(overall, target, direction, "percent")
+    if gap is not None:
+        general["Gap meta"] = gap
+    output.append(general)
+
     for _, row in rows.sort_values("segment_name").iterrows():
-        output.append({
-            "Setor": row["segment_name"],
-            "Resultado": _format_indicator_result(indicator_key, row.get("value")),
+        value = _number(row.get("value"))
+        item = {
+            "Setor": row.get("segment_name") or "—",
+            "Resultado": _format_indicator_result(indicator_key, value),
             "Base": _format_base(indicator_key, row.get("volume")),
             "Analistas": _int(row.get("analysts")),
-        })
+        }
+        gap = _format_gap(value, target, direction, row.get("unit") or "percent")
+        if gap is not None:
+            item["Gap meta"] = gap
+        output.append(item)
     return pd.DataFrame(output)
 
 
@@ -1296,12 +1316,14 @@ def _analyst_table(
                 item[success_label] = _int(row.get("successes"))
                 item[loss_label] = _int(row.get("losses"))
             item["Resultado"] = _fmt(value, unit)
-            if value is not None and target_num is not None:
-                item["Dif. meta"] = _fmt(round(value - target_num, 1), unit)
             if _number(row.get("tma_seconds")) is not None:
                 item["TMA médio"] = _duration(row.get("tma_seconds"))
             if _number(row.get("tmr_seconds")) is not None:
                 item["TMR médio"] = _duration(row.get("tmr_seconds"))
+
+        gap = _format_gap(value, target, direction, unit)
+        if gap is not None:
+            item["Gap meta"] = gap
 
         output.append(item)
 

@@ -743,15 +743,21 @@ class IndicatorRepository:
         return [dict(row) for row in rows]
 
     def dashboard_payload(self, segment_id: int, user_id: int) -> dict:
-        """Carrega a visão completa do dashboard usando uma única conexão."""
+        """Carrega apenas os dados necessários para a visão individual do analista."""
         with connection() as conn:
+            user_row = conn.execute(
+                "SELECT login FROM users WHERE id=? AND active=1",
+                (user_id,),
+            ).fetchone()
+            login = str(user_row["login"] if user_row else "").strip().upper()
+
             individual = conn.execute(
                 """
                 SELECT ir.period, ir.data_month, ir.value, ir.volume,
                        d.indicator_key, d.name, d.target_value, d.direction, d.unit
                 FROM indicator_results ir
                 JOIN indicator_definitions d ON d.id=ir.indicator_definition_id
-                WHERE ir.segment_id=? AND ir.user_id=?
+                WHERE ir.segment_id=? AND ir.user_id=? AND d.active=1
                 ORDER BY ir.period DESC, d.name
                 """,
                 (segment_id, user_id),
@@ -770,7 +776,7 @@ class IndicatorRepository:
                     SUM(ir.volume) AS volume
                 FROM indicator_results ir
                 JOIN indicator_definitions d ON d.id=ir.indicator_definition_id
-                WHERE ir.segment_id=? AND ir.user_id=?
+                WHERE ir.segment_id=? AND ir.user_id=? AND d.active=1
                 GROUP BY ir.data_month, d.indicator_key, d.name,
                          d.target_value, d.direction, d.unit
                 ORDER BY period DESC, d.name
@@ -794,12 +800,63 @@ class IndicatorRepository:
                 JOIN indicator_definitions d ON d.id=ir.indicator_definition_id
                 JOIN user_roles ur ON ur.user_id=ir.user_id
                 JOIN roles r ON r.id=ur.role_id AND r.code='analyst'
-                WHERE ir.segment_id=?
+                WHERE ir.segment_id=? AND d.active=1
                 GROUP BY ir.data_month, d.indicator_key, d.name, d.unit
                 ORDER BY period DESC, d.name
                 """,
                 (segment_id,),
             ).fetchall()
+
+            team_daily = conn.execute(
+                """
+                SELECT
+                    ir.period,
+                    ir.data_month,
+                    d.indicator_key,
+                    d.name,
+                    d.unit,
+                    ROUND(CAST(SUM(ir.value * ir.volume) AS NUMERIC) / NULLIF(SUM(ir.volume), 0), 1) AS team_avg,
+                    SUM(ir.volume) AS team_volume
+                FROM indicator_results ir
+                JOIN indicator_definitions d ON d.id=ir.indicator_definition_id
+                JOIN user_roles ur ON ur.user_id=ir.user_id
+                JOIN roles r ON r.id=ur.role_id AND r.code='analyst'
+                WHERE ir.segment_id=? AND d.active=1
+                GROUP BY ir.period, ir.data_month, d.indicator_key, d.name, d.unit
+                ORDER BY ir.period, d.name
+                """,
+                (segment_id,),
+            ).fetchall()
+
+            analyst_breakdowns = []
+            if login:
+                analyst_breakdowns = conn.execute(
+                    """
+                    SELECT
+                        b.data_month AS period,
+                        d.indicator_key,
+                        d.name,
+                        d.target_value,
+                        d.direction,
+                        d.unit,
+                        b.dimension,
+                        b.dimension_value,
+                        ROUND(CAST(SUM(b.value * b.volume) AS NUMERIC) / NULLIF(SUM(b.volume), 0), 1) AS value,
+                        SUM(b.volume) AS volume,
+                        SUM(b.successes) AS successes,
+                        SUM(b.losses) AS losses,
+                        SUM(b.tma_seconds_sum) / NULLIF(SUM(b.tma_count), 0) AS tma_seconds,
+                        SUM(b.tmr_seconds_sum) / NULLIF(SUM(b.tmr_count), 0) AS tmr_seconds
+                    FROM indicator_breakdowns b
+                    JOIN indicator_definitions d ON d.id=b.indicator_definition_id
+                    WHERE b.segment_id=? AND b.scope='team'
+                      AND UPPER(b.login)=UPPER(?) AND d.active=1
+                    GROUP BY b.data_month, d.indicator_key, d.name, d.target_value,
+                             d.direction, d.unit, b.dimension, b.dimension_value
+                    ORDER BY d.name, b.dimension, b.dimension_value
+                    """,
+                    (segment_id, login),
+                ).fetchall()
 
             freshness = conn.execute(
                 """
@@ -820,6 +877,8 @@ class IndicatorRepository:
             "individual": [dict(row) for row in individual],
             "summary": [dict(row) for row in summary],
             "team_averages": [dict(row) for row in team_averages],
+            "team_daily": [dict(row) for row in team_daily],
+            "breakdowns": [dict(row) for row in analyst_breakdowns],
             "freshness": [dict(row) for row in freshness],
         }
 

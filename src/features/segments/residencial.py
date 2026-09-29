@@ -38,5 +38,20 @@ RESIDENTIAL_INDICATORS: tuple[dict, ...] = (
         "direction": "higher_is_better",
         "unit": "percent",
     },
+
+    {
+        "indicator_key": "validacao_20m",
+        "name": "Tempo de Validação do Formulário",
+        "target_value": 80.0,
+        "direction": "higher_is_better",
+        "unit": "percent",
+    },
+    {
+        "indicator_key": "toa_cancellation_rate",
+        "name": "Tarefas Canceladas",
+        "target_value": None,
+        "direction": "lower_is_better",
+        "unit": "percent",
+    },
     *GENERIC_OPERATIONAL_INDICATORS,
 )

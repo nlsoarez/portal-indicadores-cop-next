@@ -417,6 +417,87 @@ class IndicatorRepository:
             ).fetchall()
         return [dict(row) for row in rows]
 
+    def dashboard_payload(self, segment_id: int, user_id: int) -> dict:
+        """Carrega a visão completa do dashboard usando uma única conexão."""
+        with connection() as conn:
+            individual = conn.execute(
+                """
+                SELECT ir.period, ir.data_month, ir.value, ir.volume,
+                       d.indicator_key, d.name, d.target_value, d.direction, d.unit
+                FROM indicator_results ir
+                JOIN indicator_definitions d ON d.id=ir.indicator_definition_id
+                WHERE ir.segment_id=? AND ir.user_id=?
+                ORDER BY ir.period DESC, d.name
+                """,
+                (segment_id, user_id),
+            ).fetchall()
+
+            summary = conn.execute(
+                """
+                SELECT
+                    ir.data_month AS period,
+                    d.indicator_key,
+                    d.name,
+                    d.target_value,
+                    d.direction,
+                    d.unit,
+                    ROUND(CAST(SUM(ir.value * ir.volume) AS NUMERIC) / NULLIF(SUM(ir.volume), 0), 1) AS value,
+                    SUM(ir.volume) AS volume
+                FROM indicator_results ir
+                JOIN indicator_definitions d ON d.id=ir.indicator_definition_id
+                WHERE ir.segment_id=? AND ir.user_id=?
+                GROUP BY ir.data_month, d.indicator_key, d.name,
+                         d.target_value, d.direction, d.unit
+                ORDER BY period DESC, d.name
+                """,
+                (segment_id, user_id),
+            ).fetchall()
+
+            team_averages = conn.execute(
+                """
+                SELECT
+                    ir.data_month AS period,
+                    d.indicator_key,
+                    d.name,
+                    d.unit,
+                    ROUND(CAST(SUM(ir.value * ir.volume) AS NUMERIC) / NULLIF(SUM(ir.volume), 0), 1) AS team_avg,
+                    SUM(ir.volume) AS team_volume,
+                    COUNT(DISTINCT ir.user_id) AS analysts_with_data,
+                    ROUND(CAST(SUM(ir.volume) AS NUMERIC) / NULLIF(COUNT(DISTINCT ir.user_id), 0), 1)
+                        AS avg_volume_per_analyst
+                FROM indicator_results ir
+                JOIN indicator_definitions d ON d.id=ir.indicator_definition_id
+                JOIN user_roles ur ON ur.user_id=ir.user_id
+                JOIN roles r ON r.id=ur.role_id AND r.code='analyst'
+                WHERE ir.segment_id=?
+                GROUP BY ir.data_month, d.indicator_key, d.name, d.unit
+                ORDER BY period DESC, d.name
+                """,
+                (segment_id,),
+            ).fetchall()
+
+            freshness = conn.execute(
+                """
+                SELECT d.id, d.indicator_key, d.name, d.target_value, d.direction, d.unit,
+                       f.data_through, f.source_key, f.refreshed_at,
+                       u.filename, u.created_at AS uploaded_at
+                FROM indicator_definitions d
+                LEFT JOIN indicator_freshness f
+                  ON f.segment_id=d.segment_id AND f.indicator_definition_id=d.id
+                LEFT JOIN uploads u ON u.id=f.upload_id
+                WHERE d.segment_id=? AND d.active=1
+                ORDER BY d.name
+                """,
+                (segment_id,),
+            ).fetchall()
+
+        return {
+            "individual": [dict(row) for row in individual],
+            "summary": [dict(row) for row in summary],
+            "team_averages": [dict(row) for row in team_averages],
+            "freshness": [dict(row) for row in freshness],
+        }
+
 
 class UploadRepository:
     def create(self, segment_id: int, source_key: str, filename: str, uploaded_by: int) -> int:

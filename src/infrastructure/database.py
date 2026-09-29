@@ -296,7 +296,12 @@ def connect() -> ConnectionAdapter:
                 "DATABASE_URL foi configurada, mas o driver PostgreSQL não está instalado"
             ) from exc
 
-        raw = psycopg.connect(DATABASE_URL, row_factory=dict_row)
+        raw = psycopg.connect(
+            DATABASE_URL,
+            row_factory=dict_row,
+            prepare_threshold=None,
+            application_name="portal-indicadores-cop",
+        )
         return ConnectionAdapter(raw, "postgresql")
 
     DB_PATH.parent.mkdir(parents=True, exist_ok=True)

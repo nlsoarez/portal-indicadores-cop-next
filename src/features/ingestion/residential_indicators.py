@@ -42,7 +42,7 @@ def parse_residential_indicators(raw_bytes: bytes, allowed_logins: set[str]) -> 
         COL_LOGIN_UNIFIED, COL_LOGIN_FO, COL_LOGIN_GPON,
         "IN_GRUPO", "IN_CIDADE_UF", "IN_UF", "TURNO", "TECNOLOGIA",
         "SERVICO", "NATUREZA", "SINTOMA", "FERRAMENTA_ABERTURA",
-        "FECHAMENTO", "SOLUCAO", "IMPACTO", "TMA", "TMR",
+        "FECHAMENTO", "SOLUCAO", "IMPACTO", "TMA", "TMR", "ID_MOSTRA",
     }
     required = {COL_INDICATOR, COL_VOLUME, COL_VALUE, COL_REGIONAL, COL_DATE, COL_ANOMES}
 
@@ -91,6 +91,7 @@ def parse_residential_indicators(raw_bytes: bytes, allowed_logins: set[str]) -> 
             aggregates[key][1] += volume
             dimensions = (
                 ("overall", "Total"),
+                ("incident", row.get("ID_MOSTRA")),
                 ("region", region),
                 ("group", row.get("IN_GRUPO")),
                 ("city", row.get("IN_CIDADE_UF")),

@@ -9,6 +9,7 @@ from src.infrastructure.database import initialize_database
 from src.infrastructure.repositories import SegmentRepository
 from src.ui.admin.shell import AdminShell
 from src.ui.analyst.shell import AnalystShell
+from src.ui.subadmin.shell import SubadminShell
 from src.ui.shared.style import inject_global_style
 
 
@@ -84,5 +85,7 @@ def run() -> None:
 
     if ctx.is_admin:
         AdminShell().render(ctx, segments)
+    elif ctx.is_subadmin:
+        SubadminShell().render(ctx, segments)
     else:
         AnalystShell().render(ctx, segments)

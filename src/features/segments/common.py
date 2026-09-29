@@ -13,11 +13,4 @@ GENERIC_OPERATIONAL_INDICATORS: tuple[dict, ...] = (
         "direction": "higher_is_better",
         "unit": "number",
     },
-    {
-        "indicator_key": "closing_assertiveness",
-        "name": "Assertividade Fechamento TOA x SIR",
-        "target_value": None,
-        "direction": "higher_is_better",
-        "unit": "percent",
-    },
 )

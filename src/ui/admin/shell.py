@@ -11,7 +11,7 @@ from src.application.segment_context import switch_segment_state
 from src.application.upload_service import UploadProcessingService
 from src.domain.entities import AccessContext, Segment
 from src.features.ingestion.excel import ImportValidationError
-from src.features.ingestion.registry import sources_for_indicator_keys
+from src.features.ingestion.source_catalog import UPLOAD_SOURCES
 from src.infrastructure.repositories import IndicatorRepository, UploadRepository, UserRepository
 from src.ui.shared.freshness import freshness_table_rows, render_indicator_freshness
 from src.ui.shared.person_performance import render_person_performance
@@ -118,7 +118,7 @@ class AdminShell:
                 st.info("Nenhum indicador foi configurado para este segmento ainda.")
 
         elif page == "Uploads":
-            self._render_uploads(ctx, segment)
+            self._render_uploads(ctx)
 
         else:
             st.dataframe(
@@ -127,68 +127,69 @@ class AdminShell:
                 hide_index=True,
             )
 
-    def _render_uploads(self, ctx: AccessContext, segment: Segment) -> None:
-        st.markdown("#### Importar planilha")
+    def _render_uploads(self, ctx: AccessContext) -> None:
+        st.markdown("#### Atualização das fontes")
         st.caption(
-            "O processamento usa a maior data real presente na planilha para atualizar o campo 'Dados até'. "
-            "Reenvios do mesmo mês substituem somente aquele mês e não duplicam resultados."
+            "O Admin envia cada uma das sete planilhas oficiais uma única vez por atualização. "
+            "O processamento não depende do segmento selecionado no menu."
         )
 
-        indicator_keys = {row["indicator_key"] for row in self.indicators.definitions(segment.id)}
-        available_sources = sources_for_indicator_keys(indicator_keys)
-        if not available_sources:
-            st.info("Este segmento ainda não possui fontes de upload configuradas.")
-            return
+        latest_by_source = self.uploads.latest_by_source()
+        integrated = sum(1 for source in UPLOAD_SOURCES if source.implemented)
+        c1, c2 = st.columns(2)
+        c1.metric("Fontes oficiais", len(UPLOAD_SOURCES))
+        c2.metric("Integrações ativas", f"{integrated}/{len(UPLOAD_SOURCES)}")
 
-        source = st.selectbox(
-            "Fonte",
-            available_sources,
-            format_func=lambda item: item.label,
-            key=f"source:{segment.id}",
-        )
-        source_key = source.key
-        uploaded = st.file_uploader(
-            "Planilha",
-            type=["xlsx", "xls"],
-            key=f"upload:{segment.id}:{source_key}",
-        )
-        if st.button(
-            "Processar planilha",
-            type="primary",
-            use_container_width=True,
-            disabled=uploaded is None,
-            key=f"process:{segment.id}:{source_key}",
-        ):
-            try:
-                result = self.processing.process(
-                    ctx,
-                    segment.id,
-                    source_key,
-                    uploaded.name,
-                    uploaded.getvalue(),
+        for source in UPLOAD_SOURCES:
+            latest = latest_by_source.get(source.key)
+            status = "Integrada" if source.implemented else "Mapeada"
+            title = f"{source.label} · {status}"
+
+            with st.expander(title, expanded=source.implemented):
+                st.caption(source.description)
+                st.markdown(f"**Arquivo esperado:** {source.filename_hint}.xlsx")
+
+                if latest:
+                    st.caption(
+                        f"Último processamento: {latest['filename']} · "
+                        f"{latest['created_at']} · por {latest['uploaded_by']}"
+                    )
+                else:
+                    st.caption("Nenhum processamento registrado ainda.")
+
+                if not source.implemented:
+                    st.info(source.integration_note or "Integração funcional em migração.")
+                    continue
+
+                uploaded = st.file_uploader(
+                    f"Selecionar {source.label}",
+                    type=["xlsx", "xls"],
+                    key=f"global-upload:{source.key}",
+                    label_visibility="collapsed",
                 )
-            except (ImportValidationError, ValueError, PermissionError) as exc:
-                st.error(str(exc))
-            else:
-                date_label = datetime.fromisoformat(result.data_through).strftime("%d/%m/%Y")
-                st.success(
-                    f"{result.indicator_name} processado: {result.total_volume} registros, "
-                    f"{result.analyst_count} analistas, dados até {date_label}."
-                )
-                st.rerun()
 
-        freshness = self.indicators.freshness(segment.id)
-        st.markdown("#### Atualização dos dados")
-        if freshness:
-            st.dataframe(
-                pd.DataFrame(freshness_table_rows(freshness)),
-                use_container_width=True,
-                hide_index=True,
-            )
-
-        recent = self.uploads.list_recent(segment.id)
-        st.markdown("#### Últimos uploads")
-        if recent:
-            st.dataframe(pd.DataFrame(recent), use_container_width=True, hide_index=True)
-        else:
-            st.info("Nenhuma planilha processada neste segmento ainda.")
+                if st.button(
+                    f"Processar {source.label}",
+                    type="primary",
+                    use_container_width=True,
+                    disabled=uploaded is None,
+                    key=f"global-process:{source.key}",
+                ):
+                    try:
+                        results = self.processing.process_global_source(
+                            ctx,
+                            source.key,
+                            uploaded.name,
+                            uploaded.getvalue(),
+                        )
+                    except (ImportValidationError, ValueError, PermissionError) as exc:
+                        st.error(str(exc))
+                    else:
+                        summary = []
+                        for slug, result in results:
+                            date_label = datetime.fromisoformat(result.data_through).strftime("%d/%m/%Y")
+                            summary.append(
+                                f"{slug}: {result.indicator_name} · dados até {date_label}"
+                            )
+                        st.success("Processamento concluído — " + " | ".join(summary))
+                        st.rerun()

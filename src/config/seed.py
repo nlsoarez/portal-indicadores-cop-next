@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from src.application.security import hash_password
 from src.features.segments.catalog import SEGMENTS
-from src.features.segments.preventiva import PREVENTIVA_ANALYSTS
+from src.features.segments.preventiva import PREVENTIVA_ANALYSTS, PREVENTIVA_INDICATORS
 from src.infrastructure.database import transaction
 
 DEFAULT_PASSWORD = "claro123"
@@ -31,6 +31,28 @@ def seed_foundation() -> None:
             conn.execute(
                 "INSERT OR IGNORE INTO user_segments(user_id, segment_id) VALUES (?, ?)",
                 (user_id, preventiva_id),
+            )
+
+        for indicator in PREVENTIVA_INDICATORS:
+            conn.execute(
+                """
+                INSERT INTO indicator_definitions(
+                    segment_id, indicator_key, name, target_value, direction, active
+                ) VALUES (?, ?, ?, ?, ?, 1)
+                ON CONFLICT(segment_id, indicator_key)
+                DO UPDATE SET
+                    name=excluded.name,
+                    target_value=excluded.target_value,
+                    direction=excluded.direction,
+                    active=1
+                """,
+                (
+                    preventiva_id,
+                    indicator["indicator_key"],
+                    indicator["name"],
+                    indicator["target_value"],
+                    indicator["direction"],
+                ),
             )
 
 

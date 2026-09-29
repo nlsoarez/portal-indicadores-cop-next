@@ -122,11 +122,6 @@ CREATE INDEX IF NOT EXISTS idx_freshness_segment ON indicator_freshness(segment_
 CREATE INDEX IF NOT EXISTS idx_freshness_definition ON indicator_freshness(indicator_definition_id);
 CREATE INDEX IF NOT EXISTS idx_access_user_created ON access_logs(user_id, created_at DESC);
 CREATE INDEX IF NOT EXISTS idx_perf_segment ON user_performance_segments(segment_id, user_id);
-
-REVOKE ALL ON ALL TABLES IN SCHEMA cop_portal FROM PUBLIC, anon, authenticated;
-REVOKE ALL ON ALL SEQUENCES IN SCHEMA cop_portal FROM PUBLIC, anon, authenticated;
-ALTER DEFAULT PRIVILEGES IN SCHEMA cop_portal REVOKE ALL ON TABLES FROM PUBLIC, anon, authenticated;
-ALTER DEFAULT PRIVILEGES IN SCHEMA cop_portal REVOKE ALL ON SEQUENCES FROM PUBLIC, anon, authenticated;
 """
 
 
@@ -235,8 +230,14 @@ CREATE INDEX IF NOT EXISTS idx_results_user_segment ON indicator_results(user_id
 CREATE INDEX IF NOT EXISTS idx_results_segment_month ON indicator_results(segment_id, data_month);
 CREATE INDEX IF NOT EXISTS idx_uploads_segment_created ON uploads(segment_id, created_at DESC);
 CREATE INDEX IF NOT EXISTS idx_freshness_segment ON indicator_freshness(segment_id);
+CREATE INDEX IF NOT EXISTS idx_freshness_definition ON indicator_freshness(indicator_definition_id);
 CREATE INDEX IF NOT EXISTS idx_access_user_created ON access_logs(user_id, created_at DESC);
 CREATE INDEX IF NOT EXISTS idx_perf_segment ON user_performance_segments(segment_id, user_id);
+
+REVOKE ALL ON ALL TABLES IN SCHEMA cop_portal FROM PUBLIC, anon, authenticated;
+REVOKE ALL ON ALL SEQUENCES IN SCHEMA cop_portal FROM PUBLIC, anon, authenticated;
+ALTER DEFAULT PRIVILEGES IN SCHEMA cop_portal REVOKE ALL ON TABLES FROM PUBLIC, anon, authenticated;
+ALTER DEFAULT PRIVILEGES IN SCHEMA cop_portal REVOKE ALL ON SEQUENCES FROM PUBLIC, anon, authenticated;
 """
 
 

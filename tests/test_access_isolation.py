@@ -31,6 +31,17 @@ class AccessIsolationTest(unittest.TestCase):
         with self.assertRaises(PermissionError):
             AccessService(users).assert_can_view_user(ctx, segment.id, rosana.id)
 
+    def test_admin_can_access_all_active_segments(self):
+        from src.infrastructure.repositories import SegmentRepository, UserRepository
+
+        users = UserRepository()
+        admin = users.get_by_login("ADMIN")
+        segments = SegmentRepository().list_for_user(admin.id)
+        self.assertEqual(
+            {"preventiva", "residencial", "empresarial"},
+            {segment.slug for segment in segments},
+        )
+
     def test_admin_sees_preventiva_team(self):
         from src.application.access_service import AccessService
         from src.infrastructure.repositories import SegmentRepository, UserRepository

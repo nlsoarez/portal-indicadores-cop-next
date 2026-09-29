@@ -869,11 +869,10 @@ def _analyst_table(
             "tma_seconds", "tmr_seconds",
         ]
         available = [col for col in metric_cols if col in metrics.columns]
-        rows = rows.merge(
-            metrics[available],
-            on=[col for col in ("login", "segment_id") if col in available],
-            how="left",
-        )
+        merge_keys = [col for col in ("login", "segment_id") if col in available and col in rows.columns]
+        if merge_keys:
+            metric_frame = metrics[available].drop_duplicates(subset=merge_keys)
+            rows = rows.merge(metric_frame, on=merge_keys, how="left")
 
     rows["_value_num"] = pd.to_numeric(rows["value"], errors="coerce")
     rows = rows.sort_values("_value_num", ascending=(direction == "lower_is_better"))
@@ -1060,7 +1059,7 @@ def _overall_detail(breakdown_df: pd.DataFrame, indicator_key: str) -> dict | No
 
 
 def _weighted_duration(rows: pd.DataFrame, column: str) -> float | None:
-    if column not in rows.columns:
+    if rows is None or rows.empty or column not in rows.columns or "volume" not in rows.columns:
         return None
     values = pd.to_numeric(rows[column], errors="coerce")
     weights = pd.to_numeric(rows["volume"], errors="coerce").fillna(0)
@@ -1071,6 +1070,8 @@ def _weighted_duration(rows: pd.DataFrame, column: str) -> float | None:
 
 
 def _weighted_value(rows: pd.DataFrame) -> float | None:
+    if rows is None or rows.empty or not {"value", "volume"}.issubset(rows.columns):
+        return None
     values = pd.to_numeric(rows["value"], errors="coerce")
     volumes = pd.to_numeric(rows["volume"], errors="coerce").fillna(0)
     valid = values.notna() & (volumes > 0)

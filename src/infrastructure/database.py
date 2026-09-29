@@ -71,15 +71,6 @@ CREATE TABLE IF NOT EXISTS indicator_results (
     UNIQUE(segment_id, user_id, indicator_definition_id, period)
 );
 
-CREATE TABLE IF NOT EXISTS scales (
-    id INTEGER PRIMARY KEY AUTOINCREMENT,
-    segment_id INTEGER NOT NULL REFERENCES segments(id) ON DELETE CASCADE,
-    user_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
-    work_date TEXT NOT NULL,
-    assignment TEXT NOT NULL,
-    UNIQUE(segment_id, user_id, work_date)
-);
-
 CREATE TABLE IF NOT EXISTS uploads (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
     segment_id INTEGER NOT NULL REFERENCES segments(id) ON DELETE CASCADE,
@@ -108,7 +99,6 @@ CREATE TABLE IF NOT EXISTS access_logs (
 
 CREATE INDEX IF NOT EXISTS idx_results_segment_period ON indicator_results(segment_id, period);
 CREATE INDEX IF NOT EXISTS idx_results_user_segment ON indicator_results(user_id, segment_id);
-CREATE INDEX IF NOT EXISTS idx_scale_segment_date ON scales(segment_id, work_date);
 CREATE INDEX IF NOT EXISTS idx_uploads_segment_created ON uploads(segment_id, created_at DESC);
 CREATE INDEX IF NOT EXISTS idx_freshness_segment ON indicator_freshness(segment_id);
 CREATE INDEX IF NOT EXISTS idx_access_user_created ON access_logs(user_id, created_at DESC);
@@ -148,3 +138,6 @@ def transaction():
 def initialize_database() -> None:
     with transaction() as conn:
         conn.executescript(SCHEMA)
+        # A versão inicial desta nova base chegou a criar uma tabela de escala,
+        # mas este portal não possui essa funcionalidade.
+        conn.execute("DROP TABLE IF EXISTS scales")

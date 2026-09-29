@@ -264,6 +264,7 @@ def _render_source(
                 segment_df=segment_df,
                 analyst_df=analyst_df,
                 analyst_metrics_df=analyst_metrics_df,
+                analyst_breakdowns_df=analyst_breakdowns_df,
                 daily_df=daily_df,
                 breakdown_df=breakdown_df,
                 external_df=external_df,

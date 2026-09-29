@@ -57,6 +57,38 @@ class AccessIsolationTest(unittest.TestCase):
             analyst_logins,
         )
 
+    def test_subadmin_can_view_analyst_but_not_leader(self):
+        from src.application.access_service import AccessService
+        from src.infrastructure.repositories import SegmentRepository, UserRepository
+
+        users = UserRepository()
+        access = AccessService(users)
+        leader = users.get_by_login("N0238475")
+        other_leader = users.get_by_login("N5923221")
+        daniel = users.get_by_login("N5604148")
+        segment = SegmentRepository().get_by_slug("preventiva")
+        ctx = access.context(leader.id)
+
+        access.assert_can_view_user(ctx, segment.id, daniel.id)
+        with self.assertRaises(PermissionError):
+            access.assert_can_view_user(ctx, segment.id, other_leader.id)
+
+    def test_only_admin_can_list_leaders(self):
+        from src.application.access_service import AccessService
+        from src.infrastructure.repositories import SegmentRepository, UserRepository
+
+        users = UserRepository()
+        access = AccessService(users)
+        admin = users.get_by_login("ADMIN")
+        leader = users.get_by_login("N0238475")
+        segment = SegmentRepository().get_by_slug("preventiva")
+
+        admin_ctx = access.context(admin.id)
+        leader_ctx = access.context(leader.id)
+        self.assertEqual(4, len(access.visible_subadmins(admin_ctx, segment.id)))
+        with self.assertRaises(PermissionError):
+            access.visible_subadmins(leader_ctx, segment.id)
+
 
 if __name__ == "__main__":
     unittest.main()

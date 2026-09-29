@@ -23,6 +23,7 @@ def parse_enterprise_indicators(raw_bytes: bytes, allowed_logins: set[str]) -> t
     optional = {
         "DT_ACIONAMENTO", "IN_GRUPO", "IN_CIDADE_UF", "IN_UF", "TURNO",
         "DEMANDA", "TIPO", "AREA_ENVOLVIDA", "CAUSA", "TMA", "TMR",
+        "ID_ATIVIDADE", "ID_MOSTRA", "INCIDENTE", "ID_INCIDENTE", "NUMERO_INCIDENTE",
     }
     aggregates: dict[tuple[int, str, str], list[float]] = defaultdict(lambda: [0.0, 0.0])
     breakdowns = new_bucket()
@@ -57,6 +58,7 @@ def parse_enterprise_indicators(raw_bytes: bytes, allowed_logins: set[str]) -> t
         turn = str(row.get("TURNO") or "").strip() or turn_from_hour(hour)
         tma_seconds = decimal_hours_to_seconds(row.get("TMA"))
         tmr_seconds = decimal_hours_to_seconds(row.get("TMR"))
+        incident_id = next((row.get(key) for key in ("ID_ATIVIDADE", "ID_MOSTRA", "INCIDENTE", "ID_INCIDENTE", "NUMERO_INCIDENTE") if row.get(key)), None)
 
         if login in allowed:
             latest_anomes = max(latest_anomes, anomes)
@@ -64,6 +66,7 @@ def parse_enterprise_indicators(raw_bytes: bytes, allowed_logins: set[str]) -> t
             aggregates[(anomes, login, period)][1] += volume
             for dimension, dimension_value in (
                 ("overall", "Total"),
+                ("incident", incident_id),
                 ("region", region),
                 ("group", row.get("IN_GRUPO")),
                 ("city", row.get("IN_CIDADE_UF")),

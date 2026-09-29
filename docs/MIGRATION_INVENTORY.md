@@ -21,6 +21,8 @@
 
 ## DESCARTAR
 
+- Escala: fora do escopo deste portal.
+
 - Regras de acesso implementadas apenas por visibilidade de UI.
 - Condicionais específicas de usuário dentro da composição visual.
 - Listas hardcoded de equipe como fonte de verdade de autorização.
@@ -34,7 +36,6 @@
 - `AdminShell` e `AnalystShell` distintos.
 - Auditoria/último acesso.
 - `indicator_definitions` e `indicator_results` por segmento.
-- Escala por usuário + segmento + dia.
 - Estado de UI segment-scoped com limpeza na troca de segmento.
 - Preventiva com Daniel, Rosana, Carlos e Maristella.
 - Testes server-side de isolamento entre analistas.

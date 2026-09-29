@@ -9,7 +9,6 @@ Login -> User -> Roles
               -> UserSegments -> Segment
                                 -> IndicatorDefinitions
                                 -> IndicatorResults
-                                -> Scales
                                 -> Uploads
 
 Request -> AccessContext -> AccessService -> Repository -> Data
@@ -17,7 +16,7 @@ Request -> AccessContext -> AccessService -> Repository -> Data
 
 ## Separação de experiência
 
-- `AdminShell`: visão gerencial, seletor de segmento, equipe, indicadores, escala, uploads e auditoria.
+- `AdminShell`: visão gerencial, seletor de segmento, equipe, indicadores, uploads e auditoria.
 - `AnalystShell`: experiência individual; recebe apenas dados próprios e agregados da equipe.
 
 ## Regras centrais
@@ -28,6 +27,10 @@ Request -> AccessContext -> AccessService -> Repository -> Data
 4. Troca de segmento limpa estado/cache segmentado.
 5. Identidade/roles/segmentos ficam em banco relacional; planilhas permanecem como fontes de ingestão.
 6. Indicadores são definitions + results, permitindo variar por segmento sem criar colunas por segmento.
+
+## Fora de escopo
+
+O portal não possui módulo de escala.
 
 ## Banco
 

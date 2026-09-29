@@ -145,6 +145,59 @@ class IndicatorRepository:
             rows = conn.execute(sql, params).fetchall()
         return [dict(row) for row in rows]
 
+    def monthly_summary_for_user(self, segment_id: int, user_id: int) -> list[dict]:
+        with connection() as conn:
+            rows = conn.execute(
+                """
+                SELECT
+                    substr(ir.period, 1, 7) AS period,
+                    d.indicator_key,
+                    d.name,
+                    d.target_value,
+                    d.direction,
+                    ROUND(
+                        SUM(ir.value * ir.volume) / NULLIF(SUM(ir.volume), 0),
+                        1
+                    ) AS value,
+                    SUM(ir.volume) AS volume
+                FROM indicator_results ir
+                JOIN indicator_definitions d ON d.id=ir.indicator_definition_id
+                WHERE ir.segment_id=? AND ir.user_id=?
+                GROUP BY substr(ir.period, 1, 7), d.indicator_key, d.name, d.target_value, d.direction
+                ORDER BY period DESC, d.name
+                """,
+                (segment_id, user_id),
+            ).fetchall()
+        return [dict(row) for row in rows]
+
+    def team_monthly_summary(self, segment_id: int) -> list[dict]:
+        with connection() as conn:
+            rows = conn.execute(
+                """
+                SELECT
+                    substr(ir.period, 1, 7) AS period,
+                    d.indicator_key,
+                    d.name,
+                    ROUND(
+                        SUM(ir.value * ir.volume) / NULLIF(SUM(ir.volume), 0),
+                        1
+                    ) AS team_avg,
+                    SUM(ir.volume) AS team_volume,
+                    COUNT(DISTINCT ir.user_id) AS analysts_with_data,
+                    ROUND(
+                        SUM(ir.volume) * 1.0 / NULLIF(COUNT(DISTINCT ir.user_id), 0),
+                        1
+                    ) AS avg_volume_per_analyst
+                FROM indicator_results ir
+                JOIN indicator_definitions d ON d.id=ir.indicator_definition_id
+                WHERE ir.segment_id=?
+                GROUP BY substr(ir.period, 1, 7), d.indicator_key, d.name
+                ORDER BY period DESC, d.name
+                """,
+                (segment_id,),
+            ).fetchall()
+        return [dict(row) for row in rows]
+
     def team_averages(self, segment_id: int, period: str | None = None) -> list[dict]:
         sql = (
             "SELECT ir.period, d.indicator_key, d.name, AVG(ir.value) AS team_avg, SUM(ir.volume) AS team_volume "

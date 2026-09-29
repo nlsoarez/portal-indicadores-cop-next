@@ -9,3 +9,5 @@ __pycache__
 venv
 data/*.db
 data/*.sqlite
+.env
+.env.vps

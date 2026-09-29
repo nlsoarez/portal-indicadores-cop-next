@@ -39,7 +39,7 @@ class AdminShell:
         switch_segment_state(st.session_state, segment.id)
         page = st.sidebar.radio(
             "Navegação",
-            ["Visão geral", "Analistas", "Indicadores", "Escala", "Uploads", "Auditoria"],
+            ["Visão geral", "Analistas", "Indicadores", "Uploads", "Auditoria"],
             label_visibility="collapsed",
         )
 
@@ -82,9 +82,6 @@ class AdminShell:
                 )
             else:
                 st.info("Nenhum indicador foi configurado para este segmento ainda.")
-
-        elif page == "Escala":
-            st.info("A fundação de escala está criada no banco e será conectada ao importador na etapa de migração funcional.")
 
         elif page == "Uploads":
             self._render_uploads(ctx, segment)

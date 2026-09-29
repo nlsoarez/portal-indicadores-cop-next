@@ -82,6 +82,17 @@ class SourceIngestionTest(unittest.TestCase):
         self.assertEqual("2026-09-28", chat_fresh["data_through"])
         self.assertEqual("chat.xlsx", chat_fresh["filename"])
 
+        summary = IndicatorRepository().monthly_summary_for_user(self.segment.id, daniel.id)
+        chat_summary = next(row for row in summary if row["indicator_key"] == "chat_10m")
+        self.assertEqual(50.0, chat_summary["value"])
+        self.assertEqual(2, chat_summary["volume"])
+
+        team = IndicatorRepository().team_monthly_summary(self.segment.id)
+        team_chat = next(row for row in team if row["indicator_key"] == "chat_10m")
+        self.assertEqual(66.7, team_chat["team_avg"])
+        self.assertEqual(3, team_chat["team_volume"])
+        self.assertEqual(1.5, team_chat["avg_volume_per_analyst"])
+
     def test_validation_upload_uses_latest_month_leste_and_membership(self):
         from src.application.upload_service import UploadProcessingService
         from src.infrastructure.repositories import IndicatorRepository

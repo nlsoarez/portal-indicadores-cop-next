@@ -490,7 +490,7 @@ class IndicatorRepository:
                     FROM indicator_breakdowns b
                     JOIN indicator_definitions d ON d.id=b.indicator_definition_id
                     JOIN segments s ON s.id=b.segment_id
-                    WHERE b.segment_id IN (${placeholders})
+                    WHERE b.segment_id IN ({placeholders})
                       AND b.scope='team'
                       AND b.dimension IN ('demand', 'service')
                 ),

@@ -14,6 +14,7 @@ DATABASE_URL = (
     or ""
 ).strip()
 DB_PATH = Path(os.environ.get("COP_PORTAL_DB", "data/portal.db"))
+POSTGRES_APP_SCHEMA = "cop_portal"
 
 
 SQLITE_SCHEMA = """
@@ -118,12 +119,22 @@ CREATE INDEX IF NOT EXISTS idx_results_segment_period ON indicator_results(segme
 CREATE INDEX IF NOT EXISTS idx_results_user_segment ON indicator_results(user_id, segment_id);
 CREATE INDEX IF NOT EXISTS idx_uploads_segment_created ON uploads(segment_id, created_at DESC);
 CREATE INDEX IF NOT EXISTS idx_freshness_segment ON indicator_freshness(segment_id);
+CREATE INDEX IF NOT EXISTS idx_freshness_definition ON indicator_freshness(indicator_definition_id);
 CREATE INDEX IF NOT EXISTS idx_access_user_created ON access_logs(user_id, created_at DESC);
 CREATE INDEX IF NOT EXISTS idx_perf_segment ON user_performance_segments(segment_id, user_id);
+
+REVOKE ALL ON ALL TABLES IN SCHEMA cop_portal FROM PUBLIC, anon, authenticated;
+REVOKE ALL ON ALL SEQUENCES IN SCHEMA cop_portal FROM PUBLIC, anon, authenticated;
+ALTER DEFAULT PRIVILEGES IN SCHEMA cop_portal REVOKE ALL ON TABLES FROM PUBLIC, anon, authenticated;
+ALTER DEFAULT PRIVILEGES IN SCHEMA cop_portal REVOKE ALL ON SEQUENCES FROM PUBLIC, anon, authenticated;
 """
 
 
 POSTGRES_SCHEMA = """
+CREATE SCHEMA IF NOT EXISTS cop_portal;
+SET search_path TO cop_portal, public;
+REVOKE ALL ON SCHEMA cop_portal FROM PUBLIC, anon, authenticated;
+
 CREATE TABLE IF NOT EXISTS users (
     id BIGSERIAL PRIMARY KEY,
     login TEXT NOT NULL UNIQUE,
@@ -302,6 +313,7 @@ def connect() -> ConnectionAdapter:
             prepare_threshold=None,
             application_name="portal-indicadores-cop",
         )
+        raw.execute("SET search_path TO cop_portal, public")
         return ConnectionAdapter(raw, "postgresql")
 
     DB_PATH.parent.mkdir(parents=True, exist_ok=True)

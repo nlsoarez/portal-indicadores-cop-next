@@ -337,6 +337,7 @@ class IndicatorRepository:
                 "segment_summary": [],
                 "analyst_summary": [],
                 "analyst_metrics": [],
+                "analyst_breakdowns": [],
                 "daily_summary": [],
                 "breakdowns": [],
                 "external": [],
@@ -479,6 +480,39 @@ class IndicatorRepository:
                 params,
             ).fetchall()
 
+            analyst_breakdowns = conn.execute(
+                f"""
+                WITH base AS (
+                    SELECT b.segment_id, b.data_month, b.login, b.dimension, b.dimension_value,
+                           b.value, b.volume, b.successes, b.losses,
+                           d.indicator_key, d.name,
+                           s.slug AS segment_slug, s.name AS segment_name
+                    FROM indicator_breakdowns b
+                    JOIN indicator_definitions d ON d.id=b.indicator_definition_id
+                    JOIN segments s ON s.id=b.segment_id
+                    WHERE b.segment_id IN (${placeholders})
+                      AND b.scope='team'
+                      AND b.dimension IN ('demand', 'service')
+                ),
+                latest AS (
+                    SELECT indicator_key, MAX(data_month) AS data_month
+                    FROM base GROUP BY indicator_key
+                )
+                SELECT b.data_month AS period, b.segment_id, b.segment_slug, b.segment_name,
+                       b.indicator_key, b.name, b.login, b.dimension, b.dimension_value,
+                       ROUND(CAST(SUM(b.value * b.volume) AS NUMERIC) / NULLIF(SUM(b.volume), 0), 1) AS value,
+                       SUM(b.volume) AS volume,
+                       SUM(b.successes) AS successes,
+                       SUM(b.losses) AS losses
+                FROM base b
+                JOIN latest l ON l.indicator_key=b.indicator_key AND l.data_month=b.data_month
+                GROUP BY b.data_month, b.segment_id, b.segment_slug, b.segment_name,
+                         b.indicator_key, b.name, b.login, b.dimension, b.dimension_value
+                ORDER BY b.indicator_key, b.segment_name, b.dimension, b.dimension_value, b.login
+                """,
+                params,
+            ).fetchall()
+
             daily_summary = conn.execute(
                 f"""
                 WITH base AS (
@@ -565,6 +599,7 @@ class IndicatorRepository:
             "segment_summary": [dict(row) for row in segment_summary],
             "analyst_summary": [dict(row) for row in analyst_summary],
             "analyst_metrics": [dict(row) for row in analyst_metrics],
+            "analyst_breakdowns": [dict(row) for row in analyst_breakdowns],
             "daily_summary": [dict(row) for row in daily_summary],
             "breakdowns": [dict(row) for row in breakdowns],
             "external": [dict(row) for row in external],

@@ -124,6 +124,15 @@ def connect() -> sqlite3.Connection:
 
 
 @contextmanager
+def connection():
+    conn = connect()
+    try:
+        yield conn
+    finally:
+        conn.close()
+
+
+@contextmanager
 def transaction():
     conn = connect()
     try:

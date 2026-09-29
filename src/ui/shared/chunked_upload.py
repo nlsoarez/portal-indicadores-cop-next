@@ -1,7 +1,6 @@
 from __future__ import annotations
 
 import base64
-import os
 import tempfile
 from dataclasses import dataclass
 from pathlib import Path
@@ -12,6 +11,7 @@ import streamlit as st
 
 CHUNK_SIZE = 1024 * 1024
 MAX_UPLOAD_SIZE = 128 * 1024 * 1024
+_ACTIVE_UPLOAD_KEY = "_cop_active_upload"
 
 
 @dataclass(frozen=True)
@@ -52,6 +52,7 @@ _COMPONENT_CSS = """
   background: var(--st-background-color);
   color: var(--st-text-color);
 }
+.cop-file-input:disabled { opacity: .55; cursor: not-allowed; }
 .cop-upload-meta {
   display: flex;
   justify-content: space-between;
@@ -111,12 +112,17 @@ export default function(component) {
     state = {
       file: null,
       uploadId: null,
-      nextIndex: 0,
       total: 0,
+      sentIndex: -1,
+      serverAck: -1,
       sending: false,
+      retries: {},
+      retryTimer: null,
     };
     window.__copChunkUploads[key] = state;
   }
+
+  state.serverAck = Number.isFinite(data.ack) ? data.ack : -1;
 
   const input = parentElement.querySelector(".cop-file-input");
   const nameEl = parentElement.querySelector(".cop-upload-name");
@@ -124,7 +130,18 @@ export default function(component) {
   const barEl = parentElement.querySelector(".cop-progress-bar");
   const statusEl = parentElement.querySelector(".cop-upload-status");
 
+  const isBlocked = Boolean(data.disabled);
+  input.disabled = isBlocked;
+
   const renderProgress = () => {
+    if (isBlocked && !state.file) {
+      nameEl.textContent = "Outro upload está em andamento";
+      percentEl.textContent = "";
+      barEl.style.width = "0%";
+      statusEl.textContent = data.disabled_reason || "Conclua ou cancele o upload atual antes de iniciar outro.";
+      return;
+    }
+
     if (!state.file) {
       nameEl.textContent = "Nenhum arquivo selecionado";
       percentEl.textContent = "";
@@ -133,8 +150,7 @@ export default function(component) {
       return;
     }
 
-    const ack = Number.isFinite(data.ack) ? data.ack : -1;
-    const completedChunks = Math.max(0, ack + 1);
+    const completedChunks = Math.max(0, state.serverAck + 1);
     const percent = state.total > 0
       ? Math.min(100, Math.round((completedChunks / state.total) * 100))
       : 0;
@@ -146,39 +162,61 @@ export default function(component) {
     if (data.error) {
       statusEl.textContent = data.error;
     } else if (data.done && data.upload_id === state.uploadId) {
-      statusEl.textContent = "Upload concluído. O arquivo está pronto para processamento.";
+      statusEl.textContent = "Upload concluído. Arquivo pronto para processamento.";
       percentEl.textContent = "100%";
       barEl.style.width = "100%";
+    } else if (isBlocked) {
+      statusEl.textContent = data.disabled_reason || "Upload pausado.";
     } else {
-      statusEl.textContent = "Enviando em partes para evitar o limite de upload da hospedagem…";
+      statusEl.textContent = "Enviando em partes. Não inicie outro upload até concluir este.";
     }
   };
 
-  const sendNext = async (force = false) => {
-    if (!state.file || state.sending || state.nextIndex >= state.total) return;
+  const scheduleRetry = (index) => {
+    if (state.retryTimer) clearTimeout(state.retryTimer);
+    state.retryTimer = setTimeout(() => {
+      if (
+        state.file &&
+        !data.done &&
+        !data.disabled &&
+        state.serverAck < index
+      ) {
+        const count = (state.retries[index] || 0) + 1;
+        state.retries[index] = count;
+        if (count <= 5) {
+          state.sentIndex = -1;
+          void sendIndex(index, true);
+        } else {
+          statusEl.textContent = "Upload interrompido. Cancele e tente novamente.";
+        }
+      }
+    }, 3500);
+  };
 
-    const ack = Number.isFinite(data.ack) ? data.ack : -1;
-    if (!force && ack !== state.nextIndex - 1) return;
+  const sendIndex = async (index, force = false) => {
+    if (!state.file || state.sending || data.disabled || data.done) return;
+    if (index < 0 || index >= state.total) return;
+    if (!force && state.sentIndex === index) return;
 
-    const index = state.nextIndex;
     const start = index * chunkSize;
     const end = Math.min(state.file.size, start + chunkSize);
     const slice = state.file.slice(start, end);
 
     state.sending = true;
+    state.sentIndex = index;
     try {
       const buffer = await slice.arrayBuffer();
-      const payload = {
+      setTriggerValue("chunk", {
         upload_id: state.uploadId,
         filename: state.file.name,
         size: state.file.size,
         index,
         total: state.total,
         data: bytesToBase64(new Uint8Array(buffer)),
-      };
-      state.nextIndex = index + 1;
-      setTriggerValue("chunk", payload);
+      });
+      scheduleRetry(index);
     } catch (error) {
+      state.sentIndex = -1;
       statusEl.textContent = "Falha ao preparar o arquivo: " + String(error);
     } finally {
       state.sending = false;
@@ -187,7 +225,7 @@ export default function(component) {
 
   input.onchange = async () => {
     const file = input.files && input.files[0];
-    if (!file) return;
+    if (!file || data.disabled) return;
 
     if (file.size > maxSize) {
       statusEl.textContent = "Arquivo maior que o limite de 128 MB.";
@@ -204,22 +242,26 @@ export default function(component) {
 
     state.file = file;
     state.uploadId = crypto.randomUUID();
-    state.nextIndex = 0;
     state.total = Math.ceil(file.size / chunkSize);
-    state.sending = false;
+    state.sentIndex = -1;
+    state.serverAck = -1;
+    state.retries = {};
     renderProgress();
-    await sendNext(true);
+    await sendIndex(0, true);
   };
 
   renderProgress();
 
   if (
     state.file &&
+    !data.disabled &&
     !data.done &&
-    data.upload_id === state.uploadId &&
-    data.ack === state.nextIndex - 1
+    data.upload_id === state.uploadId
   ) {
-    void sendNext(false);
+    const nextIndex = state.serverAck + 1;
+    if (nextIndex < state.total && state.sentIndex !== nextIndex) {
+      void sendIndex(nextIndex, false);
+    }
   }
 }
 """
@@ -258,7 +300,12 @@ def _remove_path(path_value: str | None) -> None:
         pass
 
 
-def _consume_chunk(state: dict[str, Any], chunk: dict[str, Any]) -> bool:
+def _consume_chunk(key: str, state: dict[str, Any], chunk: dict[str, Any]) -> bool:
+    active_key = st.session_state.get(_ACTIVE_UPLOAD_KEY)
+    if active_key not in (None, key):
+        state["error"] = "Outro upload está em andamento. Conclua ou cancele antes de iniciar este."
+        return False
+
     upload_id = str(chunk.get("upload_id") or "")
     filename = str(chunk.get("filename") or "")
     size = int(chunk.get("size") or 0)
@@ -272,6 +319,9 @@ def _consume_chunk(state: dict[str, Any], chunk: dict[str, Any]) -> bool:
     if size <= 0 or size > MAX_UPLOAD_SIZE or total <= 0:
         state["error"] = "Tamanho de upload inválido."
         return False
+
+    if active_key is None:
+        st.session_state[_ACTIVE_UPLOAD_KEY] = key
 
     if state["upload_id"] != upload_id:
         _remove_path(state.get("path"))
@@ -303,8 +353,8 @@ def _consume_chunk(state: dict[str, Any], chunk: dict[str, Any]) -> bool:
         state["error"] = "Não foi possível decodificar um bloco do arquivo."
         return False
 
-    mode = "wb" if index == 0 else "ab"
     path = Path(str(state["path"]))
+    mode = "wb" if index == 0 else "ab"
     try:
         with path.open(mode) as handle:
             handle.write(raw)
@@ -318,9 +368,7 @@ def _consume_chunk(state: dict[str, Any], chunk: dict[str, Any]) -> bool:
     if index + 1 == total:
         actual_size = path.stat().st_size
         if actual_size != size:
-            state["error"] = (
-                f"Upload incompleto: recebido {actual_size} bytes de {size} bytes."
-            )
+            state["error"] = f"Upload incompleto: recebido {actual_size} bytes de {size} bytes."
             return True
         state["done"] = True
 
@@ -333,6 +381,9 @@ def chunked_file_uploader(*, key: str) -> ChunkedUpload | None:
         st.session_state[state_key] = _new_state()
     state = st.session_state[state_key]
 
+    active_key = st.session_state.get(_ACTIVE_UPLOAD_KEY)
+    disabled = active_key not in (None, key)
+
     result = _CHUNKED_UPLOADER(
         data={
             "key": key,
@@ -342,6 +393,12 @@ def chunked_file_uploader(*, key: str) -> ChunkedUpload | None:
             "done": bool(state["done"]),
             "upload_id": state.get("upload_id"),
             "error": state.get("error"),
+            "disabled": disabled,
+            "disabled_reason": (
+                "Há outro upload em andamento. Conclua ou cancele o upload atual."
+                if disabled
+                else None
+            ),
         },
         key=f"chunk-component:{key}",
         on_chunk_change=lambda: None,
@@ -349,8 +406,13 @@ def chunked_file_uploader(*, key: str) -> ChunkedUpload | None:
 
     chunk = getattr(result, "chunk", None)
     if isinstance(chunk, dict):
-        changed = _consume_chunk(state, chunk)
+        changed = _consume_chunk(key, state, chunk)
         if changed:
+            st.rerun()
+
+    if active_key == key and not state["done"]:
+        if st.button("Cancelar upload", key=f"cancel-upload:{key}", use_container_width=False):
+            clear_chunked_upload(key)
             st.rerun()
 
     if state["done"] and state.get("path"):
@@ -371,3 +433,5 @@ def clear_chunked_upload(key: str) -> None:
     state = st.session_state.pop(state_key, None)
     if isinstance(state, dict):
         _remove_path(state.get("path"))
+    if st.session_state.get(_ACTIVE_UPLOAD_KEY) == key:
+        st.session_state.pop(_ACTIVE_UPLOAD_KEY, None)

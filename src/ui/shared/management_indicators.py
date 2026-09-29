@@ -336,6 +336,7 @@ def _render_indicator(
             people=people,
             analyst_breakdowns=analyst_breakdowns,
             details=details,
+            daily=daily,
             target=target,
             direction=direction,
         )
@@ -367,6 +368,7 @@ def _render_executive_summary(
     people: pd.DataFrame,
     analyst_breakdowns: pd.DataFrame,
     details: pd.DataFrame,
+    daily: pd.DataFrame,
     target,
     direction: str,
 ) -> None:
@@ -381,6 +383,7 @@ def _render_executive_summary(
         segment_name = str(rows.iloc[0].get("segment_name") or "—")
         st.caption(f"Setor: {segment_name}")
 
+    _render_recent_signal(indicator_key, rows, daily)
     _render_team_average_panel(
         indicator_key=indicator_key,
         people=people,
@@ -391,6 +394,39 @@ def _render_executive_summary(
         details=details,
         target=target,
         direction=direction,
+    )
+
+
+def _render_recent_signal(
+    indicator_key: str,
+    rows: pd.DataFrame,
+    daily: pd.DataFrame,
+) -> None:
+    if daily is None or daily.empty:
+        return
+
+    scoped = daily.copy()
+    if _segment_names(scoped) and len(_segment_names(scoped)) > 1:
+        scoped = _aggregate_daily_rows(scoped)
+    if scoped.empty or not {"period", "value", "volume"}.issubset(scoped.columns):
+        return
+
+    scoped = scoped.sort_values("period")
+    latest = scoped.iloc[-1]
+    latest_value = _number(latest.get("value"))
+    current_value = _weighted_value(rows)
+    if latest_value is None or current_value is None:
+        return
+
+    if indicator_key == "productivity_avg_daily":
+        latest_label = _fmt(latest_value, "number")
+        delta_label = f"{latest_value - current_value:+.1f} vs competência"
+    else:
+        latest_label = _pct(latest_value)
+        delta_label = f"{latest_value - current_value:+.1f} pp vs competência"
+
+    st.caption(
+        f"Último dia ({latest.get('period')}): **{latest_label}** · {delta_label}"
     )
 
 

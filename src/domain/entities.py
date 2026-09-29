@@ -6,6 +6,7 @@ from enum import Enum
 
 class RoleCode(str, Enum):
     ADMIN = "admin"
+    SUBADMIN = "subadmin"
     ANALYST = "analyst"
 
 
@@ -35,6 +36,10 @@ class AccessContext:
     @property
     def is_admin(self) -> bool:
         return RoleCode.ADMIN in self.roles
+
+    @property
+    def is_subadmin(self) -> bool:
+        return RoleCode.SUBADMIN in self.roles
 
     @property
     def is_analyst(self) -> bool:

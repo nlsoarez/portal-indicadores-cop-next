@@ -184,6 +184,18 @@ class ManagementIndicatorsTest(unittest.TestCase):
         self.assertTrue(_dimensions_rows(frame, ("turn", "hour")).empty)
         self.assertIsNone(_weighted_value(frame))
 
+    def test_segment_name_helper_handles_missing_column(self):
+        from src.ui.shared.management_indicators import _segment_names
+
+        self.assertEqual([], _segment_names(pd.DataFrame()))
+        self.assertEqual([], _segment_names(pd.DataFrame({"value": [1]})))
+        self.assertEqual(
+            ["Empresarial", "Residencial"],
+            _segment_names(pd.DataFrame({
+                "segment_name": ["Residencial", None, "Empresarial", ""],
+            })),
+        )
+
     def test_chat_parser_keeps_hour_zero_and_external_night_record(self):
         from src.features.ingestion.chat_toa import parse_chat_toa
 

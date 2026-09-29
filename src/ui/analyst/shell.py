@@ -38,24 +38,62 @@ class AnalystShell:
         )
 
         payload = self.dashboard.analyst_payload(ctx, segment.id)
-
-        # Sempre visível: o analista sabe exatamente até quando cada indicador está atualizado.
         render_indicator_freshness(payload["freshness"])
 
         if page == "Meu desempenho":
+            self._render_performance(payload)
+        elif page == "Minha evolução":
             if payload["individual"]:
                 st.dataframe(pd.DataFrame(payload["individual"]), use_container_width=True, hide_index=True)
             else:
-                st.info("Ainda não há resultados individuais processados para este segmento.")
-            st.subheader("Dicas baseadas nos seus dados")
-            for tip in build_tips(payload["individual"], payload["team_averages"]):
-                st.markdown(f"<div class='cop-tip'>{tip}</div>", unsafe_allow_html=True)
-        elif page == "Minha evolução":
-            st.dataframe(pd.DataFrame(payload["individual"]), use_container_width=True, hide_index=True)
+                st.info("Ainda não há evolução disponível para este segmento.")
         elif page == "Minha escala":
             if payload["scale"]:
                 st.dataframe(pd.DataFrame(payload["scale"]), use_container_width=True, hide_index=True)
             else:
                 st.info("Nenhuma escala importada para você neste segmento.")
         else:
-            st.dataframe(pd.DataFrame(payload["individual"]), use_container_width=True, hide_index=True)
+            if payload["summary"]:
+                st.dataframe(pd.DataFrame(payload["summary"]), use_container_width=True, hide_index=True)
+            else:
+                st.info("Ainda não há histórico mensal processado.")
+
+    def _render_performance(self, payload: dict) -> None:
+        latest = _latest_by_indicator(payload["summary"])
+        team_index = {
+            (row["period"], row["indicator_key"]): row
+            for row in payload["team_averages"]
+        }
+
+        if not latest:
+            st.info("Ainda não há resultados individuais processados para este segmento.")
+        else:
+            cols = st.columns(min(2, len(latest)))
+            for index, row in enumerate(latest):
+                team = team_index.get((row["period"], row["indicator_key"]), {})
+                value = float(row.get("value") or 0)
+                team_avg = team.get("team_avg")
+                delta = None if team_avg is None else f"{value - float(team_avg):+.1f} p.p. vs equipe"
+                with cols[index % len(cols)]:
+                    st.metric(row["name"], f"{value:.1f}%", delta=delta)
+                    target = row.get("target_value")
+                    target_label = f"Meta ≥ {float(target):.0f}%" if target is not None else "Sem meta"
+                    avg_volume = team.get("avg_volume_per_analyst")
+                    volume_label = f"Volume {int(row.get('volume') or 0)}"
+                    if avg_volume is not None:
+                        volume_label += f" · média equipe {float(avg_volume):.1f}"
+                    st.caption(f"{target_label} · {volume_label} · {row['period']}")
+
+        st.subheader("Dicas baseadas nos seus dados")
+        tips = build_tips(latest, payload["team_averages"])
+        for tip in tips:
+            st.markdown(f"<div class='cop-tip'>{tip}</div>", unsafe_allow_html=True)
+
+
+def _latest_by_indicator(rows: list[dict]) -> list[dict]:
+    latest: dict[str, dict] = {}
+    for row in rows:
+        key = str(row["indicator_key"])
+        if key not in latest or str(row["period"]) > str(latest[key]["period"]):
+            latest[key] = row
+    return sorted(latest.values(), key=lambda row: str(row["name"]))

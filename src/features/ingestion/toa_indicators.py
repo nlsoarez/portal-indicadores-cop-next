@@ -65,6 +65,7 @@ def parse_toa_indicators(raw_bytes: bytes, allowed_logins: set[str]) -> tuple[Pa
                 ("overall", "Total"),
                 ("region", region),
                 ("group", row.get("IN_GRUPO")),
+                ("turn", turn),
                 ("hour", hour),
                 ("network", row.get("REDE")),
                 ("activity_type", row.get("TIPO_ATIVIDADE")),

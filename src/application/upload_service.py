@@ -52,10 +52,10 @@ class UploadProcessingService:
         if adapter is None:
             raise ValueError(f"Fonte não suportada: {source_key}")
 
-        analysts = self.users.list_for_segment(segment_id)
-        login_to_user_id = {user.login.upper(): user.id for user in analysts}
+        performance_users = self.users.list_performance_users_for_segment(segment_id)
+        login_to_user_id = {user.login.upper(): user.id for user in performance_users}
         if not login_to_user_id:
-            raise ValueError("O segmento não possui analistas ativos para processar")
+            raise ValueError("O segmento não possui usuários de desempenho ativos para processar")
 
         batch = adapter.parser(raw_bytes, set(login_to_user_id))
         if batch.indicator_key != adapter.indicator_key:

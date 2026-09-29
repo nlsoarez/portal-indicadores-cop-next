@@ -98,19 +98,49 @@ ADHERENCE_KEYS = {
 }
 
 
+FRAME_SCHEMAS = {
+    "segment_summary": (
+        "period", "segment_id", "segment_slug", "segment_name", "indicator_key", "name",
+        "target_value", "direction", "unit", "value", "volume", "analysts",
+    ),
+    "analyst_summary": (
+        "period", "segment_id", "segment_slug", "segment_name", "indicator_key", "name",
+        "target_value", "direction", "unit", "user_id", "login", "display_name", "value", "volume",
+    ),
+    "analyst_metrics": (
+        "period", "segment_id", "segment_slug", "segment_name", "indicator_key", "login",
+        "volume", "successes", "losses", "tma_seconds", "tmr_seconds",
+    ),
+    "daily_summary": (
+        "period", "data_month", "segment_id", "segment_slug", "segment_name",
+        "indicator_key", "name", "unit", "value", "volume",
+    ),
+    "breakdowns": (
+        "period", "segment_id", "segment_slug", "segment_name", "indicator_key", "name",
+        "dimension", "dimension_value", "value", "volume", "successes", "losses",
+        "tma_seconds", "tmr_seconds",
+    ),
+    "external": (
+        "period", "indicator_key", "name", "login", "hour", "value", "volume",
+        "successes", "losses", "tma_seconds", "tmr_seconds",
+    ),
+    "freshness": ("indicator_key", "name", "data_through", "refreshed_at"),
+}
+
+
 def render_management_indicators(
     ctx: AccessContext,
     segments: list[Segment],
     dashboard: DashboardService,
 ) -> None:
     payload = dashboard.management_payload(ctx, [segment.id for segment in segments])
-    segment_df = pd.DataFrame(payload["segment_summary"])
-    analyst_df = pd.DataFrame(payload["analyst_summary"])
-    analyst_metrics_df = pd.DataFrame(payload.get("analyst_metrics", []))
-    daily_df = pd.DataFrame(payload.get("daily_summary", []))
-    breakdown_df = pd.DataFrame(payload["breakdowns"])
-    external_df = pd.DataFrame(payload["external"])
-    freshness_df = pd.DataFrame(payload["freshness"])
+    segment_df = _payload_frame(payload, "segment_summary")
+    analyst_df = _payload_frame(payload, "analyst_summary")
+    analyst_metrics_df = _payload_frame(payload, "analyst_metrics")
+    daily_df = _payload_frame(payload, "daily_summary")
+    breakdown_df = _payload_frame(payload, "breakdowns")
+    external_df = _payload_frame(payload, "external")
+    freshness_df = _payload_frame(payload, "freshness")
 
     st.markdown("### Visão gerencial dos indicadores")
     st.caption(
@@ -123,11 +153,12 @@ def render_management_indicators(
         return
 
     freshness_index = {
-        str(row["indicator_key"]): row
+        str(row.get("indicator_key")): row
         for row in freshness_df.to_dict("records")
+        if row.get("indicator_key") not in (None, "")
     } if not freshness_df.empty else {}
 
-    available = set(segment_df["indicator_key"].astype(str))
+    available = set(segment_df["indicator_key"].dropna().astype(str))
     groups = [
         (label, tuple(key for key in keys if key in available))
         for label, keys in SOURCE_GROUPS
@@ -249,28 +280,12 @@ def _render_indicator(
     period = str(first.get("period") or "")
     fresh = freshness_index.get(indicator_key, {})
 
-    details = (
-        breakdown_df[breakdown_df["indicator_key"] == indicator_key].copy()
-        if not breakdown_df.empty
-        else pd.DataFrame()
-    )
+    details = _indicator_frame(breakdown_df, indicator_key)
     detail = _overall_detail(breakdown_df, indicator_key)
     people = analyst_df[analyst_df["indicator_key"] == indicator_key].copy()
-    metrics = (
-        analyst_metrics_df[analyst_metrics_df["indicator_key"] == indicator_key].copy()
-        if not analyst_metrics_df.empty
-        else pd.DataFrame()
-    )
-    daily = (
-        daily_df[daily_df["indicator_key"] == indicator_key].copy()
-        if not daily_df.empty
-        else pd.DataFrame()
-    )
-    ext = (
-        external_df[external_df["indicator_key"] == indicator_key].copy()
-        if ctx.is_admin and not external_df.empty
-        else pd.DataFrame()
-    )
+    metrics = _indicator_frame(analyst_metrics_df, indicator_key)
+    daily = _indicator_frame(daily_df, indicator_key)
+    ext = _indicator_frame(external_df, indicator_key) if ctx.is_admin else external_df.iloc[0:0].copy()
 
     st.markdown(f"### {name}")
     st.caption(
@@ -353,12 +368,12 @@ def _render_operational_details(
 
     for scope_tab, scope in zip(scope_tabs, scopes):
         with scope_tab:
-            scoped = details.copy() if scope == "Geral" else details[details["segment_name"] == scope].copy()
+            scoped = _scope_frame(details, scope)
             if scoped.empty:
                 st.info("Sem detalhamento para este setor.")
                 continue
 
-            service_rows = scoped[scoped["dimension"] == "service"].copy()
+            service_rows = _dimension_rows(scoped, "service")
             service_values = sorted(service_rows["dimension_value"].dropna().astype(str).unique())
             service_choice = "Todos"
             if len(service_values) > 1:
@@ -373,7 +388,7 @@ def _render_operational_details(
                 scoped = _service_scoped_details(scoped, service_choice)
                 st.caption(f"Cortes abaixo filtrados para o serviço: {service_choice}")
             else:
-                scoped = scoped[~scoped["dimension"].astype(str).str.startswith("service__")].copy()
+                scoped = _exclude_dimension_prefix(scoped, "service__")
 
             if scope == "Geral":
                 scoped = _aggregate_breakdown_rows(scoped)
@@ -394,7 +409,7 @@ def _render_operational_details(
                 ("Filas", ("queue_type", "queue")),
             )
             available_categories = [
-                (label, tuple(dim for dim in dims if not scoped[scoped["dimension"] == dim].empty))
+                (label, tuple(dim for dim in dims if not _dimension_rows(scoped, dim).empty))
                 for label, dims in categories
             ]
             available_categories = [(label, dims) for label, dims in available_categories if dims]
@@ -408,7 +423,7 @@ def _render_operational_details(
                     dimension_tabs = st.tabs([DIMENSION_LABELS[dimension] for dimension in dimensions])
                     for dimension_tab, dimension in zip(dimension_tabs, dimensions):
                         with dimension_tab:
-                            part = scoped[scoped["dimension"] == dimension].copy()
+                            part = _dimension_rows(scoped, dimension)
                             st.dataframe(
                                 _breakdown_table(part, dimension, indicator_key),
                                 use_container_width=True,
@@ -431,21 +446,16 @@ def _render_time_details(
             scoped_details = _scope_frame(details, scope)
             scoped_daily = _scope_frame(daily, scope)
 
-            if not scoped_details.empty and "dimension" in scoped_details.columns:
-                scoped_details = scoped_details[
-                    scoped_details["dimension"].isin(("turn", "hour"))
-                ].copy()
-            else:
-                scoped_details = pd.DataFrame()
+            scoped_details = _dimensions_rows(scoped_details, ("turn", "hour"))
             if scope == "Geral" and not scoped_details.empty:
                 scoped_details = _aggregate_breakdown_rows(scoped_details)
             if scope == "Geral" and not scoped_daily.empty:
                 scoped_daily = _aggregate_daily_rows(scoped_daily)
 
             blocks = []
-            if not scoped_details[scoped_details["dimension"] == "turn"].empty:
+            if not _dimension_rows(scoped_details, "turn").empty:
                 blocks.append(("Turno", "turn"))
-            if not scoped_details[scoped_details["dimension"] == "hour"].empty:
+            if not _dimension_rows(scoped_details, "hour").empty:
                 blocks.append(("Hora", "hour"))
             if not scoped_daily.empty:
                 blocks.append(("Evolução diária", "daily"))
@@ -464,7 +474,7 @@ def _render_time_details(
                             hide_index=True,
                         )
                     else:
-                        part = scoped_details[scoped_details["dimension"] == kind].copy()
+                        part = _dimension_rows(scoped_details, kind)
                         st.dataframe(
                             _breakdown_table(part, kind, indicator_key),
                             use_container_width=True,
@@ -472,15 +482,60 @@ def _render_time_details(
                         )
 
 
-def _scope_frame(frame: pd.DataFrame, scope: str) -> pd.DataFrame:
-    """Filtra por setor sem quebrar quando a carga antiga ainda não possui colunas de breakdown."""
-    if frame is None or frame.empty:
+def _payload_frame(payload: dict, key: str) -> pd.DataFrame:
+    """Cria DataFrame com schema estável mesmo quando o payload vem vazio/parcial."""
+    columns = FRAME_SCHEMAS[key]
+    records = payload.get(key) or []
+    frame = pd.DataFrame(records)
+    for column in columns:
+        if column not in frame.columns:
+            frame[column] = pd.Series(index=frame.index, dtype="object")
+    return frame.loc[:, list(dict.fromkeys([*frame.columns, *columns]))]
+
+
+def _indicator_frame(frame: pd.DataFrame, indicator_key: str) -> pd.DataFrame:
+    if frame is None:
         return pd.DataFrame()
-    if scope == "Geral":
+    if frame.empty:
+        return frame.copy()
+    if "indicator_key" not in frame.columns:
+        return frame.iloc[0:0].copy()
+    return frame[frame["indicator_key"] == indicator_key].copy()
+
+
+def _scope_frame(frame: pd.DataFrame, scope: str) -> pd.DataFrame:
+    """Filtra por setor preservando o schema, inclusive para cargas legadas/vazias."""
+    if frame is None:
+        return pd.DataFrame()
+    if frame.empty or scope == "Geral":
         return frame.copy()
     if "segment_name" not in frame.columns:
-        return pd.DataFrame()
+        return frame.iloc[0:0].copy()
     return frame[frame["segment_name"] == scope].copy()
+
+
+def _dimension_rows(frame: pd.DataFrame, dimension: str) -> pd.DataFrame:
+    if frame is None:
+        return pd.DataFrame()
+    if frame.empty or "dimension" not in frame.columns:
+        return frame.iloc[0:0].copy()
+    return frame[frame["dimension"] == dimension].copy()
+
+
+def _dimensions_rows(frame: pd.DataFrame, dimensions: tuple[str, ...]) -> pd.DataFrame:
+    if frame is None:
+        return pd.DataFrame()
+    if frame.empty or "dimension" not in frame.columns:
+        return frame.iloc[0:0].copy()
+    return frame[frame["dimension"].isin(dimensions)].copy()
+
+
+def _exclude_dimension_prefix(frame: pd.DataFrame, prefix: str) -> pd.DataFrame:
+    if frame is None:
+        return pd.DataFrame()
+    if frame.empty or "dimension" not in frame.columns:
+        return frame.copy()
+    return frame[~frame["dimension"].astype(str).str.startswith(prefix, na=False)].copy()
 
 
 def _render_analyst_details(
@@ -520,12 +575,14 @@ def _render_analyst_details(
 
 
 def _service_scoped_details(rows: pd.DataFrame, service: str) -> pd.DataFrame:
+    if rows is None or rows.empty or not {"dimension", "dimension_value"}.issubset(rows.columns):
+        return rows.iloc[0:0].copy() if rows is not None else pd.DataFrame()
     direct_service = rows[
         (rows["dimension"] == "service")
         & (rows["dimension_value"].astype(str) == service)
     ].copy()
 
-    composite = rows[rows["dimension"].astype(str).str.startswith("service__")].copy()
+    composite = rows[rows["dimension"].astype(str).str.startswith("service__", na=False)].copy()
     if composite.empty:
         return direct_service
 
@@ -545,8 +602,11 @@ def _service_scoped_details(rows: pd.DataFrame, service: str) -> pd.DataFrame:
 
 
 def _aggregate_breakdown_rows(rows: pd.DataFrame) -> pd.DataFrame:
-    if rows.empty:
-        return rows
+    required = {"dimension", "dimension_value", "volume", "successes", "losses"}
+    if rows is None or rows.empty:
+        return rows.copy() if rows is not None else pd.DataFrame()
+    if not required.issubset(rows.columns):
+        return rows.iloc[0:0].copy()
     records = []
     for (dimension, dimension_value), part in rows.groupby(
         ["dimension", "dimension_value"], dropna=False
@@ -589,8 +649,11 @@ def _aggregate_breakdown_rows(rows: pd.DataFrame) -> pd.DataFrame:
 
 
 def _aggregate_daily_rows(rows: pd.DataFrame) -> pd.DataFrame:
-    if rows.empty:
-        return rows
+    required = {"period", "value", "volume"}
+    if rows is None or rows.empty:
+        return rows.copy() if rows is not None else pd.DataFrame()
+    if not required.issubset(rows.columns):
+        return rows.iloc[0:0].copy()
     records = []
     for period, part in rows.groupby("period", dropna=False):
         volume = pd.to_numeric(part["volume"], errors="coerce").fillna(0)
@@ -617,11 +680,17 @@ def _aggregate_daily_rows(rows: pd.DataFrame) -> pd.DataFrame:
 
 
 def _render_gain_loss_summary(details: pd.DataFrame, indicator_key: str) -> None:
-    if details.empty or indicator_key in {"dpa_official", "productivity_avg_daily"}:
+    required = {"dimension", "volume", "successes", "losses"}
+    if (
+        details is None
+        or details.empty
+        or not required.issubset(details.columns)
+        or indicator_key in {"dpa_official", "productivity_avg_daily"}
+    ):
         return
     usable = details[
         ~details["dimension"].isin(("overall", "turn", "hour"))
-        & ~details["dimension"].astype(str).str.startswith("service__")
+        & ~details["dimension"].astype(str).str.startswith("service__", na=False)
     ].copy()
     if usable.empty:
         return
@@ -838,8 +907,15 @@ def _analyst_table(
 
 
 def _breakdown_table(rows: pd.DataFrame, dimension: str, indicator_key: str) -> pd.DataFrame:
-    label = DIMENSION_LABELS[dimension]
+    label = DIMENSION_LABELS.get(dimension, str(dimension).replace("_", " ").title())
+    if rows is None or rows.empty:
+        return pd.DataFrame()
+    required = {"dimension_value", "volume", "successes", "losses", "value"}
+    if not required.issubset(rows.columns):
+        return pd.DataFrame()
     rows = rows.copy()
+    if "segment_name" not in rows.columns:
+        rows["segment_name"] = "Geral"
 
     if dimension == "hour":
         rows["_sort"] = pd.to_numeric(rows["dimension_value"], errors="coerce")
@@ -888,7 +964,12 @@ def _breakdown_table(rows: pd.DataFrame, dimension: str, indicator_key: str) -> 
 
 
 def _daily_table(rows: pd.DataFrame, indicator_key: str) -> pd.DataFrame:
-    rows = rows.copy().sort_values(["period", "segment_name"])
+    if rows is None or rows.empty or not {"period", "value", "volume"}.issubset(rows.columns):
+        return pd.DataFrame()
+    rows = rows.copy()
+    if "segment_name" not in rows.columns:
+        rows["segment_name"] = "Geral"
+    rows = rows.sort_values(["period", "segment_name"])
     output = []
     for _, row in rows.iterrows():
         item = {
@@ -903,6 +984,9 @@ def _daily_table(rows: pd.DataFrame, indicator_key: str) -> pd.DataFrame:
 
 
 def _external_table(rows: pd.DataFrame, indicator_key: str) -> pd.DataFrame:
+    required = {"hour", "login", "volume", "successes", "losses", "value"}
+    if rows is None or rows.empty or not required.issubset(rows.columns):
+        return pd.DataFrame()
     rows = rows.copy()
     rows["_hour_num"] = pd.to_numeric(rows["hour"], errors="coerce")
     rows = rows.sort_values(["_hour_num", "login"], na_position="last")
@@ -936,7 +1020,8 @@ def _external_table(rows: pd.DataFrame, indicator_key: str) -> pd.DataFrame:
 
 
 def _overall_detail(breakdown_df: pd.DataFrame, indicator_key: str) -> dict | None:
-    if breakdown_df.empty:
+    required = {"indicator_key", "dimension", "volume", "successes", "losses"}
+    if breakdown_df is None or breakdown_df.empty or not required.issubset(breakdown_df.columns):
         return None
     rows = breakdown_df[
         (breakdown_df["indicator_key"] == indicator_key)

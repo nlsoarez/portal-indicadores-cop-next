@@ -833,6 +833,7 @@ class IndicatorRepository:
                 analyst_breakdowns = conn.execute(
                     """
                     SELECT
+                        b.period AS day,
                         b.data_month AS period,
                         d.indicator_key,
                         d.name,
@@ -851,9 +852,9 @@ class IndicatorRepository:
                     JOIN indicator_definitions d ON d.id=b.indicator_definition_id
                     WHERE b.segment_id=? AND b.scope='team'
                       AND UPPER(b.login)=UPPER(?) AND d.active=1
-                    GROUP BY b.data_month, d.indicator_key, d.name, d.target_value,
+                    GROUP BY b.period, b.data_month, d.indicator_key, d.name, d.target_value,
                              d.direction, d.unit, b.dimension, b.dimension_value
-                    ORDER BY d.name, b.dimension, b.dimension_value
+                    ORDER BY d.name, b.period, b.dimension, b.dimension_value
                     """,
                     (segment_id, login),
                 ).fetchall()

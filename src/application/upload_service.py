@@ -64,12 +64,24 @@ class UploadProcessingService:
 
         batches = adapter.parser(raw_bytes, union_logins)
         output: list[tuple[str, UploadProcessingResult]] = []
-        for segment, login_map in targets:
+        for target_index, (segment, login_map) in enumerate(targets):
             filtered: list[ParsedIndicatorBatch] = []
             for batch in batches:
                 rows = tuple(row for row in batch.rows if str(row.get("login", "")).upper() in login_map)
                 if not rows:
                     continue
+                breakdowns = tuple(
+                    breakdown
+                    for breakdown in batch.breakdowns
+                    if (
+                        str(breakdown.get("scope") or "team") == "team"
+                        and str(breakdown.get("login") or "").upper() in login_map
+                    )
+                    or (
+                        str(breakdown.get("scope") or "") == "external"
+                        and target_index == 0
+                    )
+                )
                 filtered.append(
                     ParsedIndicatorBatch(
                         source_key=batch.source_key,
@@ -77,6 +89,7 @@ class UploadProcessingService:
                         data_through=max(str(row["period"]) for row in rows),
                         rows=rows,
                         months=batch.months,
+                        breakdowns=breakdowns,
                     )
                 )
             results = self._persist_batches(
@@ -124,6 +137,12 @@ class UploadProcessingService:
                 indicator_definition_id=int(definition["id"]),
                 login_to_user_id=login_map,
                 rows=batch.rows,
+                months=batch.months,
+            )
+            self.indicators.replace_breakdowns_for_months(
+                segment_id=segment_id,
+                indicator_definition_id=int(definition["id"]),
+                rows=batch.breakdowns,
                 months=batch.months,
             )
             self.freshness.record_indicator_data_through(

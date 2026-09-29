@@ -330,6 +330,217 @@ class IndicatorRepository:
             rows = conn.execute(sql, params).fetchall()
         return [dict(row) for row in rows]
 
+    def management_payload(self, segment_ids: list[int], *, include_external: bool = False) -> dict:
+        """Visão gerencial consolidada dos indicadores para liderança/admin."""
+        if not segment_ids:
+            return {
+                "segment_summary": [],
+                "analyst_summary": [],
+                "breakdowns": [],
+                "external": [],
+                "freshness": [],
+            }
+
+        placeholders = ",".join("?" for _ in segment_ids)
+        params = tuple(int(segment_id) for segment_id in segment_ids)
+        with connection() as conn:
+            segment_summary = conn.execute(
+                f"""
+                WITH base AS (
+                    SELECT ir.segment_id, ir.user_id, ir.data_month, ir.value, ir.volume,
+                           d.indicator_key, d.name, d.target_value, d.direction, d.unit,
+                           s.slug AS segment_slug, s.name AS segment_name
+                    FROM indicator_results ir
+                    JOIN indicator_definitions d ON d.id=ir.indicator_definition_id
+                    JOIN segments s ON s.id=ir.segment_id
+                    JOIN user_roles ur ON ur.user_id=ir.user_id
+                    JOIN roles r ON r.id=ur.role_id AND r.code='analyst'
+                    WHERE ir.segment_id IN ({placeholders})
+                ),
+                latest AS (
+                    SELECT indicator_key, MAX(data_month) AS data_month
+                    FROM base GROUP BY indicator_key
+                )
+                SELECT b.data_month AS period, b.segment_id, b.segment_slug, b.segment_name,
+                       b.indicator_key, b.name, b.target_value, b.direction, b.unit,
+                       ROUND(CAST(SUM(b.value * b.volume) AS NUMERIC) / NULLIF(SUM(b.volume), 0), 1) AS value,
+                       SUM(b.volume) AS volume,
+                       COUNT(DISTINCT b.user_id) AS analysts
+                FROM base b
+                JOIN latest l ON l.indicator_key=b.indicator_key AND l.data_month=b.data_month
+                GROUP BY b.data_month, b.segment_id, b.segment_slug, b.segment_name,
+                         b.indicator_key, b.name, b.target_value, b.direction, b.unit
+                ORDER BY b.name, b.segment_name
+                """,
+                params,
+            ).fetchall()
+
+            analyst_summary = conn.execute(
+                f"""
+                WITH base AS (
+                    SELECT ir.segment_id, ir.user_id, ir.data_month, ir.value, ir.volume,
+                           d.indicator_key, d.name, d.target_value, d.direction, d.unit,
+                           s.slug AS segment_slug, s.name AS segment_name,
+                           u.login, u.display_name
+                    FROM indicator_results ir
+                    JOIN indicator_definitions d ON d.id=ir.indicator_definition_id
+                    JOIN segments s ON s.id=ir.segment_id
+                    JOIN users u ON u.id=ir.user_id
+                    JOIN user_roles ur ON ur.user_id=ir.user_id
+                    JOIN roles r ON r.id=ur.role_id AND r.code='analyst'
+                    WHERE ir.segment_id IN ({placeholders})
+                ),
+                latest AS (
+                    SELECT indicator_key, MAX(data_month) AS data_month
+                    FROM base GROUP BY indicator_key
+                )
+                SELECT b.data_month AS period, b.segment_id, b.segment_slug, b.segment_name,
+                       b.indicator_key, b.name, b.target_value, b.direction, b.unit,
+                       b.user_id, b.login, b.display_name,
+                       ROUND(CAST(SUM(b.value * b.volume) AS NUMERIC) / NULLIF(SUM(b.volume), 0), 1) AS value,
+                       SUM(b.volume) AS volume
+                FROM base b
+                JOIN latest l ON l.indicator_key=b.indicator_key AND l.data_month=b.data_month
+                GROUP BY b.data_month, b.segment_id, b.segment_slug, b.segment_name,
+                         b.indicator_key, b.name, b.target_value, b.direction, b.unit,
+                         b.user_id, b.login, b.display_name
+                ORDER BY b.name, b.segment_name, b.display_name
+                """,
+                params,
+            ).fetchall()
+
+            breakdowns = conn.execute(
+                f"""
+                WITH base AS (
+                    SELECT b.segment_id, b.data_month, b.dimension, b.dimension_value,
+                           b.value, b.volume, b.successes, b.losses, b.login,
+                           d.indicator_key, d.name,
+                           s.slug AS segment_slug, s.name AS segment_name
+                    FROM indicator_breakdowns b
+                    JOIN indicator_definitions d ON d.id=b.indicator_definition_id
+                    JOIN segments s ON s.id=b.segment_id
+                    JOIN users u ON UPPER(u.login)=UPPER(b.login)
+                    JOIN user_roles ur ON ur.user_id=u.id
+                    JOIN roles r ON r.id=ur.role_id AND r.code='analyst'
+                    WHERE b.segment_id IN ({placeholders})
+                      AND b.scope='team'
+                ),
+                latest AS (
+                    SELECT indicator_key, MAX(data_month) AS data_month
+                    FROM base GROUP BY indicator_key
+                )
+                SELECT b.data_month AS period, b.segment_id, b.segment_slug, b.segment_name,
+                       b.indicator_key, b.name, b.dimension, b.dimension_value,
+                       ROUND(CAST(SUM(b.value * b.volume) AS NUMERIC) / NULLIF(SUM(b.volume), 0), 1) AS value,
+                       SUM(b.volume) AS volume,
+                       SUM(b.successes) AS successes,
+                       SUM(b.losses) AS losses
+                FROM base b
+                JOIN latest l ON l.indicator_key=b.indicator_key AND l.data_month=b.data_month
+                GROUP BY b.data_month, b.segment_id, b.segment_slug, b.segment_name,
+                         b.indicator_key, b.name, b.dimension, b.dimension_value
+                ORDER BY b.name, b.dimension, b.dimension_value, b.segment_name
+                """,
+                params,
+            ).fetchall()
+
+            freshness = conn.execute(
+                f"""
+                SELECT d.indicator_key, d.name,
+                       MAX(f.data_through) AS data_through,
+                       MAX(f.refreshed_at) AS refreshed_at
+                FROM indicator_definitions d
+                LEFT JOIN indicator_freshness f
+                  ON f.indicator_definition_id=d.id AND f.segment_id=d.segment_id
+                WHERE d.segment_id IN ({placeholders}) AND d.active=1
+                GROUP BY d.indicator_key, d.name
+                ORDER BY d.name
+                """,
+                params,
+            ).fetchall()
+
+            external = []
+            if include_external:
+                external = conn.execute(
+                    f"""
+                    WITH base AS (
+                        SELECT b.data_month, b.login, b.dimension_value, b.value, b.volume,
+                               b.successes, b.losses, d.indicator_key, d.name
+                        FROM indicator_breakdowns b
+                        JOIN indicator_definitions d ON d.id=b.indicator_definition_id
+                        WHERE b.segment_id IN ({placeholders})
+                          AND b.scope='external' AND b.dimension='external_hour'
+                    ),
+                    latest AS (
+                        SELECT indicator_key, MAX(data_month) AS data_month
+                        FROM base GROUP BY indicator_key
+                    )
+                    SELECT b.data_month AS period, b.indicator_key, b.name, b.login,
+                           b.dimension_value AS hour,
+                           ROUND(CAST(SUM(b.value * b.volume) AS NUMERIC) / NULLIF(SUM(b.volume), 0), 1) AS value,
+                           SUM(b.volume) AS volume,
+                           SUM(b.successes) AS successes,
+                           SUM(b.losses) AS losses
+                    FROM base b
+                    JOIN latest l ON l.indicator_key=b.indicator_key AND l.data_month=b.data_month
+                    GROUP BY b.data_month, b.indicator_key, b.name, b.login, b.dimension_value
+                    ORDER BY b.name, b.login, b.dimension_value
+                    """,
+                    params,
+                ).fetchall()
+
+        return {
+            "segment_summary": [dict(row) for row in segment_summary],
+            "analyst_summary": [dict(row) for row in analyst_summary],
+            "breakdowns": [dict(row) for row in breakdowns],
+            "external": [dict(row) for row in external],
+            "freshness": [dict(row) for row in freshness],
+        }
+
+    def replace_breakdowns_for_months(
+        self,
+        *,
+        segment_id: int,
+        indicator_definition_id: int,
+        rows: tuple[dict, ...],
+        months: tuple[str, ...],
+    ) -> None:
+        with transaction() as conn:
+            for month in months:
+                conn.execute(
+                    "DELETE FROM indicator_breakdowns "
+                    "WHERE segment_id=? AND indicator_definition_id=? AND data_month=?",
+                    (segment_id, indicator_definition_id, month),
+                )
+            payload = []
+            for row in rows:
+                payload.append(
+                    (
+                        segment_id,
+                        indicator_definition_id,
+                        str(row.get("scope") or "team"),
+                        str(row.get("login") or "").strip().upper(),
+                        str(row.get("period") or ""),
+                        str(row.get("data_month") or str(row.get("period") or "")[:7]),
+                        str(row.get("dimension") or ""),
+                        str(row.get("dimension_value") or ""),
+                        float(row.get("value") or 0),
+                        int(row.get("volume") or 0),
+                        int(row.get("successes") or 0),
+                        int(row.get("losses") or 0),
+                    )
+                )
+            if payload:
+                conn.executemany(
+                    """
+                    INSERT INTO indicator_breakdowns(
+                        segment_id, indicator_definition_id, scope, login, period, data_month,
+                        dimension, dimension_value, value, volume, successes, losses
+                    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                    """,
+                    payload,
+                )
+
     def replace_results_for_months(
         self,
         *,

@@ -428,6 +428,40 @@ def initialize_database() -> None:
                 "CREATE UNIQUE INDEX IF NOT EXISTS uq_indicator_results_competence "
                 "ON indicator_results(segment_id, user_id, indicator_definition_id, data_month, period)"
             )
+            conn.execute(
+                """
+                CREATE TABLE IF NOT EXISTS indicator_breakdowns (
+                    id BIGSERIAL PRIMARY KEY,
+                    segment_id BIGINT NOT NULL REFERENCES segments(id) ON DELETE CASCADE,
+                    indicator_definition_id BIGINT NOT NULL REFERENCES indicator_definitions(id) ON DELETE CASCADE,
+                    scope TEXT NOT NULL DEFAULT 'team',
+                    login TEXT NOT NULL DEFAULT '',
+                    period TEXT NOT NULL,
+                    data_month TEXT NOT NULL,
+                    dimension TEXT NOT NULL,
+                    dimension_value TEXT NOT NULL DEFAULT '',
+                    value DOUBLE PRECISION,
+                    volume INTEGER NOT NULL DEFAULT 0,
+                    successes INTEGER NOT NULL DEFAULT 0,
+                    losses INTEGER NOT NULL DEFAULT 0,
+                    created_at TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP
+                )
+                """
+            )
+            conn.execute(
+                "CREATE INDEX IF NOT EXISTS idx_breakdowns_segment_month "
+                "ON indicator_breakdowns(segment_id, indicator_definition_id, data_month)"
+            )
+            conn.execute(
+                "CREATE INDEX IF NOT EXISTS idx_breakdowns_scope_dimension "
+                "ON indicator_breakdowns(scope, dimension, data_month)"
+            )
+            conn.execute(
+                "REVOKE ALL ON TABLE indicator_breakdowns FROM PUBLIC, anon, authenticated"
+            )
+            conn.execute(
+                "REVOKE ALL ON ALL SEQUENCES IN SCHEMA cop_portal FROM PUBLIC, anon, authenticated"
+            )
         return
 
     with transaction() as conn:
@@ -441,6 +475,34 @@ def initialize_database() -> None:
         )
         _migrate_indicator_results_unique_sqlite(conn)
         _ensure_result_indexes_sqlite(conn)
+        conn.execute(
+            """
+            CREATE TABLE IF NOT EXISTS indicator_breakdowns (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                segment_id INTEGER NOT NULL REFERENCES segments(id) ON DELETE CASCADE,
+                indicator_definition_id INTEGER NOT NULL REFERENCES indicator_definitions(id) ON DELETE CASCADE,
+                scope TEXT NOT NULL DEFAULT 'team',
+                login TEXT NOT NULL DEFAULT '',
+                period TEXT NOT NULL,
+                data_month TEXT NOT NULL,
+                dimension TEXT NOT NULL,
+                dimension_value TEXT NOT NULL DEFAULT '',
+                value REAL,
+                volume INTEGER NOT NULL DEFAULT 0,
+                successes INTEGER NOT NULL DEFAULT 0,
+                losses INTEGER NOT NULL DEFAULT 0,
+                created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
+            )
+            """
+        )
+        conn.execute(
+            "CREATE INDEX IF NOT EXISTS idx_breakdowns_segment_month "
+            "ON indicator_breakdowns(segment_id, indicator_definition_id, data_month)"
+        )
+        conn.execute(
+            "CREATE INDEX IF NOT EXISTS idx_breakdowns_scope_dimension "
+            "ON indicator_breakdowns(scope, dimension, data_month)"
+        )
 
 
 def _ensure_column_sqlite(

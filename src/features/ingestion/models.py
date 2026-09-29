@@ -10,6 +10,7 @@ class ParsedIndicatorBatch:
     data_through: str
     rows: tuple[dict, ...]
     months: tuple[str, ...]
+    breakdowns: tuple[dict, ...] = ()
 
     @property
     def analyst_count(self) -> int:

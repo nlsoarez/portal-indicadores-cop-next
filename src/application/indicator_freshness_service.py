@@ -8,80 +8,40 @@ from src.infrastructure.repositories import IndicatorRepository, UploadRepositor
 
 
 class IndicatorFreshnessService:
-    """Registra até qual data cada indicador está coberto por um upload processado."""
-
-    def __init__(
-        self,
-        access: AccessService | None = None,
-        indicators: IndicatorRepository | None = None,
-        uploads: UploadRepository | None = None,
-    ):
+    def __init__(self, access=None, indicators=None, uploads=None):
         self.access = access or AccessService()
         self.indicators = indicators or IndicatorRepository()
         self.uploads = uploads or UploadRepository()
 
-    def start_upload(
-        self,
-        ctx: AccessContext,
-        segment_id: int,
-        source_key: str,
-        filename: str,
-    ) -> int:
+    def start_upload(self, ctx: AccessContext, segment_id: int, source_key: str, filename: str) -> int:
         self.access.assert_segment_access(ctx, segment_id)
         if not ctx.is_admin:
             raise PermissionError("Somente administradores podem registrar uploads")
-        return self.uploads.create(
-            segment_id=segment_id,
-            source_key=source_key,
-            filename=filename,
-            uploaded_by=ctx.user.id,
-        )
+        return self.uploads.create(segment_id, source_key, filename, ctx.user.id)
 
-    def record_indicator_data_through(
-        self,
-        ctx: AccessContext,
-        segment_id: int,
-        indicator_key: str,
-        data_through: date | datetime | str,
-        source_key: str,
-        upload_id: int | None = None,
-    ) -> None:
+    def record_indicator_data_through(self, ctx, segment_id, indicator_key, data_through, source_key, upload_id=None):
         self.access.assert_segment_access(ctx, segment_id)
         if not ctx.is_admin:
             raise PermissionError("Somente administradores podem atualizar a cobertura dos indicadores")
-
-        normalized = _normalize_date(data_through)
         definition = self.indicators.get_definition(segment_id, indicator_key)
         if not definition:
             raise ValueError(f"Indicador não cadastrado no segmento: {indicator_key}")
+        self.indicators.upsert_freshness(segment_id, int(definition["id"]), _normalize_date(data_through), source_key, upload_id)
 
-        self.indicators.upsert_freshness(
-            segment_id=segment_id,
-            indicator_definition_id=int(definition["id"]),
-            data_through=normalized,
-            source_key=source_key,
-            upload_id=upload_id,
-        )
-
-    def freshness(self, ctx: AccessContext, segment_id: int) -> list[dict]:
+    def freshness(self, ctx, segment_id):
         self.access.assert_segment_access(ctx, segment_id)
         return self.indicators.freshness(segment_id)
 
 
-def _normalize_date(value: date | datetime | str) -> str:
+def _normalize_date(value):
     if isinstance(value, datetime):
         return value.date().isoformat()
     if isinstance(value, date):
         return value.isoformat()
-
     raw = str(value).strip()
-    if not raw:
-        raise ValueError("data_through vazio")
-
-    # Contrato interno: persistir sempre YYYY-MM-DD.
     for fmt in ("%Y-%m-%d", "%d/%m/%Y", "%Y-%m-%dT%H:%M:%S"):
         try:
             return datetime.strptime(raw, fmt).date().isoformat()
         except ValueError:
-            continue
+            pass
     raise ValueError(f"Data inválida para cobertura do indicador: {value}")

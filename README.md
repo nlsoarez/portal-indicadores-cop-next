@@ -1,88 +1,97 @@
 # Portal de Indicadores COP — Next
 
-Nova geração arquitetural do portal de indicadores, construída sem alterar o repositório de referência.
+Nova geração do Portal de Indicadores COP, construída sem alterar o repositório legado de referência.
 
-## O que já está implementado
+## Perfis de acesso
 
-- Modelo relacional: usuários, roles, segmentos, memberships, indicadores, resultados, uploads e logs de acesso.
-- Autorização server-side com fail-closed.
-- `AdminShell` e `AnalystShell` visual e funcionalmente separados.
-- Seletor de segmento para admin com limpeza de estado na troca.
-- Preventiva cadastrada com Daniel, Rosana, Carlos e Maristella.
-- Nome completo persistido e nome curto na interface.
-- Senha inicial `claro123`, armazenada apenas como hash PBKDF2, com troca obrigatória.
-- Último acesso disponível para administração.
-- Estrutura para média de equipe sem expor linhas individuais dos colegas.
-- **Cobertura dos dados por indicador:** cada processamento registra a maior data real encontrada no arquivo (`data_through`), separada da data/hora do upload. Admin e analista visualizam "Dados até DD/MM/AAAA".
-- Histórico do arquivo/fonte que originou a cobertura mais recente de cada indicador.
-- Testes de isolamento de dados, contexto de segmento e atualização da cobertura dos indicadores.
-- **Sem GitHub Actions.** O repositório não usa `.github/workflows/`.
+- **Admin** — gestão total e **único perfil autorizado a fazer upload/processamento das planilhas**.
+- **Subadmin** — Bruno (`N5619600`), Leandro (`N6088107`), Kelly (`N5923221`) e Marley (`N0238475`). Possuem visão gerencial dos analistas, sem upload.
+- **Analista** — visualiza somente seus próprios dados individuais e agregados permitidos da equipe.
+- Líderes/Subadmins não aparecem na lista de analistas comuns.
+- O Admin possui a aba **Líderes** para consultar indicadores, evolução, histórico e último acesso dos quatro líderes.
+- Resultados dos líderes são persistidos quando aparecem nas fontes, mas **não entram nas médias dos analistas**.
 
-Este portal não possui módulo de escala.
+## Segmentos e pessoas
 
-## Perfis e pessoas
+- **Preventiva:** Daniel (`N5604148`), Rosana (`N5941223`), Carlos (`N0158974`) e Maristella (`N5577565`).
+- Maristella pertence somente à Preventiva.
+- **Residencial:** inclui Marcelo de Souza Almeida (`F104752`) e a equipe residencial migrada do portal legado.
+- **Empresarial:** equipe empresarial migrada do portal legado.
+- Bruno e Leandro têm seus indicadores próprios associados ao Empresarial; Kelly e Marley ao Residencial. Como Subadmins, os quatro continuam podendo consultar os segmentos ativos autorizados.
 
-- **Admin:** gestão total do portal e único perfil autorizado a fazer upload/processamento de planilhas.
-- **Subadmin:** Bruno (N5619600), Leandro (N6088107), Kelly (N5923221) e Marley (N0238475). Podem consultar os dados individuais dos analistas, mas não possuem upload.
-- **Analista:** recebe somente os próprios dados individuais e os agregados permitidos da equipe.
-- Líderes/Subadmins não aparecem nas listas de usuários comuns/analistas.
-- O Admin possui uma aba exclusiva **Líderes** para consultar acesso e indicadores de Bruno, Leandro, Kelly e Marley.
-- Indicadores dos líderes podem ser persistidos a partir das planilhas, mas são excluídos das médias da equipe de analistas.
-- Maristella (N5577565) pertence somente à Preventiva.
-- Marcelo de Souza Almeida (F104752) pertence ao Residencial.
+## Sete fontes oficiais de upload
 
-## Fontes oficiais de upload
+O Admin atualiza o portal em um painel global. Cada arquivo é enviado **uma única vez**, independentemente do segmento atualmente selecionado:
 
-O Admin atualiza o portal por um painel global com exatamente sete fontes:
+1. **Analítico Indicadores Residencial**
+2. **Analítico Empresarial**
+3. **Ocupação DPA 2026**
+4. **Produtividade COP Rede 2026 — Analítico**
+5. **Fechamento TOA x SIR**
+6. **Analítico TOA Chat**
+7. **Analítico Indicadores TOA**
 
-1. Analítico Indicadores Residencial
-2. Analítico Empresarial
-3. Ocupação DPA 2026
-4. Produtividade COP Rede 2026 - Analítico
-5. Fechamento TOA x SIR
-6. Analítico TOA Chat
-7. Analitico Indicadores TOA
+As sete fontes possuem adapter funcional. O backend identifica os usuários autorizados e direciona os resultados aos segmentos correspondentes.
 
-O upload é feito uma única vez por fonte e não depende do segmento selecionado no menu. O backend direciona cada fonte aos segmentos configurados.
+## Indicadores atualmente processados
 
-## Fontes já migradas
+### Residencial
+
+- ETIT Fibra HFC
+- ETIT GPON
+- Assertividade Acionamento Fibra HFC
+- Assertividade Acionamento GPON
+- DPA Oficial
+- Produtividade média diária
+- Assertividade Fechamento TOA x SIR
+
+### Empresarial
+
+- ETIT por Evento
+- DPA Oficial
+- Produtividade média diária
+- Assertividade Fechamento TOA x SIR
 
 ### Preventiva
 
-- **Chat 10 min** — fonte Chat TOA, meta 75%, leitura de `INDICADOR_TMA_DENTRO`, filtro RJO, mês mais recente e membership do segmento.
-- **Tempo de Validação do Formulário** — fonte Indicadores TOA, meta 80%, `INDICADOR=1` como aderente, Regional Leste, mês mais recente e membership do segmento.
-- Resultados são persistidos por dia/analista.
-- Reupload do mesmo mês substitui aquele mês em vez de duplicar resultados.
-- A visão do analista consolida o mês ponderando aderência pelo volume e compara com a média da equipe.
+- Chat 10 min — meta 75%
+- Tempo de Validação do Formulário — meta 80%
+- Taxa de Tarefas Canceladas
+- DPA Oficial
+- Produtividade média diária
+- Assertividade Fechamento TOA x SIR quando houver dados dos usuários do segmento
 
-## Contrato dos importadores
+## Regras de ingestão
 
-Quando um parser processar uma planilha, ele deve:
+- A maior data real encontrada em cada indicador alimenta **Dados até DD/MM/AAAA**.
+- O mês de competência da fonte (`ANOMES`) é persistido separadamente da data real do evento. Isso evita atribuir ao mês anterior um evento que pertence ao fechamento do mês atual.
+- Reupload de uma mesma competência substitui aquele mês/indicador, evitando duplicação.
+- Médias mensais são ponderadas pelo volume quando o indicador possui volume operacional.
+- DPA e Fechamento TOA x SIR são lidos do **pivot cache** interno dos arquivos, sem depender do estado visual dos filtros do Excel.
+- Planilhas grandes são processadas em streaming de XML para evitar carregar worksheets de centenas de MB inteiros em memória.
+- Chat TOA é filtrado pelas matrículas do segmento; não há filtro fixo por nome de fila, porque as filas reais da Preventiva incluem QOE.
 
-1. registrar o upload com `IndicatorFreshnessService.start_upload(...)`;
-2. calcular a maior data válida realmente presente para cada indicador;
-3. chamar `record_indicator_data_through(...)` para cada indicador processado.
+## Banco e segurança
 
-A data exibida ao usuário é a cobertura real do indicador, não a data do envio do arquivo.
+- Usuários, roles, segmentos, memberships, indicadores, resultados, uploads, cobertura dos dados e logs de acesso ficam no banco relacional.
+- Existe uma separação entre segmento que o usuário pode **consultar** e segmento em que seu próprio **desempenho** deve ser contabilizado.
+- Senha inicial `claro123`, persistida somente como hash PBKDF2, com troca obrigatória no primeiro acesso.
+- Autorização é validada no backend (`AccessService`); esconder um controle na interface não é usado como proteção de acesso.
+- O portal **não possui módulo de escala**.
+- O projeto **não usa GitHub Actions** e não possui `.github/workflows/`.
 
-## Importante
+## Testes
 
-A fundação de rastreamento e os parsers de Chat/Validação da Preventiva já estão integrados. As demais fontes do portal legado ainda devem ser migradas por adapters independentes.
-
-## Rodar
+A suíte cobre isolamento de usuários, hierarquia Admin/Subadmin/Analista, ausência de escala, roteamento de segmentos, freshness, catálogo das sete fontes e parsers das fontes oficiais.
 
 ```bash
 python -m unittest discover -s tests -v
 streamlit run app.py
 ```
 
-Login inicial de administração: `ADMIN` / `claro123`.
-
-Analistas Preventiva usam suas matrículas com a mesma senha inicial e são obrigados a alterá-la no primeiro acesso.
-
 ## Documentação
 
-- `docs/GRAPHIFY_DIAGNOSIS.md`
 - `docs/ARCHITECTURE.md`
 - `docs/MIGRATION_INVENTORY.md`
 - `docs/POST_BUILD_GRAPH_AUDIT.md`
+- `docs/GRAPHIFY_DIAGNOSIS.md`

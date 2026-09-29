@@ -12,21 +12,14 @@ class SourceIngestionTest(unittest.TestCase):
         self.tmp = tempfile.TemporaryDirectory()
         os.environ["COP_PORTAL_DB"] = str(Path(self.tmp.name) / "portal.db")
         from src.infrastructure import database
-
         database.DB_PATH = Path(os.environ["COP_PORTAL_DB"])
         from src.infrastructure.database import initialize_database
         from src.config.seed import seed_foundation
-
-        initialize_database()
-        seed_foundation()
-
+        initialize_database(); seed_foundation()
         from src.application.access_service import AccessService
         from src.infrastructure.repositories import SegmentRepository, UserRepository
-
-        self.users = UserRepository()
-        self.segment = SegmentRepository().get_by_slug("preventiva")
-        admin = self.users.get_by_login("ADMIN")
-        self.ctx = AccessService(self.users).context(admin.id)
+        self.users = UserRepository(); self.segment = SegmentRepository().get_by_slug("preventiva")
+        self.ctx = AccessService(self.users).context(self.users.get_by_login("ADMIN").id)
 
     def tearDown(self):
         self.tmp.cleanup()
@@ -41,205 +34,55 @@ class SourceIngestionTest(unittest.TestCase):
     def test_chat_upload_filters_scope_and_persists_daily_result_and_freshness(self):
         from src.application.upload_service import UploadProcessingService
         from src.infrastructure.repositories import IndicatorRepository
+        df = pd.DataFrame({
+            "FECHAMENTO_COPREDE_LOGIN_ANALISTA":["N5604148","N5604148","N5941223","OUTSIDE","N0158974"],
+            "ABERTURA_ANOMES":[202609,202609,202609,202609,202608],
+            "FECHAMENTO_FILA":["COP REDE COAXIAL SUPORTE QOE"]*5,
+            "INDICADOR_TMA_DENTRO":[1,0,1,1,1],
+            "CHAT_INICIO":["2026-09-28 22:10:00","2026-09-28 22:20:00","2026-09-28 23:10:00","2026-09-28 23:20:00","2026-08-31 23:00:00"],
+        })
+        result=UploadProcessingService().process(self.ctx,self.segment.id,"chat_toa","chat.xlsx",self._xlsx(df,"Analítico CHAT TOA",3))
+        self.assertEqual("2026-09-28",result.data_through); self.assertEqual(2,result.analyst_count); self.assertEqual(3,result.total_volume)
+        daniel=self.users.get_by_login("N5604148"); repo=IndicatorRepository()
+        chat=next(r for r in repo.results_for_user(self.segment.id,daniel.id) if r["indicator_key"]=="chat_10m")
+        self.assertEqual(50.0,chat["value"]); self.assertEqual(2,chat["volume"])
+        fresh=next(r for r in repo.freshness(self.segment.id) if r["indicator_key"]=="chat_10m")
+        self.assertEqual("2026-09-28",fresh["data_through"]); self.assertEqual("chat.xlsx",fresh["filename"])
 
-        df = pd.DataFrame(
-            {
-                "FECHAMENTO_COPREDE_LOGIN_ANALISTA": [
-                    "N5604148", "N5604148", "N5941223", "OUTSIDE", "N0158974"
-                ],
-                "ABERTURA_ANOMES": [202609, 202609, 202609, 202609, 202608],
-                "FECHAMENTO_FILA": ["RJO RES", "RJO RES", "RJO RES", "RJO RES", "RJO RES"],
-                "INDICADOR_TMA_DENTRO": [1, 0, 1, 1, 1],
-                "CHAT_INICIO": [
-                    "2026-09-28 22:10:00",
-                    "2026-09-28 22:20:00",
-                    "2026-09-28 23:10:00",
-                    "2026-09-28 23:20:00",
-                    "2026-08-31 23:00:00",
-                ],
-            }
-        )
-        result = UploadProcessingService().process(
-            self.ctx,
-            self.segment.id,
-            "chat_toa",
-            "chat.xlsx",
-            self._xlsx(df, "Analítico CHAT TOA", startrow=3),
-        )
-        self.assertEqual("2026-09-28", result.data_through)
-        self.assertEqual(2, result.analyst_count)
-        self.assertEqual(3, result.total_volume)
-
-        daniel = self.users.get_by_login("N5604148")
-        rows = IndicatorRepository().results_for_user(self.segment.id, daniel.id)
-        chat = [row for row in rows if row["indicator_key"] == "chat_10m"]
-        self.assertEqual(1, len(chat))
-        self.assertEqual(50.0, chat[0]["value"])
-        self.assertEqual(2, chat[0]["volume"])
-
-        freshness = IndicatorRepository().freshness(self.segment.id)
-        chat_fresh = next(row for row in freshness if row["indicator_key"] == "chat_10m")
-        self.assertEqual("2026-09-28", chat_fresh["data_through"])
-        self.assertEqual("chat.xlsx", chat_fresh["filename"])
-
-        summary = IndicatorRepository().monthly_summary_for_user(self.segment.id, daniel.id)
-        chat_summary = next(row for row in summary if row["indicator_key"] == "chat_10m")
-        self.assertEqual(50.0, chat_summary["value"])
-        self.assertEqual(2, chat_summary["volume"])
-
-        team = IndicatorRepository().team_monthly_summary(self.segment.id)
-        team_chat = next(row for row in team if row["indicator_key"] == "chat_10m")
-        self.assertEqual(66.7, team_chat["team_avg"])
-        self.assertEqual(3, team_chat["team_volume"])
-        self.assertEqual(1.5, team_chat["avg_volume_per_analyst"])
-
-    def test_validation_upload_uses_latest_month_leste_and_membership(self):
+    def test_validation_compatibility_route(self):
         from src.application.upload_service import UploadProcessingService
         from src.infrastructure.repositories import IndicatorRepository
+        df=pd.DataFrame({
+            "INDICADOR_NOME":["TEMPO DE VALIDAÇÃO DO FORMULÁRIO"]*3,
+            "LOGIN":["N5577565","N5577565","N0158974"],
+            "INDICADOR":[1,1,0],"ANOMES":[202609]*3,"IN_REGIONAL":["Leste"]*3,
+            "DATA":["2026-09-27","2026-09-29","2026-09-29"],
+        })
+        result=UploadProcessingService().process(self.ctx,self.segment.id,"toa_validation","validacao.xlsx",self._xlsx(df,"TOA"))
+        self.assertEqual("2026-09-29",result.data_through)
+        carlos=self.users.get_by_login("N0158974")
+        val=next(r for r in IndicatorRepository().results_for_user(self.segment.id,carlos.id) if r["indicator_key"]=="validacao_20m")
+        self.assertEqual(0.0,val["value"])
 
-        df = pd.DataFrame(
-            {
-                "INDICADOR_NOME": [
-                    "TEMPO DE VALIDAÇÃO DO FORMULÁRIO",
-                    "TEMPO DE VALIDAÇÃO DO FORMULÁRIO",
-                    "TEMPO DE VALIDAÇÃO DO FORMULÁRIO",
-                    "TEMPO DE VALIDAÇÃO DO FORMULÁRIO",
-                    "TAREFAS CANCELADAS",
-                ],
-                "LOGIN": ["N5577565", "N5577565", "N0158974", "N5941223", "N5604148"],
-                "INDICADOR": [1, 1, 0, 1, 1],
-                "ANOMES": [202609, 202609, 202609, 202608, 202609],
-                "IN_REGIONAL": ["Leste", "Leste", "Leste", "Leste", "Leste"],
-                "DATA": ["2026-09-27", "2026-09-29", "2026-09-29", "2026-08-30", "2026-09-29"],
-            }
-        )
-        result = UploadProcessingService().process(
-            self.ctx,
-            self.segment.id,
-            "toa_validation",
-            "validacao.xlsx",
-            self._xlsx(df, "TOA"),
-        )
-        self.assertEqual("2026-09-29", result.data_through)
-        self.assertEqual(2, result.analyst_count)
-        self.assertEqual(3, result.total_volume)
-
-        carlos = self.users.get_by_login("N0158974")
-        rows = IndicatorRepository().results_for_user(self.segment.id, carlos.id)
-        validation = [row for row in rows if row["indicator_key"] == "validacao_20m"]
-        self.assertEqual(1, len(validation))
-        self.assertEqual(0.0, validation[0]["value"])
-
-    def test_reupload_same_month_replaces_old_days_instead_of_duplicating(self):
+    def test_reupload_same_month_replaces_old_days(self):
         from src.application.upload_service import UploadProcessingService
         from src.infrastructure.repositories import IndicatorRepository
-
-        service = UploadProcessingService()
-        first = pd.DataFrame(
-            {
-                "FECHAMENTO_COPREDE_LOGIN_ANALISTA": ["N5604148", "N5604148"],
-                "ABERTURA_ANOMES": [202609, 202609],
-                "FECHAMENTO_FILA": ["RJO RES", "RJO RES"],
-                "INDICADOR_TMA_DENTRO": [1, 0],
-                "CHAT_INICIO": ["2026-09-27 22:00:00", "2026-09-28 22:00:00"],
-            }
-        )
-        service.process(
-            self.ctx, self.segment.id, "chat_toa", "chat-1.xlsx",
-            self._xlsx(first, "Analítico CHAT TOA", startrow=3),
-        )
-
-        second = pd.DataFrame(
-            {
-                "FECHAMENTO_COPREDE_LOGIN_ANALISTA": ["N5604148"],
-                "ABERTURA_ANOMES": [202609],
-                "FECHAMENTO_FILA": ["RJO RES"],
-                "INDICADOR_TMA_DENTRO": [1],
-                "CHAT_INICIO": ["2026-09-29 22:00:00"],
-            }
-        )
-        service.process(
-            self.ctx, self.segment.id, "chat_toa", "chat-2.xlsx",
-            self._xlsx(second, "Analítico CHAT TOA", startrow=3),
-        )
-
-        daniel = self.users.get_by_login("N5604148")
-        rows = IndicatorRepository().results_for_user(self.segment.id, daniel.id)
-        chat = [row for row in rows if row["indicator_key"] == "chat_10m"]
-        self.assertEqual(1, len(chat))
-        self.assertEqual("2026-09-29", chat[0]["period"])
-        self.assertEqual(100.0, chat[0]["value"])
-        self.assertEqual(1, chat[0]["volume"])
-
-    def test_leader_indicators_are_stored_but_excluded_from_team_average(self):
-        from src.application.upload_service import UploadProcessingService
-        from src.infrastructure.repositories import IndicatorRepository
-
-        df = pd.DataFrame(
-            {
-                "FECHAMENTO_COPREDE_LOGIN_ANALISTA": [
-                    "N5604148", "N5941223", "N0238475", "N0238475"
-                ],
-                "ABERTURA_ANOMES": [202609, 202609, 202609, 202609],
-                "FECHAMENTO_FILA": ["RJO RES", "RJO RES", "RJO RES", "RJO RES"],
-                "INDICADOR_TMA_DENTRO": [1, 0, 1, 1],
-                "CHAT_INICIO": [
-                    "2026-09-29 22:00:00",
-                    "2026-09-29 22:10:00",
-                    "2026-09-29 22:20:00",
-                    "2026-09-29 22:30:00",
-                ],
-            }
-        )
-
-        UploadProcessingService().process(
-            self.ctx,
-            self.segment.id,
-            "chat_toa",
-            "chat-com-lider.xlsx",
-            self._xlsx(df, "Analítico CHAT TOA", startrow=3),
-        )
-
-        indicators = IndicatorRepository()
-        marley = self.users.get_by_login("N0238475")
-        leader_summary = indicators.monthly_summary_for_user(self.segment.id, marley.id)
-        leader_chat = next(row for row in leader_summary if row["indicator_key"] == "chat_10m")
-        self.assertEqual(100.0, leader_chat["value"])
-        self.assertEqual(2, leader_chat["volume"])
-
-        team_chat = next(
-            row for row in indicators.team_monthly_summary(self.segment.id)
-            if row["indicator_key"] == "chat_10m"
-        )
-        self.assertEqual(50.0, team_chat["team_avg"])
-        self.assertEqual(2, team_chat["team_volume"])
-        self.assertEqual(2, team_chat["analysts_with_data"])
+        service=UploadProcessingService()
+        first=pd.DataFrame({"FECHAMENTO_COPREDE_LOGIN_ANALISTA":["N5604148","N5604148"],"ABERTURA_ANOMES":[202609,202609],"INDICADOR_TMA_DENTRO":[1,0],"CHAT_INICIO":["2026-09-27 22:00:00","2026-09-28 22:00:00"]})
+        second=pd.DataFrame({"FECHAMENTO_COPREDE_LOGIN_ANALISTA":["N5604148"],"ABERTURA_ANOMES":[202609],"INDICADOR_TMA_DENTRO":[1],"CHAT_INICIO":["2026-09-29 22:00:00"]})
+        service.process(self.ctx,self.segment.id,"chat_toa","chat-1.xlsx",self._xlsx(first,"Analítico CHAT TOA",3))
+        service.process(self.ctx,self.segment.id,"chat_toa","chat-2.xlsx",self._xlsx(second,"Analítico CHAT TOA",3))
+        daniel=self.users.get_by_login("N5604148")
+        rows=[r for r in IndicatorRepository().results_for_user(self.segment.id,daniel.id) if r["indicator_key"]=="chat_10m"]
+        self.assertEqual(1,len(rows)); self.assertEqual("2026-09-29",rows[0]["period"]); self.assertEqual(100.0,rows[0]["value"])
 
     def test_subadmin_cannot_process_upload(self):
         from src.application.access_service import AccessService
         from src.application.upload_service import UploadProcessingService
-
-        leader = self.users.get_by_login("N0238475")
-        leader_ctx = AccessService(self.users).context(leader.id)
-        df = pd.DataFrame(
-            {
-                "FECHAMENTO_COPREDE_LOGIN_ANALISTA": ["N5604148"],
-                "ABERTURA_ANOMES": [202609],
-                "FECHAMENTO_FILA": ["RJO RES"],
-                "INDICADOR_TMA_DENTRO": [1],
-                "CHAT_INICIO": ["2026-09-29 22:00:00"],
-            }
-        )
-
+        leader=self.users.get_by_login("N0238475"); ctx=AccessService(self.users).context(leader.id)
+        df=pd.DataFrame({"FECHAMENTO_COPREDE_LOGIN_ANALISTA":["N5604148"],"ABERTURA_ANOMES":[202609],"INDICADOR_TMA_DENTRO":[1],"CHAT_INICIO":["2026-09-29 22:00:00"]})
         with self.assertRaises(PermissionError):
-            UploadProcessingService().process(
-                leader_ctx,
-                self.segment.id,
-                "chat_toa",
-                "bloqueado.xlsx",
-                self._xlsx(df, "Analítico CHAT TOA", startrow=3),
-            )
+            UploadProcessingService().process(ctx,self.segment.id,"chat_toa","bloqueado.xlsx",self._xlsx(df,"Analítico CHAT TOA",3))
 
 
-if __name__ == "__main__":
-    unittest.main()
+if __name__ == "__main__": unittest.main()

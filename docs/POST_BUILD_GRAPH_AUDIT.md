@@ -1,53 +1,48 @@
 # Auditoria estrutural pós-build
 
-> Método: grafo de imports extraído por AST como fallback Graphify-style. O CLI oficial do Graphify não estava disponível no runtime; portanto este relatório não é apresentado como saída oficial do Graphify.
+> Método: grafo de imports extraído por AST como fallback Graphify-style. O CLI oficial do Graphify não foi executado neste runtime; este documento não é apresentado como saída oficial do Graphify.
 
-## Resultado após migração de Chat e Validação
+## Resultado atual
 
-- Módulos analisados: 36
-- Relações de import internas: 47
+- Módulos Python analisados: 53
+- Relações internas de import: 89
 - Ciclos detectados: 0
 
-## Módulos mais conectados
+## Módulos de maior centralidade
 
-- `src.infrastructure.repositories` — grau 9 (entrada 7, saída 2)
-- `src.app` — grau 8 (entrada 0, saída 8)
-- `src.domain.entities` — grau 7 (entrada 7, saída 0)
-- `src.application.access_service` — grau 7 (entrada 5, saída 2)
-- `src.ui.admin.shell` — grau 8 (entrada 1, saída 7)
-- `src.application.upload_service` — grau 6 (entrada 1, saída 5)
-- `src.features.ingestion.registry` — grau 5 (entrada 2, saída 3)
-- `src.ui.analyst.shell` — grau 5 (entrada 1, saída 4)
+- `src.infrastructure.repositories` — grau 10
+- `src.ui.admin.shell` — grau 10
+- `src.features.ingestion.models` — grau 9
+- `src.domain.entities` — grau 9
+- `src.features.ingestion.registry` — grau 9
+- `src.application.upload_service` — grau 9
+- `src.app` — grau 9
+- `src.application.access_service` — grau 8
+- `src.config.seed` — grau 8
 
-## Novos caminhos relevantes
+## Caminho de ingestão
 
 ```text
 AdminShell
   -> UploadProcessingService
-     -> parser por fonte
-        -> Chat TOA
-        -> Indicadores TOA / Validação
+     -> source_catalog (7 fontes)
+     -> registry
+        -> residential_indicators
+        -> enterprise_indicators
+        -> dpa
+        -> productivity
+        -> closing_toa_sir
+        -> chat_toa
+        -> toa_indicators
      -> IndicatorRepository
-        -> resultados diários por usuário
-        -> resumo mensal ponderado
      -> IndicatorFreshnessService
-        -> upload
-        -> "dados até" por indicador
-
-AnalystShell
-  -> DashboardService
-     -> dados individuais autorizados
-     -> resumo mensal individual
-     -> média agregada da equipe
-     -> freshness
 ```
 
 ## Avaliação
 
-- Nenhuma dependência circular interna foi encontrada.
-- Chat e Validação foram isolados em adapters próprios em `src.features.ingestion`, registrados por `registry.py`.
-- Os parsers recebem apenas os logins autorizados do segmento; não possuem lista hardcoded da equipe.
-- Reupload substitui apenas os meses presentes no arquivo para aquele indicador.
-- A camada de leitura SQLite passou a fechar conexões explicitamente.
-- Admin e analista continuam sem dependência direta entre seus shells.
-- O próximo risco de centralidade está em `src.infrastructure.repositories`; novas fontes não devem adicionar regras de parsing nesse módulo.
+- Nenhum ciclo interno foi encontrado.
+- Os parsers estão fora dos shells e separados por fonte.
+- A UI administrativa não contém regras de cálculo dos indicadores.
+- Autorização continua centralizada em `AccessService`.
+- As fontes grandes usam módulos comuns de streaming/pivot, evitando duplicação de lógica de leitura.
+- O módulo mais sensível a crescimento continua sendo `repositories.py`; uma próxima refatoração pode dividi-lo em repositórios por agregado sem alterar o contrato dos serviços.

@@ -1,0 +1,26 @@
+from src.features.segments.common import GENERIC_OPERATIONAL_INDICATORS
+
+ENTERPRISE_ANALYSTS = (
+    ("N0189105", "IGOR MARCELINO DE MARINS", "Igor"),
+    ("N5737414", "SANDRO DA SILVA CARVALHO", "Sandro"),
+    ("N5713690", "GABRIELA TAVARES DA SILVA", "Gabriela"),
+    ("N5802257", "MAGNO FERRAREZ DE MORAIS", "Magno"),
+    ("F201714", "FERNANDA MESQUITA DE FREITAS", "Fernanda"),
+    ("N6173055", "JEFFERSON LUIS GONÇALVES COITINHO", "Jefferson"),
+    ("N0125317", "ROBERTO SILVA DO NASCIMENTO", "Roberto"),
+    ("F218860", "ALDENES MARQUES IDALINO DA SILVA", "Aldenes"),
+    ("N5819183", "RODRIGO PIRES BERNARDINO", "Rodrigo"),
+    ("N5926003", "SUELLEN HERNANDEZ DA SILVA", "Suellen"),
+    ("N5932064", "MONICA DA SILVA RODRIGUES", "Monica"),
+)
+
+ENTERPRISE_INDICATORS: tuple[dict, ...] = (
+    {
+        "indicator_key": "emp_etit_event",
+        "name": "ETIT por Evento",
+        "target_value": 90.0,
+        "direction": "higher_is_better",
+        "unit": "percent",
+    },
+    *GENERIC_OPERATIONAL_INDICATORS,
+)

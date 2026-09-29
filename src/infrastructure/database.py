@@ -48,6 +48,12 @@ CREATE TABLE IF NOT EXISTS user_segments (
     PRIMARY KEY (user_id, segment_id)
 );
 
+CREATE TABLE IF NOT EXISTS user_performance_segments (
+    user_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+    segment_id INTEGER NOT NULL REFERENCES segments(id) ON DELETE CASCADE,
+    PRIMARY KEY (user_id, segment_id)
+);
+
 CREATE TABLE IF NOT EXISTS indicator_definitions (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
     segment_id INTEGER NOT NULL REFERENCES segments(id) ON DELETE CASCADE,
@@ -55,6 +61,7 @@ CREATE TABLE IF NOT EXISTS indicator_definitions (
     name TEXT NOT NULL,
     target_value REAL,
     direction TEXT NOT NULL DEFAULT 'higher_is_better',
+    unit TEXT NOT NULL DEFAULT 'percent',
     active INTEGER NOT NULL DEFAULT 1,
     UNIQUE(segment_id, indicator_key)
 );
@@ -65,10 +72,11 @@ CREATE TABLE IF NOT EXISTS indicator_results (
     user_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
     indicator_definition_id INTEGER NOT NULL REFERENCES indicator_definitions(id) ON DELETE CASCADE,
     period TEXT NOT NULL,
+    data_month TEXT NOT NULL,
     value REAL,
     volume INTEGER NOT NULL DEFAULT 0,
     created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
-    UNIQUE(segment_id, user_id, indicator_definition_id, period)
+    UNIQUE(segment_id, user_id, indicator_definition_id, data_month, period)
 );
 
 CREATE TABLE IF NOT EXISTS uploads (
@@ -102,6 +110,7 @@ CREATE INDEX IF NOT EXISTS idx_results_user_segment ON indicator_results(user_id
 CREATE INDEX IF NOT EXISTS idx_uploads_segment_created ON uploads(segment_id, created_at DESC);
 CREATE INDEX IF NOT EXISTS idx_freshness_segment ON indicator_freshness(segment_id);
 CREATE INDEX IF NOT EXISTS idx_access_user_created ON access_logs(user_id, created_at DESC);
+CREATE INDEX IF NOT EXISTS idx_perf_segment ON user_performance_segments(segment_id, user_id);
 """
 
 
@@ -138,6 +147,69 @@ def transaction():
 def initialize_database() -> None:
     with transaction() as conn:
         conn.executescript(SCHEMA)
-        # A versão inicial desta nova base chegou a criar uma tabela de escala,
-        # mas este portal não possui essa funcionalidade.
+        # Resíduo de uma versão inicial que não faz parte do escopo atual.
         conn.execute("DROP TABLE IF EXISTS scales")
+        _ensure_column(conn, "indicator_definitions", "unit", "TEXT NOT NULL DEFAULT 'percent'")
+        _ensure_column(conn, "indicator_results", "data_month", "TEXT NOT NULL DEFAULT ''")
+        conn.execute("UPDATE indicator_results SET data_month=substr(period,1,7) WHERE data_month='' OR data_month IS NULL")
+        _migrate_indicator_results_unique(conn)
+        _ensure_result_indexes(conn)
+
+
+def _ensure_column(conn: sqlite3.Connection, table: str, column: str, definition: str) -> None:
+    columns = {row["name"] for row in conn.execute(f"PRAGMA table_info({table})").fetchall()}
+    if column not in columns:
+        conn.execute(f"ALTER TABLE {table} ADD COLUMN {column} {definition}")
+
+
+def _migrate_indicator_results_unique(conn: sqlite3.Connection) -> None:
+    row = conn.execute(
+        "SELECT sql FROM sqlite_master WHERE type='table' AND name='indicator_results'"
+    ).fetchone()
+    table_sql = "" if not row or not row["sql"] else "".join(str(row["sql"]).lower().split())
+    expected = "unique(segment_id,user_id,indicator_definition_id,data_month,period)"
+    if expected in table_sql:
+        return
+
+    conn.execute("DROP TABLE IF EXISTS indicator_results_v2")
+    conn.execute(
+        """
+        CREATE TABLE indicator_results_v2 (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            segment_id INTEGER NOT NULL REFERENCES segments(id) ON DELETE CASCADE,
+            user_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+            indicator_definition_id INTEGER NOT NULL REFERENCES indicator_definitions(id) ON DELETE CASCADE,
+            period TEXT NOT NULL,
+            data_month TEXT NOT NULL,
+            value REAL,
+            volume INTEGER NOT NULL DEFAULT 0,
+            created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+            UNIQUE(segment_id, user_id, indicator_definition_id, data_month, period)
+        )
+        """
+    )
+    conn.execute(
+        """
+        INSERT OR REPLACE INTO indicator_results_v2(
+            id, segment_id, user_id, indicator_definition_id, period, data_month, value, volume, created_at
+        )
+        SELECT id, segment_id, user_id, indicator_definition_id, period,
+               CASE WHEN data_month IS NULL OR data_month='' THEN substr(period,1,7) ELSE data_month END,
+               value, volume, created_at
+        FROM indicator_results
+        """
+    )
+    conn.execute("DROP TABLE indicator_results")
+    conn.execute("ALTER TABLE indicator_results_v2 RENAME TO indicator_results")
+
+
+def _ensure_result_indexes(conn: sqlite3.Connection) -> None:
+    conn.execute(
+        "CREATE INDEX IF NOT EXISTS idx_results_segment_period ON indicator_results(segment_id, period)"
+    )
+    conn.execute(
+        "CREATE INDEX IF NOT EXISTS idx_results_user_segment ON indicator_results(user_id, segment_id)"
+    )
+    conn.execute(
+        "CREATE INDEX IF NOT EXISTS idx_results_segment_month ON indicator_results(segment_id, data_month)"
+    )

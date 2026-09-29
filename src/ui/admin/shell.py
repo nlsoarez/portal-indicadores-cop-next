@@ -31,13 +31,10 @@ class AdminShell:
         )
 
     def render(self, ctx: AccessContext, segments: list[Segment]) -> None:
-        st.sidebar.markdown("ADMINISTRADOR")
+        st.sidebar.markdown("<span class='cop-role-admin'>ADMIN</span>", unsafe_allow_html=True)
         st.sidebar.markdown(f"### {ctx.user.display_name}")
         segment = st.sidebar.selectbox(
-            "Segmento",
-            segments,
-            format_func=lambda item: item.name,
-            key="admin_segment_selector",
+            "Segmento", segments, format_func=lambda item: item.name, key="admin_segment_selector"
         )
         switch_segment_state(st.session_state, segment.id)
         page = st.sidebar.radio(
@@ -46,20 +43,22 @@ class AdminShell:
             label_visibility="collapsed",
         )
 
-        st.markdown("### Gestão operacional")
-        st.title(segment.name)
-        st.caption("Visão gerencial, comparação, anomalias e administração do segmento.")
+        st.markdown("<div class='cop-eyebrow'>Gestão operacional</div>", unsafe_allow_html=True)
+        st.markdown(f"<div class='cop-title'>{segment.name}</div>", unsafe_allow_html=True)
+        st.markdown(
+            "<div class='cop-subtitle'>Visão gerencial, indicadores e administração do portal.</div>",
+            unsafe_allow_html=True,
+        )
 
         analysts = self.access.visible_users(ctx, segment.id)
         freshness = self.indicators.freshness(segment.id)
 
         if page == "Visão geral":
             c1, c2, c3 = st.columns(3)
-            c1.metric("Pessoas no segmento", len(analysts))
+            c1.metric("Analistas", len(analysts))
             c2.metric("Indicadores configurados", len(self.indicators.definitions(segment.id)))
             last_access = self.users.last_access_for_segment(segment.id)
-            accessed = sum(1 for row in last_access if row["last_access"])
-            c3.metric("Usuários que já acessaram", accessed)
+            c3.metric("Analistas que já acessaram", sum(1 for row in last_access if row["last_access"]))
             render_indicator_freshness(freshness)
             st.subheader("Acompanhamento da equipe")
             st.dataframe(pd.DataFrame(last_access), use_container_width=True, hide_index=True)
@@ -77,32 +76,34 @@ class AdminShell:
                 render_person_performance(ctx, segment.id, target, self.dashboard)
 
         elif page == "Líderes":
-            leaders = self.access.visible_subadmins(ctx, segment.id)
+            leaders = self.access.visible_subadmins(ctx)
             st.caption("Área exclusiva do Admin. Líderes não aparecem na lista de analistas.")
             if not leaders:
-                st.info("Nenhum líder cadastrado neste segmento.")
+                st.info("Nenhum líder cadastrado.")
             else:
                 leader = st.selectbox(
                     "Líder",
                     leaders,
                     format_func=lambda user: f"{user.display_name} · {user.login}",
-                    key=f"admin_leader:{segment.id}",
+                    key="admin_leader",
                 )
-                render_person_performance(
-                    ctx,
-                    segment.id,
-                    leader,
-                    self.dashboard,
-                    comparison_label="média dos analistas",
-                )
-
-                leader_access = self.users.last_access_for_subadmins(segment.id)
-                current_access = next(
-                    (row for row in leader_access if int(row["id"]) == leader.id),
-                    None,
-                )
-                if current_access:
-                    st.caption(f"Último acesso: {current_access.get('last_access') or 'Nunca acessou'}")
+                performance_segments = self.users.performance_segments_for_user(leader.id)
+                if not performance_segments:
+                    st.info("Este líder ainda não possui segmento operacional para indicadores.")
+                else:
+                    perf_segment = performance_segments[0]
+                    st.caption(f"Indicadores operacionais: {perf_segment.name}")
+                    render_person_performance(
+                        ctx,
+                        perf_segment.id,
+                        leader,
+                        self.dashboard,
+                        comparison_label="vs média dos analistas",
+                    )
+                access_rows = self.users.last_access_for_subadmins()
+                current = next((row for row in access_rows if int(row["id"]) == leader.id), None)
+                if current:
+                    st.caption(f"Último acesso: {current.get('last_access') or 'Nunca acessou'}")
 
         elif page == "Indicadores":
             definitions = self.indicators.definitions(segment.id)
@@ -128,38 +129,28 @@ class AdminShell:
             )
 
     def _render_uploads(self, ctx: AccessContext) -> None:
-        st.markdown("#### Atualização das fontes")
+        st.markdown("#### Atualização das 7 fontes oficiais")
         st.caption(
-            "O Admin envia cada uma das sete planilhas oficiais uma única vez por atualização. "
-            "O processamento não depende do segmento selecionado no menu."
+            "Envie cada planilha uma única vez por atualização. O backend identifica os usuários "
+            "e direciona os resultados aos segmentos correspondentes."
         )
-
         latest_by_source = self.uploads.latest_by_source()
-        integrated = sum(1 for source in UPLOAD_SOURCES if source.implemented)
         c1, c2 = st.columns(2)
         c1.metric("Fontes oficiais", len(UPLOAD_SOURCES))
-        c2.metric("Integrações ativas", f"{integrated}/{len(UPLOAD_SOURCES)}")
+        c2.metric("Integrações ativas", f"{len(UPLOAD_SOURCES)}/{len(UPLOAD_SOURCES)}")
 
         for source in UPLOAD_SOURCES:
             latest = latest_by_source.get(source.key)
-            status = "Integrada" if source.implemented else "Mapeada"
-            title = f"{source.label} · {status}"
-
-            with st.expander(title, expanded=source.implemented):
+            with st.expander(f"{source.label} · Integrada", expanded=False):
                 st.caption(source.description)
                 st.markdown(f"**Arquivo esperado:** {source.filename_hint}.xlsx")
-
                 if latest:
                     st.caption(
-                        f"Último processamento: {latest['filename']} · "
-                        f"{latest['created_at']} · por {latest['uploaded_by']}"
+                        f"Último processamento: {latest['filename']} · {latest['created_at']} · "
+                        f"por {latest['uploaded_by']}"
                     )
                 else:
                     st.caption("Nenhum processamento registrado ainda.")
-
-                if not source.implemented:
-                    st.info(source.integration_note or "Integração funcional em migração.")
-                    continue
 
                 uploaded = st.file_uploader(
                     f"Selecionar {source.label}",
@@ -167,7 +158,6 @@ class AdminShell:
                     key=f"global-upload:{source.key}",
                     label_visibility="collapsed",
                 )
-
                 if st.button(
                     f"Processar {source.label}",
                     type="primary",
@@ -188,8 +178,6 @@ class AdminShell:
                         summary = []
                         for slug, result in results:
                             date_label = datetime.fromisoformat(result.data_through).strftime("%d/%m/%Y")
-                            summary.append(
-                                f"{slug}: {result.indicator_name} · dados até {date_label}"
-                            )
+                            summary.append(f"{slug}: {result.indicator_name} · dados até {date_label}")
                         st.success("Processamento concluído — " + " | ".join(summary))
                         st.rerun()

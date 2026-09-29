@@ -1,3 +1,5 @@
+from src.features.segments.common import GENERIC_OPERATIONAL_INDICATORS
+
 PREVENTIVA_ANALYSTS = (
     ("N5604148", "DANIEL MARCELO FELISBERTO OLIVEIRA", "Daniel"),
     ("N5941223", "ROSANA RIEGER MATOS", "Rosana"),
@@ -11,11 +13,21 @@ PREVENTIVA_INDICATORS: tuple[dict, ...] = (
         "name": "Chat 10 min",
         "target_value": 75.0,
         "direction": "higher_is_better",
+        "unit": "percent",
     },
     {
         "indicator_key": "validacao_20m",
         "name": "Tempo de Validação do Formulário",
         "target_value": 80.0,
         "direction": "higher_is_better",
+        "unit": "percent",
     },
+    {
+        "indicator_key": "toa_cancellation_rate",
+        "name": "Tarefas Canceladas",
+        "target_value": None,
+        "direction": "lower_is_better",
+        "unit": "percent",
+    },
+    *GENERIC_OPERATIONAL_INDICATORS,
 )

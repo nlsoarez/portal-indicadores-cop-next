@@ -31,47 +31,242 @@
     "src.ui.shared.style"
   ],
   "edges": [
-    {"from":"src.app","to":"src.application.access_service","relation":"imports","evidence":"EXTRACTED"},
-    {"from":"src.app","to":"src.application.auth_service","relation":"imports","evidence":"EXTRACTED"},
-    {"from":"src.app","to":"src.config.seed","relation":"imports","evidence":"EXTRACTED"},
-    {"from":"src.app","to":"src.infrastructure.database","relation":"imports","evidence":"EXTRACTED"},
-    {"from":"src.app","to":"src.infrastructure.repositories","relation":"imports","evidence":"EXTRACTED"},
-    {"from":"src.app","to":"src.ui.admin.shell","relation":"imports","evidence":"EXTRACTED"},
-    {"from":"src.app","to":"src.ui.analyst.shell","relation":"imports","evidence":"EXTRACTED"},
-    {"from":"src.app","to":"src.ui.shared.style","relation":"imports","evidence":"EXTRACTED"},
-    {"from":"src.application.access_service","to":"src.domain.entities","relation":"imports","evidence":"EXTRACTED"},
-    {"from":"src.application.access_service","to":"src.infrastructure.repositories","relation":"imports","evidence":"EXTRACTED"},
-    {"from":"src.application.auth_service","to":"src.application.security","relation":"imports","evidence":"EXTRACTED"},
-    {"from":"src.application.auth_service","to":"src.infrastructure.repositories","relation":"imports","evidence":"EXTRACTED"},
-    {"from":"src.application.dashboard_service","to":"src.application.access_service","relation":"imports","evidence":"EXTRACTED"},
-    {"from":"src.application.dashboard_service","to":"src.domain.entities","relation":"imports","evidence":"EXTRACTED"},
-    {"from":"src.application.dashboard_service","to":"src.infrastructure.repositories","relation":"imports","evidence":"EXTRACTED"},
-    {"from":"src.config.seed","to":"src.application.security","relation":"imports","evidence":"EXTRACTED"},
-    {"from":"src.config.seed","to":"src.features.segments.catalog","relation":"imports","evidence":"EXTRACTED"},
-    {"from":"src.config.seed","to":"src.features.segments.preventiva","relation":"imports","evidence":"EXTRACTED"},
-    {"from":"src.config.seed","to":"src.infrastructure.database","relation":"imports","evidence":"EXTRACTED"},
-    {"from":"src.infrastructure.repositories","to":"src.domain.entities","relation":"imports","evidence":"EXTRACTED"},
-    {"from":"src.infrastructure.repositories","to":"src.infrastructure.database","relation":"imports","evidence":"EXTRACTED"},
-    {"from":"src.ui.admin.shell","to":"src.application.access_service","relation":"imports","evidence":"EXTRACTED"},
-    {"from":"src.ui.admin.shell","to":"src.application.segment_context","relation":"imports","evidence":"EXTRACTED"},
-    {"from":"src.ui.admin.shell","to":"src.domain.entities","relation":"imports","evidence":"EXTRACTED"},
-    {"from":"src.ui.admin.shell","to":"src.infrastructure.repositories","relation":"imports","evidence":"EXTRACTED"},
-    {"from":"src.ui.analyst.shell","to":"src.application.dashboard_service","relation":"imports","evidence":"EXTRACTED"},
-    {"from":"src.ui.analyst.shell","to":"src.application.segment_context","relation":"imports","evidence":"EXTRACTED"},
-    {"from":"src.ui.analyst.shell","to":"src.domain.entities","relation":"imports","evidence":"EXTRACTED"},
-    {"from":"src.ui.analyst.shell","to":"src.features.analytics.tips","relation":"imports","evidence":"EXTRACTED"}
+    {
+      "from": "src.app",
+      "to": "src.application.access_service",
+      "relation": "imports",
+      "evidence": "EXTRACTED"
+    },
+    {
+      "from": "src.app",
+      "to": "src.application.auth_service",
+      "relation": "imports",
+      "evidence": "EXTRACTED"
+    },
+    {
+      "from": "src.app",
+      "to": "src.config.seed",
+      "relation": "imports",
+      "evidence": "EXTRACTED"
+    },
+    {
+      "from": "src.app",
+      "to": "src.infrastructure.database",
+      "relation": "imports",
+      "evidence": "EXTRACTED"
+    },
+    {
+      "from": "src.app",
+      "to": "src.infrastructure.repositories",
+      "relation": "imports",
+      "evidence": "EXTRACTED"
+    },
+    {
+      "from": "src.app",
+      "to": "src.ui.admin.shell",
+      "relation": "imports",
+      "evidence": "EXTRACTED"
+    },
+    {
+      "from": "src.app",
+      "to": "src.ui.analyst.shell",
+      "relation": "imports",
+      "evidence": "EXTRACTED"
+    },
+    {
+      "from": "src.app",
+      "to": "src.ui.shared.style",
+      "relation": "imports",
+      "evidence": "EXTRACTED"
+    },
+    {
+      "from": "src.application.access_service",
+      "to": "src.domain.entities",
+      "relation": "imports",
+      "evidence": "EXTRACTED"
+    },
+    {
+      "from": "src.application.access_service",
+      "to": "src.infrastructure.repositories",
+      "relation": "imports",
+      "evidence": "EXTRACTED"
+    },
+    {
+      "from": "src.application.auth_service",
+      "to": "src.application.security",
+      "relation": "imports",
+      "evidence": "EXTRACTED"
+    },
+    {
+      "from": "src.application.auth_service",
+      "to": "src.infrastructure.repositories",
+      "relation": "imports",
+      "evidence": "EXTRACTED"
+    },
+    {
+      "from": "src.application.dashboard_service",
+      "to": "src.application.access_service",
+      "relation": "imports",
+      "evidence": "EXTRACTED"
+    },
+    {
+      "from": "src.application.dashboard_service",
+      "to": "src.domain.entities",
+      "relation": "imports",
+      "evidence": "EXTRACTED"
+    },
+    {
+      "from": "src.application.dashboard_service",
+      "to": "src.infrastructure.repositories",
+      "relation": "imports",
+      "evidence": "EXTRACTED"
+    },
+    {
+      "from": "src.config.seed",
+      "to": "src.application.security",
+      "relation": "imports",
+      "evidence": "EXTRACTED"
+    },
+    {
+      "from": "src.config.seed",
+      "to": "src.features.segments.catalog",
+      "relation": "imports",
+      "evidence": "EXTRACTED"
+    },
+    {
+      "from": "src.config.seed",
+      "to": "src.features.segments.preventiva",
+      "relation": "imports",
+      "evidence": "EXTRACTED"
+    },
+    {
+      "from": "src.config.seed",
+      "to": "src.infrastructure.database",
+      "relation": "imports",
+      "evidence": "EXTRACTED"
+    },
+    {
+      "from": "src.infrastructure.repositories",
+      "to": "src.domain.entities",
+      "relation": "imports",
+      "evidence": "EXTRACTED"
+    },
+    {
+      "from": "src.infrastructure.repositories",
+      "to": "src.infrastructure.database",
+      "relation": "imports",
+      "evidence": "EXTRACTED"
+    },
+    {
+      "from": "src.ui.admin.shell",
+      "to": "src.application.access_service",
+      "relation": "imports",
+      "evidence": "EXTRACTED"
+    },
+    {
+      "from": "src.ui.admin.shell",
+      "to": "src.application.segment_context",
+      "relation": "imports",
+      "evidence": "EXTRACTED"
+    },
+    {
+      "from": "src.ui.admin.shell",
+      "to": "src.domain.entities",
+      "relation": "imports",
+      "evidence": "EXTRACTED"
+    },
+    {
+      "from": "src.ui.admin.shell",
+      "to": "src.infrastructure.repositories",
+      "relation": "imports",
+      "evidence": "EXTRACTED"
+    },
+    {
+      "from": "src.ui.analyst.shell",
+      "to": "src.application.dashboard_service",
+      "relation": "imports",
+      "evidence": "EXTRACTED"
+    },
+    {
+      "from": "src.ui.analyst.shell",
+      "to": "src.application.segment_context",
+      "relation": "imports",
+      "evidence": "EXTRACTED"
+    },
+    {
+      "from": "src.ui.analyst.shell",
+      "to": "src.domain.entities",
+      "relation": "imports",
+      "evidence": "EXTRACTED"
+    },
+    {
+      "from": "src.ui.analyst.shell",
+      "to": "src.features.analytics.tips",
+      "relation": "imports",
+      "evidence": "EXTRACTED"
+    }
   ],
   "cycles": [],
   "centrality": [
-    {"module":"src.app","degree":8,"in":0,"out":8},
-    {"module":"src.infrastructure.repositories","degree":7,"in":5,"out":2},
-    {"module":"src.ui.analyst.shell","degree":5,"in":1,"out":4},
-    {"module":"src.ui.admin.shell","degree":5,"in":1,"out":4},
-    {"module":"src.domain.entities","degree":5,"in":5,"out":0},
-    {"module":"src.config.seed","degree":5,"in":1,"out":4},
-    {"module":"src.application.access_service","degree":5,"in":3,"out":2},
-    {"module":"src.application.dashboard_service","degree":4,"in":1,"out":3},
-    {"module":"src.infrastructure.database","degree":3,"in":3,"out":0},
-    {"module":"src.application.auth_service","degree":3,"in":1,"out":2}
+    {
+      "module": "src.app",
+      "degree": 8,
+      "in": 0,
+      "out": 8
+    },
+    {
+      "module": "src.infrastructure.repositories",
+      "degree": 7,
+      "in": 5,
+      "out": 2
+    },
+    {
+      "module": "src.ui.analyst.shell",
+      "degree": 5,
+      "in": 1,
+      "out": 4
+    },
+    {
+      "module": "src.ui.admin.shell",
+      "degree": 5,
+      "in": 1,
+      "out": 4
+    },
+    {
+      "module": "src.domain.entities",
+      "degree": 5,
+      "in": 5,
+      "out": 0
+    },
+    {
+      "module": "src.config.seed",
+      "degree": 5,
+      "in": 1,
+      "out": 4
+    },
+    {
+      "module": "src.application.access_service",
+      "degree": 5,
+      "in": 3,
+      "out": 2
+    },
+    {
+      "module": "src.application.dashboard_service",
+      "degree": 4,
+      "in": 1,
+      "out": 3
+    },
+    {
+      "module": "src.infrastructure.database",
+      "degree": 3,
+      "in": 3,
+      "out": 0
+    },
+    {
+      "module": "src.application.auth_service",
+      "degree": 3,
+      "in": 1,
+      "out": 2
+    }
   ]
 }

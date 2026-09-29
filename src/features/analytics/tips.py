@@ -7,7 +7,7 @@ def build_tips(individual: list[dict], team_averages: list[dict]) -> list[str]:
 
     avg_index = {(row["period"], row["indicator_key"]): row for row in team_averages}
     tips: list[str] = []
-    for row in individual[:6]:
+    for row in individual[:8]:
         team = avg_index.get((row["period"], row["indicator_key"]))
         value = row.get("value")
         if value is None or not team or team.get("team_avg") is None:
@@ -16,7 +16,9 @@ def build_tips(individual: list[dict], team_averages: list[dict]) -> list[str]:
         if abs(delta) < 0.01:
             continue
         direction = "acima" if delta > 0 else "abaixo"
+        unit = row.get("unit") or "percent"
+        amount = f"{abs(delta):.1f} p.p." if unit == "percent" else f"{abs(delta):.1f}"
         tips.append(
-            f"{row['name']}: você está {abs(delta):.1f} p.p. {direction} da média da equipe em {row['period']}."
+            f"{row['name']}: você está {amount} {direction} da média dos analistas em {row['period']}."
         )
     return tips or ["Seu desempenho está próximo da média da equipe nos indicadores disponíveis."]

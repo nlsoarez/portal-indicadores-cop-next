@@ -8,6 +8,7 @@ from src.application.segment_context import switch_segment_state
 from src.domain.entities import AccessContext, Segment
 from src.features.analytics.tips import build_tips
 from src.ui.shared.freshness import render_indicator_freshness
+from src.ui.shared.metrics import format_delta, format_metric, format_target
 
 
 class AnalystShell:
@@ -18,16 +19,11 @@ class AnalystShell:
         st.sidebar.markdown("<span class='cop-role-analyst'>ANALISTA</span>", unsafe_allow_html=True)
         st.sidebar.markdown(f"### {ctx.user.display_name}")
         segment = st.sidebar.selectbox(
-            "Meu segmento",
-            segments,
-            format_func=lambda item: item.name,
-            key="analyst_segment_selector",
+            "Meu segmento", segments, format_func=lambda item: item.name, key="analyst_segment_selector"
         )
         switch_segment_state(st.session_state, segment.id)
         page = st.sidebar.radio(
-            "Navegação",
-            ["Meu desempenho", "Minha evolução", "Histórico"],
-            label_visibility="collapsed",
+            "Navegação", ["Meu desempenho", "Minha evolução", "Histórico"], label_visibility="collapsed"
         )
 
         st.markdown("<div class='cop-eyebrow'>Desempenho individual</div>", unsafe_allow_html=True)
@@ -63,25 +59,20 @@ class AnalystShell:
         if not latest:
             st.info("Ainda não há resultados individuais processados para este segmento.")
         else:
-            cols = st.columns(min(2, len(latest)))
+            cols = st.columns(min(3, len(latest)))
             for index, row in enumerate(latest):
                 team = team_index.get((row["period"], row["indicator_key"]), {})
                 value = float(row.get("value") or 0)
+                unit = row.get("unit")
                 team_avg = team.get("team_avg")
-                delta = None if team_avg is None else f"{value - float(team_avg):+.1f} p.p. vs equipe"
+                delta = None if team_avg is None else format_delta(value - float(team_avg), unit)
                 with cols[index % len(cols)]:
-                    st.metric(row["name"], f"{value:.1f}%", delta=delta)
-                    target = row.get("target_value")
-                    target_label = f"Meta ≥ {float(target):.0f}%" if target is not None else "Sem meta"
-                    avg_volume = team.get("avg_volume_per_analyst")
-                    volume_label = f"Volume {int(row.get('volume') or 0)}"
-                    if avg_volume is not None:
-                        volume_label += f" · média equipe {float(avg_volume):.1f}"
-                    st.caption(f"{target_label} · {volume_label} · {row['period']}")
+                    st.metric(row["name"], format_metric(value, unit), delta=delta)
+                    target_label = format_target(row.get("target_value"), unit, row.get("direction"))
+                    st.caption(f"{target_label} · Base {int(row.get('volume') or 0)} · {row['period']}")
 
         st.subheader("Dicas baseadas nos seus dados")
-        tips = build_tips(latest, payload["team_averages"])
-        for tip in tips:
+        for tip in build_tips(latest, payload["team_averages"]):
             st.markdown(f"<div class='cop-tip'>{tip}</div>", unsafe_allow_html=True)
 
 

@@ -5,6 +5,7 @@ import streamlit as st
 
 from src.application.dashboard_service import DashboardService
 from src.domain.entities import AccessContext, User
+from src.ui.shared.metrics import format_delta, format_metric, format_target
 
 
 def render_person_performance(
@@ -13,7 +14,7 @@ def render_person_performance(
     target: User,
     dashboard: DashboardService,
     *,
-    comparison_label: str = "média dos analistas",
+    comparison_label: str = "vs equipe",
 ) -> None:
     payload = dashboard.analyst_payload(ctx, segment_id, target.id)
     latest = _latest_by_indicator(payload["summary"])
@@ -33,31 +34,20 @@ def render_person_performance(
     for index, row in enumerate(latest):
         team = team_index.get((row["period"], row["indicator_key"]), {})
         value = float(row.get("value") or 0)
+        unit = row.get("unit")
         team_avg = team.get("team_avg")
-        delta = (
-            None
-            if team_avg is None
-            else f"{value - float(team_avg):+.1f} p.p. vs {comparison_label}"
-        )
+        delta = None
+        if team_avg is not None:
+            delta = format_delta(value - float(team_avg), unit, comparison_label)
         with columns[index % len(columns)]:
-            st.metric(row["name"], f"{value:.1f}%", delta=delta)
-            target_value = row.get("target_value")
-            meta = f"Meta ≥ {float(target_value):.0f}%" if target_value is not None else "Sem meta"
-            st.caption(f"{meta} · Volume {int(row.get('volume') or 0)} · {row['period']}")
+            st.metric(row["name"], format_metric(value, unit), delta=delta)
+            target_label = format_target(row.get("target_value"), unit, row.get("direction"))
+            st.caption(f"{target_label} · Base {int(row.get('volume') or 0)} · {row['period']}")
 
     with st.expander("Evolução diária", expanded=False):
-        st.dataframe(
-            pd.DataFrame(payload["individual"]),
-            use_container_width=True,
-            hide_index=True,
-        )
-
+        st.dataframe(pd.DataFrame(payload["individual"]), use_container_width=True, hide_index=True)
     with st.expander("Histórico mensal", expanded=False):
-        st.dataframe(
-            pd.DataFrame(payload["summary"]),
-            use_container_width=True,
-            hide_index=True,
-        )
+        st.dataframe(pd.DataFrame(payload["summary"]), use_container_width=True, hide_index=True)
 
 
 def _latest_by_indicator(rows: list[dict]) -> list[dict]:

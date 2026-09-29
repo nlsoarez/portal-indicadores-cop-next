@@ -1,49 +1,56 @@
-# Inventário funcional
+# Inventário de migração
 
-## MANTER
+## Migrado
 
-- Processamento de planilhas em Python.
-- Cache de processamento por conteúdo/versão.
-- Carregamento seletivo de fontes conforme necessidade.
-- Tratamento de múltiplos schemas de origem quando já testado.
-- Testes existentes dos parsers e semântica dos indicadores.
-- Conceito de senha inicial com troca obrigatória, mantendo apenas hashes.
+### Identidade e autorização
 
-## REFATORAR
+- User / Role / Segment / UserSegment.
+- `user_performance_segments` para separar visibilidade de desempenho.
+- Admin, Subadmin e Analista.
+- Último acesso.
+- Isolamento server-side.
 
-- `app.py`: quebrar em shells e features por domínio.
-- `processors.py`: dividir por fonte/indicador e separar parsing de autorização.
-- `config.py`: remover usuários, memberships e permissões; manter apenas configuração técnica de fontes/indicadores.
-- `auth.py`: separar autenticação, upload e persistência.
-- Escopos de coordenadores/matrículas: migrar para tabelas `users`, `roles`, `segments`, `user_segments`.
-- Tabs baseadas em texto: migrar para rotas/feature registry.
-- Uploads globais por chave fixa: escopar por `segment_id` e fonte.
+### Pessoas
 
-## DESCARTAR
+- Preventiva com Daniel, Rosana, Carlos e Maristella.
+- Maristella removida do Residencial.
+- Marcelo de Souza Almeida (`F104752`) no Residencial.
+- Bruno, Leandro, Kelly e Marley convertidos para Subadmin.
+- Equipes comuns Residencial e Empresarial migradas do legado.
+
+### Sete fontes oficiais
+
+- Indicadores Residencial → 4 indicadores.
+- Indicadores Empresarial → ETIT por Evento.
+- Ocupação DPA → DPA Oficial via pivot cache.
+- Produtividade COP Rede → produtividade média diária.
+- Fechamento TOA x SIR → assertividade via pivot cache.
+- Chat TOA → Chat 10 min.
+- Indicadores TOA → Tempo de Validação + Tarefas Canceladas.
+
+### Infraestrutura funcional
+
+- Catálogo global de fontes.
+- Upload único por fonte, independente do segmento selecionado.
+- Streaming de XLSX para arquivos grandes.
+- Batches múltiplos por arquivo.
+- Resultado diário + competência mensal.
+- Freshness / “Dados até”.
+- Reupload sem duplicação.
+- Separação de resultados dos líderes das médias dos analistas.
+
+## Descartado
 
 - Escala: fora do escopo deste portal.
+- Listas hardcoded dentro dos parsers como regra de autorização.
+- Upload permitido a líderes/subadmins.
+- Condicionais de segurança implementadas apenas na UI.
+- Dependência do estado visual de filtros/slicers do Excel para DPA e Fechamento.
+- Filtro fixo `RJO` no Chat TOA, incompatível com as filas QOE reais da Preventiva.
 
-- Regras de acesso implementadas apenas por visibilidade de UI.
-- Condicionais específicas de usuário dentro da composição visual.
-- Listas hardcoded de equipe como fonte de verdade de autorização.
-- Acoplamento de cores/labels de indicadores ao mesmo módulo que define equipe/permissões.
-- Scripts de patch ad-hoc como parte da arquitetura de produção.
+## Ainda pendente antes de produção
 
-## NOVO
-
-- `Segment` como entidade persistida.
-- `user_segments` e roles persistidos.
-- `AdminShell` e `AnalystShell` distintos.
-- Auditoria/último acesso.
-- `indicator_definitions` e `indicator_results` por segmento.
-- Estado de UI segment-scoped com limpeza na troca de segmento.
-- Preventiva com Daniel, Rosana, Carlos e Maristella.
-- Testes server-side de isolamento entre analistas.
-
-
-## MIGRADO
-
-- Chat TOA -> adapter `src/features/ingestion/chat_toa.py`.
-- Tempo de Validação do Formulário -> adapter `src/features/ingestion/toa_validation.py`.
-- Upload administrativo dessas duas fontes.
-- Resultados diários, resumo mensal ponderado, média de equipe e data de cobertura por indicador.
+- Escolher persistência definitiva para hospedagem (SQLite persistente versus PostgreSQL/Supabase).
+- Implantar o portal em um ambiente acessível aos usuários.
+- Validar visualmente a experiência com os três perfis no navegador publicado.
+- Refinar dashboards/gráficos além das tabelas e KPIs já existentes.

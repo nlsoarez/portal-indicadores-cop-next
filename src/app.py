@@ -2,15 +2,15 @@ from __future__ import annotations
 
 import streamlit as st
 
-from src.application.auth_service import AuthService
 from src.application.access_service import AccessService
+from src.application.auth_service import AuthService
 from src.config.seed import seed_foundation
 from src.infrastructure.database import initialize_database
 from src.infrastructure.repositories import SegmentRepository
 from src.ui.admin.shell import AdminShell
 from src.ui.analyst.shell import AnalystShell
-from src.ui.subadmin.shell import SubadminShell
 from src.ui.shared.style import inject_global_style
+from src.ui.subadmin.shell import SubadminShell
 
 
 def _bootstrap() -> None:
@@ -21,9 +21,7 @@ def _bootstrap() -> None:
 def _login() -> None:
     st.markdown("<div class='cop-eyebrow'>COP Rede</div>", unsafe_allow_html=True)
     st.markdown("<div class='cop-title'>Portal de Indicadores</div>", unsafe_allow_html=True)
-    st.markdown(
-        "<div class='cop-subtitle'>Acesso por perfil e segmento.</div>", unsafe_allow_html=True
-    )
+    st.markdown("<div class='cop-subtitle'>Acesso por perfil e segmento.</div>", unsafe_allow_html=True)
     with st.form("login"):
         login = st.text_input("Login")
         password = st.text_input("Senha", type="password")

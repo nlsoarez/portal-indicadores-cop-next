@@ -76,6 +76,20 @@ def _seed_analysts(conn, segment_id: int, people: tuple[tuple[str, str, str], ..
 
 
 def _seed_indicators(conn, segment_id: int, indicators: tuple[dict, ...]) -> None:
+    configured_keys = [str(indicator["indicator_key"]) for indicator in indicators]
+    if configured_keys:
+        placeholders = ",".join("?" for _ in configured_keys)
+        conn.execute(
+            f"UPDATE indicator_definitions SET active=0 "
+            f"WHERE segment_id=? AND indicator_key NOT IN ({placeholders})",
+            (segment_id, *configured_keys),
+        )
+    else:
+        conn.execute(
+            "UPDATE indicator_definitions SET active=0 WHERE segment_id=?",
+            (segment_id,),
+        )
+
     for indicator in indicators:
         conn.execute(
             """

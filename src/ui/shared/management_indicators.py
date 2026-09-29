@@ -515,14 +515,14 @@ def _service_scoped_details(rows: pd.DataFrame, service: str) -> pd.DataFrame:
     if composite.empty:
         return direct_service
 
-    split_values = composite["dimension_value"].astype(str).str.split("|||", n=1, expand=True)
+    split_values = composite["dimension_value"].astype(str).str.split("|||", n=1, expand=True, regex=False)
     if split_values.shape[1] < 2:
         return direct_service
     composite = composite[split_values[0] == service].copy()
     if composite.empty:
         return direct_service
 
-    selected_values = composite["dimension_value"].astype(str).str.split("|||", n=1, expand=True)
+    selected_values = composite["dimension_value"].astype(str).str.split("|||", n=1, expand=True, regex=False)
     composite["dimension_value"] = selected_values[1].values
     composite["dimension"] = composite["dimension"].astype(str).str.replace(
         r"^service__", "", regex=True

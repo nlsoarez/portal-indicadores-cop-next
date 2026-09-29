@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from src.application.access_service import AccessService
 from src.domain.entities import AccessContext
-from src.infrastructure.repositories import IndicatorRepository, ScaleRepository
+from src.infrastructure.repositories import IndicatorRepository
 
 
 class DashboardService:
@@ -10,11 +10,9 @@ class DashboardService:
         self,
         access: AccessService | None = None,
         indicators: IndicatorRepository | None = None,
-        scales: ScaleRepository | None = None,
     ):
         self.access = access or AccessService()
         self.indicators = indicators or IndicatorRepository()
-        self.scales = scales or ScaleRepository()
 
     def analyst_payload(
         self,
@@ -29,5 +27,4 @@ class DashboardService:
             "summary": self.indicators.monthly_summary_for_user(segment_id, target_user_id),
             "team_averages": self.indicators.team_monthly_summary(segment_id),
             "freshness": self.indicators.freshness(segment_id),
-            "scale": self.scales.for_user(segment_id, target_user_id),
         }

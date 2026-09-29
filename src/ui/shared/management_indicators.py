@@ -164,6 +164,13 @@ def render_management_indicators(
         for label, keys in SOURCE_GROUPS
     ]
     groups = [(label, keys) for label, keys in groups if keys]
+    known_keys = {key for _, keys in SOURCE_GROUPS for key in keys}
+    unknown_keys = tuple(sorted(available - known_keys))
+    if unknown_keys:
+        groups.append(("Outros indicadores", unknown_keys))
+    if not groups:
+        st.info("Há resultados no banco, mas nenhum indicador reconhecido para exibição.")
+        return
 
     tabs = st.tabs([label for label, _ in groups])
     for source_tab, (source_label, keys) in zip(tabs, groups):

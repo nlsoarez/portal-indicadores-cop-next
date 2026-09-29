@@ -1167,7 +1167,6 @@ def _render_kpis(
         c2.metric("Meta", _target_value(target, unit))
         c3.metric("Jornada acumulada", _format_hours(raw_volume))
         c4.metric("Analistas", analysts)
-        st.caption(format_target(None if pd.isna(target) else target, unit, direction))
         return
 
     if indicator_key == "productivity_avg_daily":
@@ -1179,47 +1178,42 @@ def _render_kpis(
 
     if indicator_key == "toa_cancellation_rate":
         total = _int(detail["volume"]) if detail else _int(raw_volume)
-        not_cancelled = _int(detail["successes"]) if detail else None
         cancelled = _int(detail["losses"]) if detail else None
         rate = None if total <= 0 or cancelled is None else cancelled / total * 100
         c1, c2, c3, c4 = st.columns(4)
-        c1.metric("Total", total)
-        c2.metric("Canceladas", cancelled if cancelled is not None else "—")
-        c3.metric("Não canceladas", not_cancelled if not_cancelled is not None else "—")
-        c4.metric("Taxa de cancelamento", _pct(rate))
+        c1.metric("Taxa de cancelamento", _pct(rate if rate is not None else result))
+        c2.metric("Volume", total)
+        c3.metric("Canceladas", cancelled if cancelled is not None else "—")
+        c4.metric("Analistas", analysts)
         if detail and _number(detail.get("tmr_seconds")) is not None:
-            st.metric("TMR médio", _duration(detail.get("tmr_seconds")))
+            st.caption(f"TMR médio: {_duration(detail.get('tmr_seconds'))}")
         return
 
     if indicator_key in ADHERENCE_KEYS:
         total = _int(detail["volume"]) if detail else _int(raw_volume)
-        successes = _int(detail["successes"]) if detail else None
         losses = _int(detail["losses"]) if detail else None
-        adherence = None if total <= 0 or successes is None else successes / total * 100
-        non_adherence = None if total <= 0 or losses is None else losses / total * 100
-        success_label = "Assertivos" if indicator_key == "closing_assertiveness" else "Aderentes"
-        loss_label = "Não assertivos" if indicator_key == "closing_assertiveness" else "Não aderentes"
+        adherence = result
+        if detail and total > 0:
+            successes = _int(detail["successes"])
+            adherence = successes / total * 100
+
         result_label = "Assertividade" if indicator_key == "closing_assertiveness" else "Aderência"
+        loss_label = "Não assertivos" if indicator_key == "closing_assertiveness" else "Não aderentes"
 
         c1, c2, c3, c4, c5 = st.columns(5)
-        c1.metric("Volume", total)
-        c2.metric(success_label, successes if successes is not None else "—")
-        c3.metric(loss_label, losses if losses is not None else "—")
-        c4.metric(result_label, _pct(adherence if adherence is not None else result))
-        c5.metric("Não aderência", _pct(non_adherence))
+        c1.metric(result_label, _pct(adherence))
+        c2.metric("Meta", _target_value(target, unit))
+        c3.metric("Volume", total)
+        c4.metric(loss_label, losses if losses is not None else "—")
+        c5.metric("Analistas", analysts)
 
         durations = []
         if detail and _number(detail.get("tma_seconds")) is not None:
-            durations.append(("TMA médio", _duration(detail.get("tma_seconds"))))
+            durations.append(f"TMA médio {_duration(detail.get('tma_seconds'))}")
         if detail and _number(detail.get("tmr_seconds")) is not None:
-            durations.append(("TMR médio", _duration(detail.get("tmr_seconds"))))
+            durations.append(f"TMR médio {_duration(detail.get('tmr_seconds'))}")
         if durations:
-            cols = st.columns(len(durations))
-            for col, (label, value) in zip(cols, durations):
-                col.metric(label, value)
-
-        if target is not None and not pd.isna(target):
-            st.caption(format_target(float(target), unit, direction))
+            st.caption(" · ".join(durations))
         return
 
     c1, c2, c3, c4 = st.columns(4)

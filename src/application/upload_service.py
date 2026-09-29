@@ -1,0 +1,101 @@
+from __future__ import annotations
+
+from dataclasses import dataclass
+
+from src.application.access_service import AccessService
+from src.application.indicator_freshness_service import IndicatorFreshnessService
+from src.domain.entities import AccessContext
+from src.features.ingestion.chat_toa import parse_chat_toa
+from src.features.ingestion.toa_validation import parse_toa_validation
+from src.infrastructure.repositories import IndicatorRepository, UserRepository
+
+
+@dataclass(frozen=True)
+class UploadProcessingResult:
+    source_key: str
+    indicator_key: str
+    indicator_name: str
+    data_through: str
+    analyst_count: int
+    total_volume: int
+    daily_points: int
+
+
+PARSERS = {
+    "chat_toa": parse_chat_toa,
+    "toa_validation": parse_toa_validation,
+}
+
+
+class UploadProcessingService:
+    def __init__(
+        self,
+        access: AccessService | None = None,
+        users: UserRepository | None = None,
+        indicators: IndicatorRepository | None = None,
+        freshness: IndicatorFreshnessService | None = None,
+    ):
+        self.access = access or AccessService()
+        self.users = users or UserRepository()
+        self.indicators = indicators or IndicatorRepository()
+        self.freshness = freshness or IndicatorFreshnessService(
+            access=self.access,
+            indicators=self.indicators,
+        )
+
+    def process(
+        self,
+        ctx: AccessContext,
+        segment_id: int,
+        source_key: str,
+        filename: str,
+        raw_bytes: bytes,
+    ) -> UploadProcessingResult:
+        self.access.assert_segment_access(ctx, segment_id)
+        if not ctx.is_admin:
+            raise PermissionError("Somente administradores podem processar planilhas")
+        parser = PARSERS.get(source_key)
+        if parser is None:
+            raise ValueError(f"Fonte não suportada: {source_key}")
+
+        analysts = self.users.list_for_segment(segment_id)
+        login_to_user_id = {user.login.upper(): user.id for user in analysts}
+        if not login_to_user_id:
+            raise ValueError("O segmento não possui analistas ativos para processar")
+
+        batch = parser(raw_bytes, set(login_to_user_id))
+        definition = self.indicators.get_definition(segment_id, batch.indicator_key)
+        if not definition:
+            raise ValueError(f"Indicador não cadastrado no segmento: {batch.indicator_key}")
+
+        upload_id = self.freshness.start_upload(
+            ctx,
+            segment_id,
+            source_key=batch.source_key,
+            filename=filename,
+        )
+        self.indicators.replace_results_for_months(
+            segment_id=segment_id,
+            indicator_definition_id=int(definition["id"]),
+            login_to_user_id=login_to_user_id,
+            rows=batch.rows,
+            months=batch.months,
+        )
+        self.freshness.record_indicator_data_through(
+            ctx,
+            segment_id,
+            batch.indicator_key,
+            batch.data_through,
+            batch.source_key,
+            upload_id,
+        )
+
+        return UploadProcessingResult(
+            source_key=batch.source_key,
+            indicator_key=batch.indicator_key,
+            indicator_name=str(definition["name"]),
+            data_through=batch.data_through,
+            analyst_count=batch.analyst_count,
+            total_volume=batch.total_volume,
+            daily_points=len(batch.rows),
+        )

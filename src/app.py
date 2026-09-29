@@ -13,6 +13,7 @@ from src.ui.shared.style import inject_global_style
 from src.ui.subadmin.shell import SubadminShell
 
 
+@st.cache_resource(show_spinner=False)
 def _bootstrap() -> None:
     initialize_database()
     seed_foundation()

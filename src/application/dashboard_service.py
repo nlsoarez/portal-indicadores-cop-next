@@ -26,7 +26,8 @@ class DashboardService:
         self.access.assert_can_view_user(ctx, segment_id, target_user_id)
         return {
             "individual": self.indicators.results_for_user(segment_id, target_user_id),
-            "team_averages": self.indicators.team_averages(segment_id),
+            "summary": self.indicators.monthly_summary_for_user(segment_id, target_user_id),
+            "team_averages": self.indicators.team_monthly_summary(segment_id),
             "freshness": self.indicators.freshness(segment_id),
             "scale": self.scales.for_user(segment_id, target_user_id),
         }

@@ -20,6 +20,13 @@ Nova geração arquitetural do portal de indicadores, construída sem alterar o 
 
 Este portal não possui módulo de escala.
 
+## Perfis e pessoas
+
+- Administradores/líderes com a mesma visão administrativa: Bruno (N5619600), Leandro (N6088107), Kelly (N5923221) e Marley (N0238475).
+- Maristella (N5577565) pertence somente à Preventiva.
+- Marcelo de Souza Almeida (F104752) pertence ao Residencial.
+- Analistas continuam recebendo somente os próprios dados individuais e agregados da equipe.
+
 ## Fontes já migradas
 
 ### Preventiva

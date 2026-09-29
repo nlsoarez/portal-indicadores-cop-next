@@ -13,6 +13,16 @@ class SupabasePostgresConfigTest(unittest.TestCase):
             database.POSTGRES_SCHEMA,
         )
 
+    def test_postgres_privileges_do_not_leak_into_sqlite(self):
+        from src.infrastructure import database
+
+        self.assertNotIn("REVOKE ALL", database.SQLITE_SCHEMA)
+        self.assertNotIn("ALTER DEFAULT PRIVILEGES", database.SQLITE_SCHEMA)
+        self.assertIn(
+            "REVOKE ALL ON ALL TABLES IN SCHEMA cop_portal",
+            database.POSTGRES_SCHEMA,
+        )
+
     def test_postgres_is_preferred_when_database_url_exists(self):
         from src.infrastructure import database
 

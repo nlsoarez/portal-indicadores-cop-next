@@ -5,8 +5,7 @@ from dataclasses import dataclass
 from src.application.access_service import AccessService
 from src.application.indicator_freshness_service import IndicatorFreshnessService
 from src.domain.entities import AccessContext
-from src.features.ingestion.chat_toa import parse_chat_toa
-from src.features.ingestion.toa_validation import parse_toa_validation
+from src.features.ingestion.registry import SOURCE_ADAPTERS
 from src.infrastructure.repositories import IndicatorRepository, UserRepository
 
 
@@ -20,11 +19,6 @@ class UploadProcessingResult:
     total_volume: int
     daily_points: int
 
-
-PARSERS = {
-    "chat_toa": parse_chat_toa,
-    "toa_validation": parse_toa_validation,
-}
 
 
 class UploadProcessingService:
@@ -54,8 +48,8 @@ class UploadProcessingService:
         self.access.assert_segment_access(ctx, segment_id)
         if not ctx.is_admin:
             raise PermissionError("Somente administradores podem processar planilhas")
-        parser = PARSERS.get(source_key)
-        if parser is None:
+        adapter = SOURCE_ADAPTERS.get(source_key)
+        if adapter is None:
             raise ValueError(f"Fonte não suportada: {source_key}")
 
         analysts = self.users.list_for_segment(segment_id)
@@ -63,7 +57,9 @@ class UploadProcessingService:
         if not login_to_user_id:
             raise ValueError("O segmento não possui analistas ativos para processar")
 
-        batch = parser(raw_bytes, set(login_to_user_id))
+        batch = adapter.parser(raw_bytes, set(login_to_user_id))
+        if batch.indicator_key != adapter.indicator_key:
+            raise ValueError("Adapter retornou indicador incompatível com a fonte")
         definition = self.indicators.get_definition(segment_id, batch.indicator_key)
         if not definition:
             raise ValueError(f"Indicador não cadastrado no segmento: {batch.indicator_key}")

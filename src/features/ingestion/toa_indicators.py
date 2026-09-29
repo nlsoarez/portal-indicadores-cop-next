@@ -20,7 +20,7 @@ def parse_toa_indicators(raw_bytes: bytes, allowed_logins: set[str]) -> tuple[Pa
     required = {"INDICADOR_NOME", "LOGIN", "INDICADOR", "ANOMES", "IN_REGIONAL", "DATA"}
     optional = {
         "IN_GRUPO", "DT_INICIO_FORM", "DT_CANCELAMENTO", "TURNO",
-        "REDE", "TIPO_ATIVIDADE", "AGING", "TMR",
+        "REDE", "TIPO_ATIVIDADE", "AGING", "TMR", "ID_ATIVIDADE", "TIPO_INCIDENTE", "IN_CIDADE_UF", "IN_UF",
     }
     aggregates: dict[tuple[int, str, str, str], list[float]] = defaultdict(lambda: [0.0, 0.0])
     breakdowns_by_indicator = {key: new_bucket() for key in SPECS.values()}
@@ -63,8 +63,12 @@ def parse_toa_indicators(raw_bytes: bytes, allowed_logins: set[str]) -> tuple[Pa
             aggregates[(anomes, indicator_key, login, period)][1] += 1
             for dimension, dimension_value in (
                 ("overall", "Total"),
+                ("activity_id", row.get("ID_ATIVIDADE")),
                 ("region", region),
                 ("group", row.get("IN_GRUPO")),
+                ("city", row.get("IN_CIDADE_UF")),
+                ("uf", row.get("IN_UF")),
+                ("incident_type", row.get("TIPO_INCIDENTE")),
                 ("turn", turn),
                 ("hour", hour),
                 ("network", row.get("REDE")),

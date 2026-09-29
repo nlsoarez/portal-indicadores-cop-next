@@ -21,8 +21,8 @@ def parse_enterprise_indicators(raw_bytes: bytes, allowed_logins: set[str]) -> t
     allowed = {login.strip().upper() for login in allowed_logins}
     required = {"INDICADOR_NOME", "LOGIN_ACIONAMENTO", "VOLUME", "INDICADOR", "IN_REGIONAL", "DT_INICIO", "ANOMES"}
     optional = {
-        "DT_ACIONAMENTO", "IN_GRUPO", "TURNO", "DEMANDA", "TIPO", "CAUSA",
-        "TMA", "TMR",
+        "DT_ACIONAMENTO", "IN_GRUPO", "IN_CIDADE_UF", "IN_UF", "TURNO",
+        "DEMANDA", "TIPO", "AREA_ENVOLVIDA", "CAUSA", "TMA", "TMR",
     }
     aggregates: dict[tuple[int, str, str], list[float]] = defaultdict(lambda: [0.0, 0.0])
     breakdowns = new_bucket()
@@ -66,10 +66,13 @@ def parse_enterprise_indicators(raw_bytes: bytes, allowed_logins: set[str]) -> t
                 ("overall", "Total"),
                 ("region", region),
                 ("group", row.get("IN_GRUPO")),
+                ("city", row.get("IN_CIDADE_UF")),
+                ("uf", row.get("IN_UF")),
                 ("hour", hour),
                 ("turn", turn),
                 ("demand", row.get("DEMANDA")),
                 ("type", row.get("TIPO")),
+                ("area", row.get("AREA_ENVOLVIDA")),
                 ("cause", row.get("CAUSA")),
             ):
                 add_ratio(

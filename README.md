@@ -31,6 +31,20 @@ Este portal não possui módulo de escala.
 - Maristella (N5577565) pertence somente à Preventiva.
 - Marcelo de Souza Almeida (F104752) pertence ao Residencial.
 
+## Fontes oficiais de upload
+
+O Admin atualiza o portal por um painel global com exatamente sete fontes:
+
+1. Analítico Indicadores Residencial
+2. Analítico Empresarial
+3. Ocupação DPA 2026
+4. Produtividade COP Rede 2026 - Analítico
+5. Fechamento TOA x SIR
+6. Analítico TOA Chat
+7. Analitico Indicadores TOA
+
+O upload é feito uma única vez por fonte e não depende do segmento selecionado no menu. O backend direciona cada fonte aos segmentos configurados.
+
 ## Fontes já migradas
 
 ### Preventiva

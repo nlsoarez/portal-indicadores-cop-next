@@ -124,3 +124,14 @@ O container do Vercel não deve usar SQLite em `/tmp` como banco definitivo. O p
 Para uso real, conecte um PostgreSQL/Neon ao projeto no Vercel e disponibilize `DATABASE_URL` para Production e Preview. O schema é criado automaticamente na inicialização.
 
 As planilhas Excel originais **não são arquivadas permanentemente** pelo portal. Elas são remontadas temporariamente durante o upload, processadas e removidas. O banco persiste os resultados normalizados, metadados do upload, cobertura dos indicadores, usuários, senhas e logs. Se for necessário manter cópia dos arquivos-fonte para auditoria, deve ser adicionada uma camada de object storage.
+
+
+### Supabase dedicado
+
+- Projeto: `portal-indicadores-cop`
+- Project ref: `zuxdjfirvltktqsbvvlf`
+- Região: `sa-east-1` (São Paulo)
+- Schema da aplicação: `cop_portal`
+- O schema não é usado pela Data API pública do portal; `anon` e `authenticated` não recebem privilégios nas tabelas.
+- Em produção no Vercel, configure a URI PostgreSQL do **Transaction pooler** como `DATABASE_URL`.
+- O driver `psycopg` roda com prepared statements desativados para compatibilidade com Supavisor em transaction mode.

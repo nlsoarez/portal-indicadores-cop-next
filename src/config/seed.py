@@ -6,16 +6,16 @@ from src.features.segments.catalog import SEGMENTS
 from src.features.segments.empresarial import ENTERPRISE_ANALYSTS, ENTERPRISE_INDICATORS
 from src.features.segments.preventiva import PREVENTIVA_ANALYSTS, PREVENTIVA_INDICATORS
 from src.features.segments.residencial import RESIDENTIAL_ANALYSTS, RESIDENTIAL_INDICATORS
-from src.infrastructure.database import transaction
+from src.infrastructure.database import insert_returning_id, transaction
 
 DEFAULT_PASSWORD = "claro123"
 
 
 def seed_foundation() -> None:
     with transaction() as conn:
-        conn.execute("INSERT OR IGNORE INTO roles(code, name) VALUES ('admin', 'Administrador')")
-        conn.execute("INSERT OR IGNORE INTO roles(code, name) VALUES ('subadmin', 'Subadministrador')")
-        conn.execute("INSERT OR IGNORE INTO roles(code, name) VALUES ('analyst', 'Analista')")
+        conn.execute("INSERT INTO roles(code, name) VALUES ('admin', 'Administrador') ON CONFLICT(code) DO NOTHING")
+        conn.execute("INSERT INTO roles(code, name) VALUES ('subadmin', 'Subadministrador') ON CONFLICT(code) DO NOTHING")
+        conn.execute("INSERT INTO roles(code, name) VALUES ('analyst', 'Analista') ON CONFLICT(code) DO NOTHING")
 
         for segment in SEGMENTS:
             conn.execute(
@@ -112,12 +112,12 @@ def _ensure_user(conn, login: str, full_name: str, display_name: str) -> int:
         return user_id
 
     password_hash, salt = hash_password(DEFAULT_PASSWORD)
-    cur = conn.execute(
+    return insert_returning_id(
+        conn,
         "INSERT INTO users(login, full_name, display_name, password_hash, password_salt, must_change_password) "
         "VALUES (?, ?, ?, ?, ?, 1)",
         (login, full_name, display_name, password_hash, salt),
     )
-    return int(cur.lastrowid)
 
 
 def _set_single_role(conn, user_id: int, role_code: str) -> None:

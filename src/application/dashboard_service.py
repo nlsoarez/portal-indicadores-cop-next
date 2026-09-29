@@ -22,9 +22,4 @@ class DashboardService:
     ) -> dict:
         target_user_id = target_user_id or ctx.user.id
         self.access.assert_can_view_user(ctx, segment_id, target_user_id)
-        return {
-            "individual": self.indicators.results_for_user(segment_id, target_user_id),
-            "summary": self.indicators.monthly_summary_for_user(segment_id, target_user_id),
-            "team_averages": self.indicators.team_monthly_summary(segment_id),
-            "freshness": self.indicators.freshness(segment_id),
-        }
+        return self.indicators.dashboard_payload(segment_id, target_user_id)

@@ -607,6 +607,15 @@ def _goal_gap(value, target, direction: str) -> float | None:
     return value_num - target_num
 
 
+def _format_gap(value, target, direction: str, unit) -> str | None:
+    gap = _goal_gap(value, target, direction)
+    if gap is None:
+        return None
+    if str(unit or "").lower() == "percent":
+        return f"{gap:+.1f} pp"
+    return format_metric(gap, unit)
+
+
 def _render_diagnostic(
     *,
     indicator_key: str,
@@ -1337,45 +1346,64 @@ def _breakdown_table(rows: pd.DataFrame, dimension: str, indicator_key: str) -> 
     required = {"dimension_value", "volume", "successes", "losses", "value"}
     if not required.issubset(rows.columns):
         return pd.DataFrame()
+
     rows = rows.copy()
     if "segment_name" not in rows.columns:
         rows["segment_name"] = "Geral"
 
+    rows["_volume"] = pd.to_numeric(rows["volume"], errors="coerce").fillna(0)
+    rows["_successes"] = pd.to_numeric(rows["successes"], errors="coerce").fillna(0)
+    rows["_losses"] = pd.to_numeric(rows["losses"], errors="coerce").fillna(0)
+    total_volume = float(rows["_volume"].sum())
+    total_losses = float(rows["_losses"].sum())
+
     if dimension == "hour":
         rows["_sort"] = pd.to_numeric(rows["dimension_value"], errors="coerce")
         rows = rows.sort_values(["_sort", "segment_name"], na_position="last")
+    elif total_losses > 0:
+        rows = rows.sort_values(
+            ["_losses", "_volume", "dimension_value"],
+            ascending=[False, False, True],
+        )
     else:
-        rows = rows.sort_values(["volume", "dimension_value"], ascending=[False, True])
+        rows = rows.sort_values(["_volume", "dimension_value"], ascending=[False, True])
 
     if dimension == "solution":
         rows = rows.head(15)
+    elif len(rows) > 25:
+        rows = rows.head(25)
 
     output = []
     for _, row in rows.iterrows():
         item = {}
         if rows["segment_name"].nunique() > 1:
-            item["Setor"] = row["segment_name"]
-        item[label] = row["dimension_value"]
+            item["Setor"] = row.get("segment_name") or "—"
+        item[label] = row.get("dimension_value") or "—"
 
         volume = _int(row.get("volume"))
         successes = _int(row.get("successes"))
         losses = _int(row.get("losses"))
         value = _number(row.get("value"))
+        volume_share = None if total_volume <= 0 else volume / total_volume * 100
+        loss_share = None if total_losses <= 0 else losses / total_losses * 100
 
         if indicator_key == "toa_cancellation_rate":
             item["Volume"] = volume
-            item["Não canceladas"] = successes
+            item["% volume"] = _pct(volume_share)
             item["Canceladas"] = losses
+            item["% canceladas"] = _pct(loss_share)
+            item["Não canceladas"] = successes
             item["Cancelamento %"] = _pct(None if volume <= 0 else losses / volume * 100)
         elif indicator_key == "dpa_official":
             item["DPA"] = _pct(value)
             item["Jornada"] = _format_hours(volume)
         else:
             item["Volume"] = volume
+            item["% volume"] = _pct(volume_share)
             item["Aderentes / ganhos"] = successes
             item["Não aderentes / perdas"] = losses
+            item["% das perdas"] = _pct(loss_share)
             item["Aderência %"] = _pct(value)
-            item["Não aderência %"] = _pct(None if volume <= 0 else losses / volume * 100)
 
         if _number(row.get("tma_seconds")) is not None:
             item["TMA médio"] = _duration(row.get("tma_seconds"))

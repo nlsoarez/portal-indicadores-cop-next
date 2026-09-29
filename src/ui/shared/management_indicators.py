@@ -306,12 +306,12 @@ def _render_indicator(
     external_df: pd.DataFrame,
     freshness_index: dict[str, dict],
 ) -> None:
-    rows = segment_df[segment_df["indicator_key"] == indicator_key].copy()
+    rows = _indicator_frame(segment_df, indicator_key)
     if rows.empty:
         return
 
     first = rows.iloc[0]
-    name = str(first["name"])
+    name = str(first.get("name") or indicator_key)
     unit = first.get("unit")
     direction = str(first.get("direction") or "higher_is_better")
     target = first.get("target_value")
@@ -320,8 +320,9 @@ def _render_indicator(
 
     details = _indicator_frame(breakdown_df, indicator_key)
     detail = _overall_detail(breakdown_df, indicator_key)
-    people = analyst_df[analyst_df["indicator_key"] == indicator_key].copy()
+    people = _indicator_frame(analyst_df, indicator_key)
     metrics = _indicator_frame(analyst_metrics_df, indicator_key)
+    analyst_breakdowns = _indicator_frame(analyst_breakdowns_df, indicator_key)
     daily = _indicator_frame(daily_df, indicator_key)
     ext = _indicator_frame(external_df, indicator_key) if ctx.is_admin else external_df.iloc[0:0].copy()
 
@@ -340,37 +341,32 @@ def _render_indicator(
         direction=direction,
     )
 
-    tab_labels = ["Visão geral", "Operação", "Horários", "Analistas"]
-    if ctx.is_admin:
-        tab_labels.append("Fora da equipe")
-    tabs = st.tabs(tab_labels)
+    summary_tab, diagnostic_tab, analysts_tab = st.tabs(
+        ["Resumo executivo", "Diagnóstico", "Analistas"]
+    )
 
-    with tabs[0]:
-        if len(rows) > 1:
-            st.markdown("#### Geral + resultado por setor")
-            st.dataframe(
-                _sector_table(rows, indicator_key, breakdown_df),
-                use_container_width=True,
-                hide_index=True,
-            )
-        else:
-            st.caption(f"Setor: {rows.iloc[0]['segment_name']}")
-        _render_gain_loss_summary(details, indicator_key)
+    with summary_tab:
+        _render_executive_summary(
+            indicator_key=indicator_key,
+            rows=rows,
+            people=people,
+            analyst_breakdowns=analyst_breakdowns,
+            details=details,
+            target=target,
+            direction=direction,
+        )
 
-    with tabs[1]:
-        if details.empty:
-            st.info(
-                "Reprocesse esta fonte para preencher cluster, cidade, serviço, causas, "
-                "rede e demais cortes disponíveis no analítico."
-            )
-        else:
-            _render_operational_details(details, indicator_key, rows)
+    with diagnostic_tab:
+        _render_diagnostic(
+            indicator_key=indicator_key,
+            rows=rows,
+            details=details,
+            daily=daily,
+            external=ext,
+        )
 
-    with tabs[2]:
-        _render_time_details(details, daily, indicator_key, rows)
-
-    with tabs[3]:
-        _render_analyst_details(
+    with analysts_tab:
+        _render_analysts_compact(
             people,
             metrics,
             indicator_key=indicator_key,
@@ -379,20 +375,396 @@ def _render_indicator(
             unit=unit,
         )
 
-    if ctx.is_admin:
-        with tabs[4]:
-            if ext.empty:
-                st.info("Nenhum registro fora da equipe foi encontrado para a competência atual.")
-            else:
-                st.caption(
-                    "Logins fora da equipe encontrados entre 22:00 e 05:59 "
-                    "quando a fonte possui horário."
-                )
-                st.dataframe(
-                    _external_table(ext, indicator_key),
-                    use_container_width=True,
-                    hide_index=True,
-                )
+
+def _render_executive_summary(
+    *,
+    indicator_key: str,
+    rows: pd.DataFrame,
+    people: pd.DataFrame,
+    analyst_breakdowns: pd.DataFrame,
+    details: pd.DataFrame,
+    target,
+    direction: str,
+) -> None:
+    if len(rows) > 1:
+        st.markdown("#### Resultado por setor")
+        st.dataframe(
+            _sector_table(rows, indicator_key, pd.DataFrame(), target=target, direction=direction),
+            use_container_width=True,
+            hide_index=True,
+        )
+    else:
+        segment_name = str(rows.iloc[0].get("segment_name") or "—")
+        st.caption(f"Setor: {segment_name}")
+
+    _render_team_average_panel(
+        indicator_key=indicator_key,
+        people=people,
+        analyst_breakdowns=analyst_breakdowns,
+    )
+    _render_management_focus(
+        indicator_key=indicator_key,
+        details=details,
+        target=target,
+        direction=direction,
+    )
+
+
+def _render_team_average_panel(
+    *,
+    indicator_key: str,
+    people: pd.DataFrame,
+    analyst_breakdowns: pd.DataFrame,
+) -> None:
+    config = TEAM_AVERAGE_SPLITS.get(indicator_key)
+    if not config or people.empty or analyst_breakdowns.empty:
+        return
+
+    dimension, preferred = config
+    rows = _dimension_rows(analyst_breakdowns, dimension)
+    if rows.empty:
+        return
+
+    universe = sorted(
+        login for login in people.get("login", pd.Series(dtype="object")).dropna().astype(str).unique()
+        if login.strip()
+    )
+    if not universe:
+        return
+
+    available_values = [str(value) for value in rows["dimension_value"].dropna().unique() if str(value).strip()]
+    if not available_values:
+        return
+
+    upper_map = {value.upper(): value for value in available_values}
+    categories = [upper_map[value] for value in preferred if value in upper_map]
+    if not categories:
+        volume_by_value = (
+            rows.assign(_volume=pd.to_numeric(rows["volume"], errors="coerce").fillna(0))
+            .groupby("dimension_value")["_volume"]
+            .sum()
+            .sort_values(ascending=False)
+        )
+        categories = [str(value) for value in volume_by_value.head(2).index]
+    categories = categories[:2]
+    if not categories:
+        return
+
+    stats = []
+    for category in categories:
+        part = rows[rows["dimension_value"].astype(str) == category].copy()
+        grouped = part.groupby("login", dropna=False).agg(
+            successes=("successes", "sum"),
+            losses=("losses", "sum"),
+            volume=("volume", "sum"),
+        )
+        grouped = grouped.reindex(universe, fill_value=0)
+        total_volume = float(pd.to_numeric(grouped["volume"], errors="coerce").fillna(0).sum())
+        total_successes = float(pd.to_numeric(grouped["successes"], errors="coerce").fillna(0).sum())
+        adherence = None if total_volume <= 0 else total_successes / total_volume * 100
+        stats.append({
+            "category": category,
+            "avg_successes": float(pd.to_numeric(grouped["successes"], errors="coerce").fillna(0).mean()),
+            "avg_losses": float(pd.to_numeric(grouped["losses"], errors="coerce").fillna(0).mean()),
+            "adherence": adherence,
+        })
+
+    title = " e ".join(item["category"] for item in stats)
+    st.markdown(f"#### Média da equipe por analista — {title}")
+    st.caption("Média absoluta por analista; a aderência total da categoria aparece abaixo de cada valor.")
+
+    cards = []
+    for item in stats:
+        cards.append((f"{item['category']} · aderentes", item["avg_successes"], item["adherence"]))
+    for item in stats:
+        cards.append((f"{item['category']} · não aderentes", item["avg_losses"], item["adherence"]))
+
+    columns = st.columns(len(cards))
+    for column, (label, value, adherence) in zip(columns, cards):
+        with column:
+            st.metric(label, f"{value:.1f}")
+            if adherence is not None:
+                st.caption(f"Aderência da categoria: {adherence:.1f}%")
+
+
+def _render_management_focus(
+    *,
+    indicator_key: str,
+    details: pd.DataFrame,
+    target,
+    direction: str,
+) -> None:
+    if details.empty:
+        return
+
+    dimensions = MANAGEMENT_DIMENSIONS.get(indicator_key, ())
+    usable = _dimensions_rows(details, dimensions)
+    usable = _exclude_dimension_prefix(usable, "service__")
+    if usable.empty:
+        return
+
+    if usable["segment_name"].nunique(dropna=True) > 1:
+        usable = _aggregate_breakdown_rows(usable)
+    if usable.empty:
+        return
+
+    priorities: list[dict] = []
+    strengths: list[dict] = []
+
+    for dimension in dimensions:
+        part = _dimension_rows(usable, dimension)
+        if part.empty:
+            continue
+
+        part = part.copy()
+        part["_volume"] = pd.to_numeric(part["volume"], errors="coerce").fillna(0)
+        part["_successes"] = pd.to_numeric(part["successes"], errors="coerce").fillna(0)
+        part["_losses"] = pd.to_numeric(part["losses"], errors="coerce").fillna(0)
+        part["_result"] = part.apply(lambda row: _manager_result(indicator_key, row), axis=1)
+        part = part[part["_volume"] > 0]
+        if part.empty:
+            continue
+
+        min_volume = max(3.0, float(part["_volume"].sum()) * 0.02)
+        relevant = part[part["_volume"] >= min_volume].copy()
+        if relevant.empty:
+            relevant = part.copy()
+
+        worst = relevant.sort_values(
+            ["_losses", "_volume"], ascending=[False, False]
+        ).iloc[0]
+        if float(worst["_losses"]) > 0:
+            priorities.append(_focus_row(dimension, worst, indicator_key, target, direction, "losses"))
+
+        if indicator_key == "toa_cancellation_rate":
+            best = relevant.sort_values(
+                ["_result", "_volume"], ascending=[True, False], na_position="last"
+            ).iloc[0]
+        else:
+            best = relevant.sort_values(
+                ["_result", "_volume"], ascending=[False, False], na_position="last"
+            ).iloc[0]
+        strengths.append(_focus_row(dimension, best, indicator_key, target, direction, "successes"))
+
+    priorities = sorted(priorities, key=lambda row: row["_sort"], reverse=True)[:5]
+    strengths = sorted(strengths, key=lambda row: row["_sort"], reverse=True)[:5]
+
+    if not priorities and not strengths:
+        return
+
+    st.markdown("#### Leitura de gestão")
+    left, right = st.columns(2)
+    with left:
+        st.markdown("**Prioridades para recuperar**")
+        if priorities:
+            st.dataframe(
+                pd.DataFrame([{k: v for k, v in row.items() if not k.startswith("_")} for row in priorities]),
+                use_container_width=True,
+                hide_index=True,
+            )
+        else:
+            st.caption("Nenhuma concentração relevante de perdas encontrada.")
+    with right:
+        st.markdown("**Pontos para manter**")
+        if strengths:
+            st.dataframe(
+                pd.DataFrame([{k: v for k, v in row.items() if not k.startswith("_")} for row in strengths]),
+                use_container_width=True,
+                hide_index=True,
+            )
+        else:
+            st.caption("Ainda não há base suficiente para destacar pontos fortes.")
+
+
+def _focus_row(
+    dimension: str,
+    row: pd.Series,
+    indicator_key: str,
+    target,
+    direction: str,
+    sort_by: str,
+) -> dict:
+    result = _manager_result(indicator_key, row)
+    gap = _goal_gap(result, target, direction)
+    item = {
+        "Foco": DIMENSION_LABELS.get(dimension, dimension),
+        "Onde": str(row.get("dimension_value") or "—"),
+        "Resultado": _pct(result),
+        "Volume": _int(row.get("volume")),
+    }
+    if sort_by == "losses":
+        item["Perdas"] = _int(row.get("losses"))
+        item["_sort"] = float(_number(row.get("losses")) or 0)
+    else:
+        item["Ganhos"] = _int(row.get("successes"))
+        item["_sort"] = float(_number(row.get("successes")) or 0)
+    if gap is not None:
+        item["Gap meta"] = f"{gap:+.1f} pp"
+    return item
+
+
+def _manager_result(indicator_key: str, row: pd.Series) -> float | None:
+    volume = _number(row.get("volume"))
+    if indicator_key == "toa_cancellation_rate":
+        losses = _number(row.get("losses"))
+        if volume is None or volume <= 0 or losses is None:
+            return None
+        return losses / volume * 100
+    return _number(row.get("value"))
+
+
+def _goal_gap(value, target, direction: str) -> float | None:
+    value_num = _number(value)
+    target_num = _number(target)
+    if value_num is None or target_num is None:
+        return None
+    if direction == "lower_is_better":
+        return target_num - value_num
+    return value_num - target_num
+
+
+def _render_diagnostic(
+    *,
+    indicator_key: str,
+    rows: pd.DataFrame,
+    details: pd.DataFrame,
+    daily: pd.DataFrame,
+    external: pd.DataFrame,
+) -> None:
+    segment_names = _segment_names(rows)
+    scope_options = ["Geral", *segment_names] if len(segment_names) > 1 else (segment_names or ["Geral"])
+
+    c1, c2 = st.columns(2)
+    with c1:
+        scope = st.selectbox(
+            "Setor",
+            scope_options,
+            key=f"diag_scope_{indicator_key}",
+        )
+
+    scoped = _scope_frame(details, scope)
+
+    service_values = []
+    if not scoped.empty:
+        service_rows = _dimension_rows(scoped, "service")
+        service_values = sorted(
+            str(value) for value in service_rows["dimension_value"].dropna().unique()
+            if str(value).strip()
+        )
+    has_service_context = (
+        len(service_values) > 1
+        and not scoped.empty
+        and scoped["dimension"].astype(str).str.startswith("service__", na=False).any()
+    )
+
+    service_choice = "Todos"
+    if has_service_context:
+        with c2:
+            service_choice = st.selectbox(
+                "Serviço",
+                ["Todos", *service_values],
+                key=f"diag_service_{indicator_key}_{scope}",
+            )
+    else:
+        with c2:
+            st.caption("Use o recorte abaixo para localizar concentração de volume, perdas e aderência.")
+
+    if service_choice != "Todos":
+        scoped = _service_scoped_details(scoped, service_choice)
+    else:
+        scoped = _exclude_dimension_prefix(scoped, "service__")
+
+    if scope == "Geral" and not scoped.empty:
+        scoped = _aggregate_breakdown_rows(scoped)
+
+    preferred_dimensions = MANAGEMENT_DIMENSIONS.get(indicator_key, ())
+    available_dimensions = [
+        dimension for dimension in preferred_dimensions
+        if not _dimension_rows(scoped, dimension).empty
+    ]
+
+    choices: list[tuple[str, str]] = [
+        (DIMENSION_LABELS.get(dimension, dimension), dimension)
+        for dimension in available_dimensions
+    ]
+
+    scoped_daily = _scope_frame(daily, scope)
+    if scope == "Geral" and not scoped_daily.empty:
+        scoped_daily = _aggregate_daily_rows(scoped_daily)
+    if not scoped_daily.empty:
+        choices.append(("Evolução diária", "__daily__"))
+    if not external.empty:
+        choices.append(("Fora da equipe · madrugada", "__external__"))
+
+    if not choices:
+        st.info(
+            "Ainda não há detalhamento operacional nesta carga. Reprocesse a fonte para preencher "
+            "cluster, cidade, serviço, causas, horários e demais cortes disponíveis."
+        )
+        return
+
+    labels = [label for label, _ in choices]
+    selected_label = st.selectbox(
+        "Analisar por",
+        labels,
+        key=f"diag_dimension_{indicator_key}_{scope}_{service_choice}",
+    )
+    selected = next(value for label, value in choices if label == selected_label)
+
+    if selected == "__daily__":
+        table = _daily_table(scoped_daily, indicator_key)
+    elif selected == "__external__":
+        table = _external_table(external, indicator_key)
+    else:
+        part = _dimension_rows(scoped, selected)
+        table = _breakdown_table(part, selected, indicator_key)
+
+    if table.empty:
+        st.info("Sem dados para este recorte.")
+        return
+
+    st.caption("Ordenação prioriza concentração de perdas e volume; horários permanecem em ordem cronológica.")
+    st.dataframe(table, use_container_width=True, hide_index=True)
+
+
+def _render_analysts_compact(
+    people: pd.DataFrame,
+    metrics: pd.DataFrame,
+    *,
+    indicator_key: str,
+    direction: str,
+    target,
+    unit,
+) -> None:
+    if people.empty:
+        st.info("Nenhum analista com resultado para a competência atual.")
+        return
+
+    segment_names = _segment_names(people)
+    if len(segment_names) > 1:
+        scope = st.selectbox(
+            "Setor",
+            ["Todos", *segment_names],
+            key=f"analyst_scope_{indicator_key}",
+        )
+    else:
+        scope = segment_names[0] if segment_names else "Todos"
+
+    scoped_people = people.copy() if scope == "Todos" else _scope_frame(people, scope)
+    scoped_metrics = metrics.copy() if scope == "Todos" else _scope_frame(metrics, scope)
+
+    st.dataframe(
+        _analyst_table(
+            scoped_people,
+            scoped_metrics,
+            indicator_key=indicator_key,
+            direction=direction,
+            target=target,
+            unit=unit,
+        ),
+        use_container_width=True,
+        hide_index=True,
+    )
 
 
 def _render_operational_details(

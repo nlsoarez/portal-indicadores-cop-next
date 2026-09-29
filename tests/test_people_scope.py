@@ -39,7 +39,22 @@ class PeopleScopeTest(unittest.TestCase):
         self.assertEqual("Marcelo", marcelo.display_name)
         self.assertEqual("MARCELO DE SOUZA ALMEIDA", marcelo.full_name)
 
-    def test_leaders_share_admin_view_and_all_active_segments(self):
+    def test_leaders_do_not_appear_as_common_users(self):
+        from src.infrastructure.repositories import SegmentRepository, UserRepository
+
+        users = UserRepository()
+        preventiva = SegmentRepository().get_by_slug("preventiva")
+
+        analyst_logins = {user.login for user in users.list_for_segment(preventiva.id)}
+        leader_logins = {user.login for user in users.list_subadmins_for_segment(preventiva.id)}
+
+        self.assertTrue({"N5619600", "N6088107", "N5923221", "N0238475"}.isdisjoint(analyst_logins))
+        self.assertEqual(
+            {"N5619600", "N6088107", "N5923221", "N0238475"},
+            leader_logins,
+        )
+
+    def test_leaders_are_subadmins_and_access_all_active_segments(self):
         from src.application.access_service import AccessService
         from src.infrastructure.repositories import SegmentRepository, UserRepository
 
@@ -52,7 +67,8 @@ class PeopleScopeTest(unittest.TestCase):
             self.assertIsNotNone(leader)
 
             ctx = access.context(leader.id)
-            self.assertTrue(ctx.is_admin)
+            self.assertFalse(ctx.is_admin)
+            self.assertTrue(ctx.is_subadmin)
             self.assertFalse(ctx.is_analyst)
 
             segments = SegmentRepository().list_for_user(leader.id)

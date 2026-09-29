@@ -2,8 +2,9 @@ from __future__ import annotations
 
 from collections import defaultdict
 
+from src.features.ingestion.breakdowns import add_ratio, is_night, materialize, new_bucket
 from src.features.ingestion.models import ParsedIndicatorBatch
-from src.features.ingestion.xlsx_stream import as_float, as_int, excel_date, iter_rows, normalize_login
+from src.features.ingestion.xlsx_stream import as_float, as_int, excel_date, excel_hour, iter_rows, normalize_login
 
 SOURCE_KEY = "residential_indicators"
 SHEET_CANDIDATES = ("Analitico", "Analítico", "Residencial", "Sheet1")
@@ -28,8 +29,12 @@ HFC_INDICATORS = {"ETIT FIBRA HFC", "ASSERTIVIDADE ACIONAMENTO FIBRA HFC"}
 def parse_residential_indicators(raw_bytes: bytes, allowed_logins: set[str]) -> tuple[ParsedIndicatorBatch, ...]:
     allowed = {login.strip().upper() for login in allowed_logins}
     aggregates: dict[tuple[int, str, str, str], list[float]] = defaultdict(lambda: [0.0, 0.0])
+    breakdowns_by_indicator = {key: new_bucket() for key in INDICATORS.values()}
     latest_anomes = 0
-    optional = {COL_LOGIN_UNIFIED, COL_LOGIN_FO, COL_LOGIN_GPON}
+    optional = {
+        COL_LOGIN_UNIFIED, COL_LOGIN_FO, COL_LOGIN_GPON,
+        "IN_GRUPO", "TURNO", "NATUREZA", "SOLUCAO", "IMPACTO",
+    }
     required = {COL_INDICATOR, COL_VOLUME, COL_VALUE, COL_REGIONAL, COL_DATE, COL_ANOMES}
 
     for row in iter_rows(
@@ -38,17 +43,19 @@ def parse_residential_indicators(raw_bytes: bytes, allowed_logins: set[str]) -> 
         header_row=1,
         required_headers=required,
         optional_headers=optional,
-        required_any=(optional,),
+        required_any=({COL_LOGIN_UNIFIED, COL_LOGIN_FO, COL_LOGIN_GPON},),
     ):
         indicator = str(row.get(COL_INDICATOR) or "").strip().upper()
-        if indicator not in INDICATORS:
+        indicator_key = INDICATORS.get(indicator)
+        if not indicator_key:
             continue
-        if str(row.get(COL_REGIONAL) or "").strip().upper() != "LESTE":
+        region = str(row.get(COL_REGIONAL) or "").strip()
+        if region.upper() != "LESTE":
             continue
         login = normalize_login(row.get(COL_LOGIN_UNIFIED))
         if not login:
             login = normalize_login(row.get(COL_LOGIN_FO if indicator in HFC_INDICATORS else COL_LOGIN_GPON))
-        if login not in allowed:
+        if not login:
             continue
         anomes = as_int(row.get(COL_ANOMES))
         period = excel_date(row.get(COL_DATE))
@@ -56,10 +63,28 @@ def parse_residential_indicators(raw_bytes: bytes, allowed_logins: set[str]) -> 
         volume = as_float(row.get(COL_VOLUME), 0)
         if anomes <= 0 or not period or value not in (0.0, 1.0) or volume <= 0:
             continue
-        latest_anomes = max(latest_anomes, anomes)
-        key = (anomes, INDICATORS[indicator], login, period)
-        aggregates[key][0] += value * volume
-        aggregates[key][1] += volume
+
+        success = value * volume
+        hour = excel_hour(row.get(COL_DATE))
+        turn = row.get("TURNO")
+        bucket = breakdowns_by_indicator[indicator_key]
+        if login in allowed:
+            latest_anomes = max(latest_anomes, anomes)
+            key = (anomes, indicator_key, login, period)
+            aggregates[key][0] += success
+            aggregates[key][1] += volume
+            for dimension, dimension_value in (
+                ("region", region), ("group", row.get("IN_GRUPO")),
+                ("hour", hour), ("nature", row.get("NATUREZA")),
+                ("solution", row.get("SOLUCAO")), ("impact", row.get("IMPACTO")),
+            ):
+                add_ratio(bucket, anomes=anomes, scope="team", login=login, period=period,
+                          dimension=dimension, dimension_value=dimension_value,
+                          successes=success, volume=volume)
+        elif is_night(hour, turn):
+            add_ratio(bucket, anomes=anomes, scope="external", login=login, period=period,
+                      dimension="external_hour", dimension_value=hour if hour is not None else "Madrugada",
+                      successes=success, volume=volume)
 
     if latest_anomes <= 0:
         return ()
@@ -73,5 +98,10 @@ def parse_residential_indicators(raw_bytes: bytes, allowed_logins: set[str]) -> 
                 continue
             rows.append({"login": login, "period": period, "data_month": data_month, "value": round(gain / volume * 100, 1), "volume": int(round(volume))})
         if rows:
-            batches.append(ParsedIndicatorBatch(SOURCE_KEY, indicator_key, max(r["period"] for r in rows), tuple(rows), (data_month,)))
+            batches.append(
+                ParsedIndicatorBatch(
+                    SOURCE_KEY, indicator_key, max(r["period"] for r in rows), tuple(rows),
+                    (data_month,), materialize(breakdowns_by_indicator[indicator_key], latest_anomes),
+                )
+            )
     return tuple(batches)

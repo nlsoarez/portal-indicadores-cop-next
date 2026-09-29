@@ -108,6 +108,32 @@ def as_int(value: object | None, default: int = 0) -> int:
         return default
 
 
+def excel_hour(value: object | None) -> int | None:
+    if isinstance(value, datetime):
+        return int(value.hour)
+    raw = str(value or "").strip()
+    if not raw:
+        return None
+    for fmt in (
+        "%Y-%m-%d %H:%M:%S", "%Y-%m-%d %H:%M:%S.%f",
+        "%Y-%m-%dT%H:%M:%S", "%Y-%m-%dT%H:%M:%S.%f",
+    ):
+        try:
+            return int(datetime.strptime(raw, fmt).hour)
+        except ValueError:
+            pass
+    try:
+        numeric = float(raw)
+    except ValueError:
+        return None
+    if 0 <= numeric <= 23 and numeric.is_integer():
+        return int(numeric)
+    if numeric > 1000:
+        fraction = numeric - int(numeric)
+        return int(round(fraction * 24)) % 24
+    return None
+
+
 def excel_date(value: object | None) -> str | None:
     if isinstance(value, datetime):
         return value.date().isoformat()

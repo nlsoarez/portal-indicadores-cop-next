@@ -17,6 +17,14 @@ _DIMENSION_LABELS = {
     "demand": "Por demanda",
     "type": "Por tipo",
     "cause": "Por causa",
+    "nature": "Por natureza",
+    "solution": "Por solução",
+    "impact": "Por impacto",
+    "network": "Por rede",
+    "activity_type": "Por tipo de atividade",
+    "turn": "Por turno",
+    "cause_toa": "Por causa TOA",
+    "cause_sir": "Por causa SIR",
 }
 
 
@@ -95,7 +103,11 @@ def render_management_indicators(
 
             details = breakdown_df[breakdown_df["indicator_key"] == indicator_key].copy() if not breakdown_df.empty else pd.DataFrame()
             if not details.empty:
-                for dimension in ["region", "group", "hour", "base", "queue", "demand", "type", "cause"]:
+                for dimension in [
+                    "region", "group", "hour", "base", "queue", "demand", "type", "cause",
+                    "nature", "solution", "impact", "network", "activity_type", "turn",
+                    "cause_toa", "cause_sir",
+                ]:
                     part = details[details["dimension"] == dimension].copy()
                     if part.empty:
                         continue
@@ -185,6 +197,9 @@ def _breakdown_table(rows: pd.DataFrame, dimension: str, unit) -> pd.DataFrame:
     label = {
         "region": "Região", "group": "Grupo", "hour": "Hora", "base": "Base",
         "queue": "Fila", "demand": "Demanda", "type": "Tipo", "cause": "Causa",
+        "nature": "Natureza", "solution": "Solução", "impact": "Impacto",
+        "network": "Rede", "activity_type": "Tipo de atividade", "turn": "Turno",
+        "cause_toa": "Causa TOA", "cause_sir": "Causa SIR",
     }[dimension]
     if dimension == "hour":
         rows = rows.assign(_sort=pd.to_numeric(rows["dimension_value"], errors="coerce"))

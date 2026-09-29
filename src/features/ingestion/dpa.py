@@ -4,6 +4,7 @@ from collections import defaultdict
 from datetime import date, datetime, timedelta
 from calendar import monthrange
 
+from src.features.ingestion.breakdowns import add_ratio, materialize, new_bucket
 from src.features.ingestion.models import ParsedIndicatorBatch
 from src.features.ingestion.pivot_cache import iter_pivot_records
 
@@ -15,15 +16,12 @@ OPTIONAL = {"DATA"}
 def parse_dpa(raw_bytes: bytes, allowed_logins: set[str]) -> tuple[ParsedIndicatorBatch, ...]:
     allowed = {login.strip().upper() for login in allowed_logins}
     aggregates: dict[tuple[int, str, str], list[float]] = defaultdict(lambda: [0.0, 0.0])
+    breakdowns = new_bucket()
     latest_anomes = 0
 
-    for record in iter_pivot_records(
-        raw_bytes,
-        required_fields=REQUIRED,
-        optional_fields=OPTIONAL,
-    ):
+    for record in iter_pivot_records(raw_bytes, required_fields=REQUIRED, optional_fields=OPTIONAL):
         login = str(record.get("USUARIO_LOGIN") or "").strip().upper()
-        if login not in allowed:
+        if not login:
             continue
         try:
             anomes = int(float(record.get("ANOMES") or 0))
@@ -31,16 +29,25 @@ def parse_dpa(raw_bytes: bytes, allowed_logins: set[str]) -> tuple[ParsedIndicat
             continue
         if anomes <= 0:
             continue
-        latest_anomes = max(latest_anomes, anomes)
         period = _period(record.get("DATA"), anomes)
         try:
             usage = float(record.get("TEMPO_USO_SEC") or 0)
             journey = float(record.get("HORARIO_JORNADA_SEC") or 0)
         except (TypeError, ValueError):
             continue
-        key = (anomes, login, period)
-        aggregates[key][0] += usage
-        aggregates[key][1] += journey
+        if journey <= 0:
+            continue
+        if login in allowed:
+            latest_anomes = max(latest_anomes, anomes)
+            key = (anomes, login, period)
+            aggregates[key][0] += usage
+            aggregates[key][1] += journey
+        else:
+            add_ratio(
+                breakdowns, anomes=anomes, scope="external", login=login, period=period,
+                dimension="external_hour", dimension_value="Sem horário",
+                successes=usage, volume=journey,
+            )
 
     if latest_anomes <= 0:
         return ()
@@ -50,22 +57,18 @@ def parse_dpa(raw_bytes: bytes, allowed_logins: set[str]) -> tuple[ParsedIndicat
     for (anomes, login, period), (usage, journey) in sorted(aggregates.items()):
         if anomes != latest_anomes or journey <= 0:
             continue
-        rows.append(
-            {
-                "login": login,
-                "period": period,
-                "data_month": data_month,
-                "value": round(usage / journey * 100, 1),
-                "volume": int(round(journey)),
-            }
-        )
+        rows.append({
+            "login": login, "period": period, "data_month": data_month,
+            "value": round(usage / journey * 100, 1), "volume": int(round(journey)),
+        })
     if not rows:
         return ()
 
-    data_through = max(row["period"] for row in rows)
-    months = (data_month,)
     return (
-        ParsedIndicatorBatch(SOURCE_KEY, "dpa_official", data_through, tuple(rows), months),
+        ParsedIndicatorBatch(
+            SOURCE_KEY, "dpa_official", max(row["period"] for row in rows), tuple(rows),
+            (data_month,), materialize(breakdowns, latest_anomes),
+        ),
     )
 
 

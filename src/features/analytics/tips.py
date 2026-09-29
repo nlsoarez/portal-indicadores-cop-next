@@ -17,8 +17,8 @@ def build_tips(individual: list[dict], team_averages: list[dict]) -> list[str]:
             continue
         direction = "acima" if delta > 0 else "abaixo"
         unit = row.get("unit") or "percent"
-        amount = f"{abs(delta):.1f} p.p." if unit == "percent" else f"{abs(delta):.1f}"
+        amount = f"{abs(delta):.1f} pontos percentuais" if unit == "percent" else f"{abs(delta):.1f}"
         tips.append(
-            f"{row['name']}: você está {amount} {direction} da média dos analistas em {row['period']}."
+            f"{row['name']}: você está {amount} {direction} da média da equipe em {row['period']}."
         )
     return tips or ["Seu desempenho está próximo da média da equipe nos indicadores disponíveis."]

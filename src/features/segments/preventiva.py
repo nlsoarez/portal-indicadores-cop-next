@@ -5,5 +5,17 @@ PREVENTIVA_ANALYSTS = (
     ("N5577565", "MARISTELLA MARCIA DOS SANTOS", "Maristella"),
 )
 
-# Os indicadores da Preventiva devem ser cadastrados quando as fontes reais forem definidas.
-PREVENTIVA_INDICATORS: tuple[dict, ...] = ()
+PREVENTIVA_INDICATORS: tuple[dict, ...] = (
+    {
+        "indicator_key": "chat_10m",
+        "name": "Chat 10 min",
+        "target_value": 75.0,
+        "direction": "higher_is_better",
+    },
+    {
+        "indicator_key": "validacao_20m",
+        "name": "Tempo de Validação do Formulário",
+        "target_value": 80.0,
+        "direction": "higher_is_better",
+    },
+)

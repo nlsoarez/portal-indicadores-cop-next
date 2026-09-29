@@ -566,7 +566,12 @@ def _render_management_focus(
             ["_losses", "_volume"], ascending=[False, False]
         ).iloc[0]
         if float(worst["_losses"]) > 0:
-            priorities.append(_focus_row(dimension, worst, indicator_key, target, direction, "losses"))
+            priority = _focus_row(dimension, worst, indicator_key, target, direction, "losses")
+            dimension_losses = float(part["_losses"].sum())
+            priority["% das perdas"] = _pct(
+                None if dimension_losses <= 0 else float(worst["_losses"]) / dimension_losses * 100
+            )
+            priorities.append(priority)
 
         if indicator_key == "toa_cancellation_rate":
             best = relevant.sort_values(

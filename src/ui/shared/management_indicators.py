@@ -111,6 +111,10 @@ FRAME_SCHEMAS = {
         "period", "segment_id", "segment_slug", "segment_name", "indicator_key", "login",
         "volume", "successes", "losses", "tma_seconds", "tmr_seconds",
     ),
+    "analyst_breakdowns": (
+        "period", "segment_id", "segment_slug", "segment_name", "indicator_key", "name",
+        "login", "dimension", "dimension_value", "value", "volume", "successes", "losses",
+    ),
     "daily_summary": (
         "period", "data_month", "segment_id", "segment_slug", "segment_name",
         "indicator_key", "name", "unit", "value", "volume",
@@ -137,6 +141,7 @@ def render_management_indicators(
     segment_df = _payload_frame(payload, "segment_summary")
     analyst_df = _payload_frame(payload, "analyst_summary")
     analyst_metrics_df = _payload_frame(payload, "analyst_metrics")
+    analyst_breakdowns_df = _payload_frame(payload, "analyst_breakdowns")
     daily_df = _payload_frame(payload, "daily_summary")
     breakdown_df = _payload_frame(payload, "breakdowns")
     external_df = _payload_frame(payload, "external")
@@ -182,6 +187,7 @@ def render_management_indicators(
                 segment_df=segment_df,
                 analyst_df=analyst_df,
                 analyst_metrics_df=analyst_metrics_df,
+                analyst_breakdowns_df=analyst_breakdowns_df,
                 daily_df=daily_df,
                 breakdown_df=breakdown_df,
                 external_df=external_df,
@@ -197,6 +203,7 @@ def _render_source(
     segment_df: pd.DataFrame,
     analyst_df: pd.DataFrame,
     analyst_metrics_df: pd.DataFrame,
+    analyst_breakdowns_df: pd.DataFrame,
     daily_df: pd.DataFrame,
     breakdown_df: pd.DataFrame,
     external_df: pd.DataFrame,
@@ -236,6 +243,7 @@ def _render_source(
             segment_df=segment_df,
             analyst_df=analyst_df,
             analyst_metrics_df=analyst_metrics_df,
+            analyst_breakdowns_df=analyst_breakdowns_df,
             daily_df=daily_df,
             breakdown_df=breakdown_df,
             external_df=external_df,
@@ -270,6 +278,7 @@ def _render_indicator(
     segment_df: pd.DataFrame,
     analyst_df: pd.DataFrame,
     analyst_metrics_df: pd.DataFrame,
+    analyst_breakdowns_df: pd.DataFrame,
     daily_df: pd.DataFrame,
     breakdown_df: pd.DataFrame,
     external_df: pd.DataFrame,

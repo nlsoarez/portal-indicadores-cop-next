@@ -40,8 +40,9 @@ def parse_residential_indicators(raw_bytes: bytes, allowed_logins: set[str]) -> 
     latest_anomes = 0
     optional = {
         COL_LOGIN_UNIFIED, COL_LOGIN_FO, COL_LOGIN_GPON,
-        "IN_GRUPO", "TURNO", "SERVICO", "NATUREZA", "SOLUCAO", "IMPACTO",
-        "TMA", "TMR",
+        "IN_GRUPO", "IN_CIDADE_UF", "IN_UF", "TURNO", "TECNOLOGIA",
+        "SERVICO", "NATUREZA", "SINTOMA", "FERRAMENTA_ABERTURA",
+        "FECHAMENTO", "SOLUCAO", "IMPACTO", "TMA", "TMR",
     }
     required = {COL_INDICATOR, COL_VOLUME, COL_VALUE, COL_REGIONAL, COL_DATE, COL_ANOMES}
 
@@ -77,7 +78,8 @@ def parse_residential_indicators(raw_bytes: bytes, allowed_logins: set[str]) -> 
 
         success = metric * volume
         hour = excel_hour(row.get(COL_DATE))
-        turn = turn_from_hour(hour)
+        turn = str(row.get("TURNO") or "").strip() or turn_from_hour(hour)
+        service = row.get("SERVICO")
         tma_seconds = decimal_hours_to_seconds(row.get("TMA"))
         tmr_seconds = decimal_hours_to_seconds(row.get("TMR"))
         bucket = breakdowns_by_indicator[indicator_key]
@@ -87,17 +89,24 @@ def parse_residential_indicators(raw_bytes: bytes, allowed_logins: set[str]) -> 
             key = (anomes, indicator_key, login, period)
             aggregates[key][0] += success
             aggregates[key][1] += volume
-            for dimension, dimension_value in (
+            dimensions = (
                 ("overall", "Total"),
                 ("region", region),
                 ("group", row.get("IN_GRUPO")),
+                ("city", row.get("IN_CIDADE_UF")),
+                ("uf", row.get("IN_UF")),
                 ("turn", turn),
                 ("hour", hour),
-                ("service", row.get("SERVICO")),
+                ("technology", row.get("TECNOLOGIA")),
+                ("service", service),
                 ("nature", row.get("NATUREZA")),
+                ("symptom", row.get("SINTOMA")),
+                ("tool", row.get("FERRAMENTA_ABERTURA")),
+                ("closure", row.get("FECHAMENTO")),
                 ("solution", row.get("SOLUCAO")),
                 ("impact", row.get("IMPACTO")),
-            ):
+            )
+            for dimension, dimension_value in dimensions:
                 add_ratio(
                     bucket,
                     anomes=anomes,
@@ -111,6 +120,22 @@ def parse_residential_indicators(raw_bytes: bytes, allowed_logins: set[str]) -> 
                     tma_seconds=tma_seconds,
                     tmr_seconds=tmr_seconds,
                 )
+                if dimension != "service":
+                    scoped_value = _compound(service, dimension_value)
+                    if scoped_value:
+                        add_ratio(
+                            bucket,
+                            anomes=anomes,
+                            scope="team",
+                            login=login,
+                            period=period,
+                            dimension=f"service__{dimension}",
+                            dimension_value=scoped_value,
+                            successes=success,
+                            volume=volume,
+                            tma_seconds=tma_seconds,
+                            tmr_seconds=tmr_seconds,
+                        )
         elif is_night(hour, turn):
             add_ratio(
                 bucket,
@@ -155,3 +180,11 @@ def parse_residential_indicators(raw_bytes: bytes, allowed_logins: set[str]) -> 
                 )
             )
     return tuple(batches)
+
+
+def _compound(left: object | None, right: object | None) -> str | None:
+    left_value = str(left or "").strip()
+    right_value = str(right or "").strip()
+    if not left_value or not right_value:
+        return None
+    return f"{left_value}|||{right_value}"

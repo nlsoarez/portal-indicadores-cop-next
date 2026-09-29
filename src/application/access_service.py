@@ -30,18 +30,20 @@ class AccessService:
 
     def assert_can_view_user(self, ctx: AccessContext, segment_id: int, target_user_id: int) -> None:
         self.assert_segment_access(ctx, segment_id)
-        analyst_ids = {user.id for user in self.users.list_for_segment(segment_id)}
 
-        if ctx.is_admin:
-            subadmin_ids = {user.id for user in self.users.list_subadmins_for_segment(segment_id)}
-            if target_user_id not in analyst_ids | subadmin_ids:
-                raise PermissionError("Usuário-alvo não pertence ao escopo gerencial do segmento")
+        if not ctx.is_admin and not ctx.is_subadmin:
+            if target_user_id != ctx.user.id:
+                raise PermissionError("Analista não pode consultar dados individuais de outro analista")
+            return
+
+        allowed = self.users.can_view_user_in_segment(
+            target_user_id,
+            segment_id,
+            include_subadmins=ctx.is_admin,
+        )
+        if allowed:
             return
 
         if ctx.is_subadmin:
-            if target_user_id not in analyst_ids:
-                raise PermissionError("Subadmin pode consultar somente dados individuais de analistas")
-            return
-
-        if target_user_id != ctx.user.id:
-            raise PermissionError("Analista não pode consultar dados individuais de outro analista")
+            raise PermissionError("Subadmin pode consultar somente dados individuais de analistas")
+        raise PermissionError("Usuário-alvo não pertence ao escopo gerencial do segmento")

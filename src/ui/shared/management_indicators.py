@@ -428,12 +428,15 @@ def _render_time_details(
 
     for scope_tab, scope in zip(scope_tabs, scopes):
         with scope_tab:
-            scoped_details = details.copy() if scope == "Geral" else details[details["segment_name"] == scope].copy()
-            scoped_daily = daily.copy() if scope == "Geral" else daily[daily["segment_name"] == scope].copy()
+            scoped_details = _scope_frame(details, scope)
+            scoped_daily = _scope_frame(daily, scope)
 
-            scoped_details = scoped_details[
-                scoped_details["dimension"].isin(("turn", "hour"))
-            ].copy()
+            if not scoped_details.empty and "dimension" in scoped_details.columns:
+                scoped_details = scoped_details[
+                    scoped_details["dimension"].isin(("turn", "hour"))
+                ].copy()
+            else:
+                scoped_details = pd.DataFrame()
             if scope == "Geral" and not scoped_details.empty:
                 scoped_details = _aggregate_breakdown_rows(scoped_details)
             if scope == "Geral" and not scoped_daily.empty:
@@ -467,6 +470,17 @@ def _render_time_details(
                             use_container_width=True,
                             hide_index=True,
                         )
+
+
+def _scope_frame(frame: pd.DataFrame, scope: str) -> pd.DataFrame:
+    """Filtra por setor sem quebrar quando a carga antiga ainda não possui colunas de breakdown."""
+    if frame is None or frame.empty:
+        return pd.DataFrame()
+    if scope == "Geral":
+        return frame.copy()
+    if "segment_name" not in frame.columns:
+        return pd.DataFrame()
+    return frame[frame["segment_name"] == scope].copy()
 
 
 def _render_analyst_details(

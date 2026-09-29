@@ -171,6 +171,75 @@ class SourceIngestionTest(unittest.TestCase):
         self.assertEqual(100.0, chat[0]["value"])
         self.assertEqual(1, chat[0]["volume"])
 
+    def test_leader_indicators_are_stored_but_excluded_from_team_average(self):
+        from src.application.upload_service import UploadProcessingService
+        from src.infrastructure.repositories import IndicatorRepository
+
+        df = pd.DataFrame(
+            {
+                "FECHAMENTO_COPREDE_LOGIN_ANALISTA": [
+                    "N5604148", "N5941223", "N0238475", "N0238475"
+                ],
+                "ABERTURA_ANOMES": [202609, 202609, 202609, 202609],
+                "FECHAMENTO_FILA": ["RJO RES", "RJO RES", "RJO RES", "RJO RES"],
+                "INDICADOR_TMA_DENTRO": [1, 0, 1, 1],
+                "CHAT_INICIO": [
+                    "2026-09-29 22:00:00",
+                    "2026-09-29 22:10:00",
+                    "2026-09-29 22:20:00",
+                    "2026-09-29 22:30:00",
+                ],
+            }
+        )
+
+        UploadProcessingService().process(
+            self.ctx,
+            self.segment.id,
+            "chat_toa",
+            "chat-com-lider.xlsx",
+            self._xlsx(df, "Analítico CHAT TOA", startrow=3),
+        )
+
+        indicators = IndicatorRepository()
+        marley = self.users.get_by_login("N0238475")
+        leader_summary = indicators.monthly_summary_for_user(self.segment.id, marley.id)
+        leader_chat = next(row for row in leader_summary if row["indicator_key"] == "chat_10m")
+        self.assertEqual(100.0, leader_chat["value"])
+        self.assertEqual(2, leader_chat["volume"])
+
+        team_chat = next(
+            row for row in indicators.team_monthly_summary(self.segment.id)
+            if row["indicator_key"] == "chat_10m"
+        )
+        self.assertEqual(50.0, team_chat["team_avg"])
+        self.assertEqual(2, team_chat["team_volume"])
+        self.assertEqual(2, team_chat["analysts_with_data"])
+
+    def test_subadmin_cannot_process_upload(self):
+        from src.application.access_service import AccessService
+        from src.application.upload_service import UploadProcessingService
+
+        leader = self.users.get_by_login("N0238475")
+        leader_ctx = AccessService(self.users).context(leader.id)
+        df = pd.DataFrame(
+            {
+                "FECHAMENTO_COPREDE_LOGIN_ANALISTA": ["N5604148"],
+                "ABERTURA_ANOMES": [202609],
+                "FECHAMENTO_FILA": ["RJO RES"],
+                "INDICADOR_TMA_DENTRO": [1],
+                "CHAT_INICIO": ["2026-09-29 22:00:00"],
+            }
+        )
+
+        with self.assertRaises(PermissionError):
+            UploadProcessingService().process(
+                leader_ctx,
+                self.segment.id,
+                "chat_toa",
+                "bloqueado.xlsx",
+                self._xlsx(df, "Analítico CHAT TOA", startrow=3),
+            )
+
 
 if __name__ == "__main__":
     unittest.main()

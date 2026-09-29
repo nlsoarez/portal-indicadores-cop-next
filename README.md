@@ -1,5 +1,3 @@
-[![Deploy with Vercel](https://vercel.com/button)](https://vercel.com/new/clone?repository-url=https%3A%2F%2Fgithub.com%2Fnlsoarez%2Fportal-indicadores-cop-next)
-
 # Portal de Indicadores COP — Next
 
 Nova geração do Portal de Indicadores COP, construída sem alterar o repositório legado de referência.
@@ -97,3 +95,18 @@ streamlit run app.py
 - `docs/MIGRATION_INVENTORY.md`
 - `docs/POST_BUILD_GRAPH_AUDIT.md`
 - `docs/GRAPHIFY_DIAGNOSIS.md`
+
+
+## Deploy no Vercel
+
+Este repositório já existe no GitHub. Não use o fluxo **Clone** / **Deploy Button**, pois ele tenta criar outro repositório.
+
+No Vercel:
+1. Abra **Add New → Project**.
+2. Em **Import Git Repository**, selecione `nlsoarez/portal-indicadores-cop-next`.
+3. Use o time **Neural Lab**.
+4. Mantenha a branch `main` e a raiz do projeto em `./`.
+5. O Vercel detectará o `Dockerfile.vercel` na raiz e fará o build do container.
+6. Clique em **Deploy**.
+
+A integração Git do Vercel publica novos pushes diretamente, sem GitHub Actions.

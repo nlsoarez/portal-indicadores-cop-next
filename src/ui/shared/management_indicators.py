@@ -98,6 +98,27 @@ ADHERENCE_KEYS = {
 }
 
 
+MANAGEMENT_DIMENSIONS = {
+    "res_etit_fibra_hfc": ("service", "group", "city", "technology", "nature", "impact", "solution", "hour"),
+    "res_etit_gpon": ("service", "group", "city", "technology", "nature", "impact", "solution", "hour"),
+    "res_assert_fibra_hfc": ("service", "group", "city", "technology", "nature", "impact", "solution", "hour"),
+    "res_assert_gpon": ("service", "group", "city", "technology", "nature", "impact", "solution", "hour"),
+    "emp_etit_event": ("demand", "type", "area", "cause", "group", "city", "hour"),
+    "validacao_20m": ("group", "network", "activity_type", "aging", "hour"),
+    "toa_cancellation_rate": ("group", "network", "activity_type", "aging", "hour"),
+    "closing_assertiveness": ("demand", "cause_toa", "cause_sir", "group", "hour"),
+    "chat_10m": ("base", "queue_type", "queue", "hour"),
+    "dpa_official": (),
+    "productivity_avg_daily": (),
+}
+
+TEAM_AVERAGE_SPLITS = {
+    "emp_etit_event": ("demand", ("RAL", "REC")),
+    "res_etit_fibra_hfc": ("service", ("BROWNFIELD", "GREENFIELD")),
+    "res_etit_gpon": ("service", ("BROWNFIELD", "GREENFIELD")),
+}
+
+
 FRAME_SCHEMAS = {
     "segment_summary": (
         "period", "segment_id", "segment_slug", "segment_name", "indicator_key", "name",

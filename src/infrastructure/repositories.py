@@ -43,6 +43,26 @@ class UserRepository:
             ).fetchall()
         return [_user(row) for row in rows]
 
+    def list_subadmins_for_segment(self, segment_id: int) -> list[User]:
+        """Lista somente líderes/subadmins ativos do segmento."""
+        with connection() as conn:
+            rows = conn.execute(
+                "SELECT DISTINCT u.id, u.login, u.full_name, u.display_name, u.active "
+                "FROM users u "
+                "JOIN user_segments us ON us.user_id=u.id "
+                "JOIN user_roles ur ON ur.user_id=u.id "
+                "JOIN roles r ON r.id=ur.role_id "
+                "WHERE us.segment_id=? AND u.active=1 AND r.code='subadmin' ORDER BY u.display_name",
+                (segment_id,),
+            ).fetchall()
+        return [_user(row) for row in rows]
+
+    def list_performance_users_for_segment(self, segment_id: int) -> list[User]:
+        """Pessoas cujos indicadores devem ser persistidos: analistas + subadmins."""
+        analysts = self.list_for_segment(segment_id)
+        leaders = self.list_subadmins_for_segment(segment_id)
+        return sorted([*analysts, *leaders], key=lambda user: user.display_name)
+
     def roles_for_user(self, user_id: int) -> frozenset[RoleCode]:
         with connection() as conn:
             rows = conn.execute(
@@ -82,6 +102,27 @@ class UserRepository:
                 SELECT u.id, u.login, u.display_name, MAX(al.created_at) AS last_access
                 FROM users u
                 JOIN user_segments us ON us.user_id=u.id AND us.segment_id=?
+                JOIN user_roles ur ON ur.user_id=u.id
+                JOIN roles r ON r.id=ur.role_id AND r.code='analyst'
+                LEFT JOIN access_logs al ON al.user_id=u.id AND al.event_type='login'
+                WHERE u.active=1
+                GROUP BY u.id, u.login, u.display_name
+                ORDER BY u.display_name
+                """,
+                (segment_id,),
+            ).fetchall()
+        return [dict(row) for row in rows]
+
+
+    def last_access_for_subadmins(self, segment_id: int) -> list[dict]:
+        with connection() as conn:
+            rows = conn.execute(
+                """
+                SELECT u.id, u.login, u.display_name, MAX(al.created_at) AS last_access
+                FROM users u
+                JOIN user_segments us ON us.user_id=u.id AND us.segment_id=?
+                JOIN user_roles ur ON ur.user_id=u.id
+                JOIN roles r ON r.id=ur.role_id AND r.code='subadmin'
                 LEFT JOIN access_logs al ON al.user_id=u.id AND al.event_type='login'
                 WHERE u.active=1
                 GROUP BY u.id, u.login, u.display_name
@@ -190,6 +231,8 @@ class IndicatorRepository:
                     ) AS avg_volume_per_analyst
                 FROM indicator_results ir
                 JOIN indicator_definitions d ON d.id=ir.indicator_definition_id
+                JOIN user_roles ur ON ur.user_id=ir.user_id
+                JOIN roles r ON r.id=ur.role_id AND r.code='analyst'
                 WHERE ir.segment_id=?
                 GROUP BY substr(ir.period, 1, 7), d.indicator_key, d.name
                 ORDER BY period DESC, d.name
@@ -202,6 +245,8 @@ class IndicatorRepository:
         sql = (
             "SELECT ir.period, d.indicator_key, d.name, AVG(ir.value) AS team_avg, SUM(ir.volume) AS team_volume "
             "FROM indicator_results ir JOIN indicator_definitions d ON d.id=ir.indicator_definition_id "
+            "JOIN user_roles ur ON ur.user_id=ir.user_id "
+            "JOIN roles r ON r.id=ur.role_id AND r.code='analyst' "
             "WHERE ir.segment_id=?"
         )
         params: list[object] = [segment_id]

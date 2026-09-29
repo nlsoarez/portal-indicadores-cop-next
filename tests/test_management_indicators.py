@@ -170,6 +170,20 @@ class ManagementIndicatorsTest(unittest.TestCase):
             self.assertTrue(frame.empty)
             self.assertTrue(set(expected).issubset(set(frame.columns)))
 
+    def test_empty_breakdown_helpers_are_safe(self):
+        from src.ui.shared.management_indicators import (
+            _dimension_rows,
+            _dimensions_rows,
+            _scope_frame,
+            _weighted_value,
+        )
+
+        frame = pd.DataFrame()
+        self.assertTrue(_scope_frame(frame, "Residencial").empty)
+        self.assertTrue(_dimension_rows(frame, "turn").empty)
+        self.assertTrue(_dimensions_rows(frame, ("turn", "hour")).empty)
+        self.assertIsNone(_weighted_value(frame))
+
     def test_chat_parser_keeps_hour_zero_and_external_night_record(self):
         from src.features.ingestion.chat_toa import parse_chat_toa
 

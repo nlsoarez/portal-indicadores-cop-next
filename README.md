@@ -4,7 +4,7 @@ Nova geração arquitetural do portal de indicadores, construída sem alterar o 
 
 ## O que já está implementado
 
-- Modelo relacional: usuários, roles, segmentos, memberships, indicadores, resultados, escala, uploads e logs de acesso.
+- Modelo relacional: usuários, roles, segmentos, memberships, indicadores, resultados, uploads e logs de acesso.
 - Autorização server-side com fail-closed.
 - `AdminShell` e `AnalystShell` visual e funcionalmente separados.
 - Seletor de segmento para admin com limpeza de estado na troca.
@@ -17,6 +17,8 @@ Nova geração arquitetural do portal de indicadores, construída sem alterar o 
 - Histórico do arquivo/fonte que originou a cobertura mais recente de cada indicador.
 - Testes de isolamento de dados, contexto de segmento e atualização da cobertura dos indicadores.
 - **Sem GitHub Actions.** O repositório não usa `.github/workflows/`.
+
+Este portal não possui módulo de escala.
 
 ## Fontes já migradas
 

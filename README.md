@@ -13,10 +13,20 @@ Nova geração arquitetural do portal de indicadores, construída sem alterar o 
 - Senha inicial `claro123`, armazenada apenas como hash PBKDF2, com troca obrigatória.
 - Último acesso disponível para administração.
 - Estrutura para média de equipe sem expor linhas individuais dos colegas.
-- **Cobertura dos dados por indicador:** cada processamento pode registrar a maior data real encontrada no arquivo (`data_through`), separada da data/hora do upload. Admin e analista visualizam "Dados até DD/MM/AAAA".
+- **Cobertura dos dados por indicador:** cada processamento registra a maior data real encontrada no arquivo (`data_through`), separada da data/hora do upload. Admin e analista visualizam "Dados até DD/MM/AAAA".
 - Histórico do arquivo/fonte que originou a cobertura mais recente de cada indicador.
 - Testes de isolamento de dados, contexto de segmento e atualização da cobertura dos indicadores.
 - **Sem GitHub Actions.** O repositório não usa `.github/workflows/`.
+
+## Fontes já migradas
+
+### Preventiva
+
+- **Chat 10 min** — fonte Chat TOA, meta 75%, leitura de `INDICADOR_TMA_DENTRO`, filtro RJO, mês mais recente e membership do segmento.
+- **Tempo de Validação do Formulário** — fonte Indicadores TOA, meta 80%, `INDICADOR=1` como aderente, Regional Leste, mês mais recente e membership do segmento.
+- Resultados são persistidos por dia/analista.
+- Reupload do mesmo mês substitui aquele mês em vez de duplicar resultados.
+- A visão do analista consolida o mês ponderando aderência pelo volume e compara com a média da equipe.
 
 ## Contrato dos importadores
 
@@ -30,7 +40,7 @@ A data exibida ao usuário é a cobertura real do indicador, não a data do envi
 
 ## Importante
 
-A fundação de rastreamento já está pronta. Os parsers legados ainda precisam ser migrados por fonte/segmento para alimentar automaticamente resultados e cobertura.
+A fundação de rastreamento e os parsers de Chat/Validação da Preventiva já estão integrados. As demais fontes do portal legado ainda devem ser migradas por adapters independentes.
 
 ## Rodar
 

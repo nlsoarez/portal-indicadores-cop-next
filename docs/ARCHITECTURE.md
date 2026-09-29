@@ -16,7 +16,8 @@ Request -> AccessContext -> AccessService -> Repository -> Data
 
 ## Separação de experiência
 
-- `AdminShell`: visão gerencial, seletor de segmento, equipe, indicadores, uploads e auditoria.
+- `AdminShell`: gestão total; único perfil com upload; consulta analistas e possui aba exclusiva para líderes.
+- `SubadminShell`: visão de liderança somente leitura; consulta dados individuais dos analistas, sem upload e sem acesso aos dados individuais de outros líderes.
 - `AnalystShell`: experiência individual; recebe apenas dados próprios e agregados da equipe.
 
 ## Regras centrais
@@ -26,7 +27,7 @@ Request -> AccessContext -> AccessService -> Repository -> Data
 3. Média da equipe é calculada por agregação no repositório, sem expor linhas dos colegas.
 4. Troca de segmento limpa estado/cache segmentado.
 5. Identidade/roles/segmentos ficam em banco relacional; planilhas permanecem como fontes de ingestão.
-6. Indicadores são definitions + results, permitindo variar por segmento sem criar colunas por segmento.
+6. Indicadores são definitions + results, permitindo variar por segmento sem criar colunas por segmento.\n7. Subadmins são persistidos fora da role `analyst`; seus resultados podem existir, mas não entram nas médias dos analistas.\n8. Upload é autorizado exclusivamente para `RoleCode.ADMIN` no backend.
 
 ## Fora de escopo
 

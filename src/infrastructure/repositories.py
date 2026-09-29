@@ -347,16 +347,6 @@ class UploadRepository:
         return [dict(row) for row in rows]
 
 
-class ScaleRepository:
-    def for_user(self, segment_id: int, user_id: int) -> list[dict]:
-        with connection() as conn:
-            rows = conn.execute(
-                "SELECT work_date, assignment FROM scales WHERE segment_id=? AND user_id=? ORDER BY work_date DESC",
-                (segment_id, user_id),
-            ).fetchall()
-        return [dict(row) for row in rows]
-
-
 class AuditRepository:
     def record_access(self, user_id: int, event_type: str = "login") -> None:
         with transaction() as conn:

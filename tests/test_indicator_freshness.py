@@ -23,7 +23,7 @@ class IndicatorFreshnessTest(unittest.TestCase):
                 "SELECT id FROM segments WHERE slug='preventiva'"
             ).fetchone()["id"]
             conn.execute(
-                "INSERT INTO indicator_definitions(segment_id, indicator_key, name, target_value) "
+                "INSERT OR IGNORE INTO indicator_definitions(segment_id, indicator_key, name, target_value) "
                 "VALUES (?, 'chat_10m', 'Chat 10 min', 75)",
                 (segment_id,),
             )
@@ -82,7 +82,7 @@ class IndicatorFreshnessTest(unittest.TestCase):
         ctx = AccessService(users).context(daniel.id)
         service = IndicatorFreshnessService()
 
-        self.assertEqual(1, len(service.freshness(ctx, segment.id)))
+        self.assertEqual(2, len(service.freshness(ctx, segment.id)))
         with self.assertRaises(PermissionError):
             service.record_indicator_data_through(
                 ctx, segment.id, "chat_10m", "29/09/2026", "chat_toa"

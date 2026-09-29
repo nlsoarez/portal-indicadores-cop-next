@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 from src.domain.entities import AccessContext, RoleCode, Segment, User
-from src.infrastructure.database import connection, transaction
+from src.infrastructure.database import connection, insert_returning_id, transaction
 
 
 class UserRepository:
@@ -226,7 +226,7 @@ class IndicatorRepository:
                     d.target_value,
                     d.direction,
                     d.unit,
-                    ROUND(SUM(ir.value * ir.volume) / NULLIF(SUM(ir.volume), 0), 1) AS value,
+                    ROUND(CAST(SUM(ir.value * ir.volume) AS NUMERIC) / NULLIF(SUM(ir.volume), 0), 1) AS value,
                     SUM(ir.volume) AS volume
                 FROM indicator_results ir
                 JOIN indicator_definitions d ON d.id=ir.indicator_definition_id
@@ -248,10 +248,10 @@ class IndicatorRepository:
                     d.indicator_key,
                     d.name,
                     d.unit,
-                    ROUND(SUM(ir.value * ir.volume) / NULLIF(SUM(ir.volume), 0), 1) AS team_avg,
+                    ROUND(CAST(SUM(ir.value * ir.volume) AS NUMERIC) / NULLIF(SUM(ir.volume), 0), 1) AS team_avg,
                     SUM(ir.volume) AS team_volume,
                     COUNT(DISTINCT ir.user_id) AS analysts_with_data,
-                    ROUND(SUM(ir.volume) * 1.0 / NULLIF(COUNT(DISTINCT ir.user_id), 0), 1)
+                    ROUND(CAST(SUM(ir.volume) AS NUMERIC) / NULLIF(COUNT(DISTINCT ir.user_id), 0), 1)
                         AS avg_volume_per_analyst
                 FROM indicator_results ir
                 JOIN indicator_definitions d ON d.id=ir.indicator_definition_id
@@ -375,11 +375,11 @@ class IndicatorRepository:
 class UploadRepository:
     def create(self, segment_id: int, source_key: str, filename: str, uploaded_by: int) -> int:
         with transaction() as conn:
-            cur = conn.execute(
+            return insert_returning_id(
+                conn,
                 "INSERT INTO uploads(segment_id, source_key, filename, uploaded_by) VALUES (?, ?, ?, ?)",
                 (segment_id, source_key, filename, uploaded_by),
             )
-            return int(cur.lastrowid)
 
     def latest_by_source(self) -> dict[str, dict]:
         with connection() as conn:

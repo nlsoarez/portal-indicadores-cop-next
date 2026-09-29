@@ -13,12 +13,24 @@ Nova geração arquitetural do portal de indicadores, construída sem alterar o 
 - Senha inicial `claro123`, armazenada apenas como hash PBKDF2, com troca obrigatória.
 - Último acesso disponível para administração.
 - Estrutura para média de equipe sem expor linhas individuais dos colegas.
-- Testes de isolamento de dados e de contexto de segmento.
+- **Cobertura dos dados por indicador:** cada processamento pode registrar a maior data real encontrada no arquivo (`data_through`), separada da data/hora do upload. Admin e analista visualizam "Dados até DD/MM/AAAA".
+- Histórico do arquivo/fonte que originou a cobertura mais recente de cada indicador.
+- Testes de isolamento de dados, contexto de segmento e atualização da cobertura dos indicadores.
 - **Sem GitHub Actions.** O repositório não usa `.github/workflows/`.
+
+## Contrato dos importadores
+
+Quando um parser processar uma planilha, ele deve:
+
+1. registrar o upload com `IndicatorFreshnessService.start_upload(...)`;
+2. calcular a maior data válida realmente presente para cada indicador;
+3. chamar `record_indicator_data_through(...)` para cada indicador processado.
+
+A data exibida ao usuário é a cobertura real do indicador, não a data do envio do arquivo.
 
 ## Importante
 
-Esta fundação ainda não migra os parsers e dashboards do portal legado. O próximo passo técnico é mover cada fonte de `src/processors.py` para adapters/features independentes e registrar os indicadores por segmento.
+A fundação de rastreamento já está pronta. Os parsers legados ainda precisam ser migrados por fonte/segmento para alimentar automaticamente resultados e cobertura.
 
 ## Rodar
 

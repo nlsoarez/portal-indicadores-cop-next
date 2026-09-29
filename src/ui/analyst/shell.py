@@ -7,6 +7,7 @@ from src.application.dashboard_service import DashboardService
 from src.application.segment_context import switch_segment_state
 from src.domain.entities import AccessContext, Segment
 from src.features.analytics.tips import build_tips
+from src.ui.shared.freshness import render_indicator_freshness
 
 
 class AnalystShell:
@@ -37,6 +38,10 @@ class AnalystShell:
         )
 
         payload = self.dashboard.analyst_payload(ctx, segment.id)
+
+        # Sempre visível: o analista sabe exatamente até quando cada indicador está atualizado.
+        render_indicator_freshness(payload["freshness"])
+
         if page == "Meu desempenho":
             if payload["individual"]:
                 st.dataframe(pd.DataFrame(payload["individual"]), use_container_width=True, hide_index=True)

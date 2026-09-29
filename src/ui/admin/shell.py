@@ -12,6 +12,7 @@ from src.application.upload_service import UploadProcessingService
 from src.domain.entities import AccessContext, Segment
 from src.features.ingestion.excel import ImportValidationError
 from src.features.ingestion.source_catalog import UPLOAD_SOURCES
+from src.infrastructure.database import database_backend, database_is_persistent
 from src.infrastructure.repositories import IndicatorRepository, UploadRepository, UserRepository
 from src.ui.shared.chunked_upload import chunked_file_uploader, clear_chunked_upload
 from src.ui.shared.freshness import freshness_table_rows, render_indicator_freshness
@@ -133,8 +134,25 @@ class AdminShell:
         st.markdown("#### Atualização das 7 fontes oficiais")
         st.caption(
             "Envie cada planilha uma única vez por atualização. O backend identifica os usuários "
-            "e direciona os resultados aos segmentos correspondentes."
+            "e direciona os resultados aos segmentos correspondentes. Faça apenas um upload por vez."
         )
+
+        if not database_is_persistent():
+            st.error(
+                "BANCO TEMPORÁRIO: esta implantação ainda está usando SQLite no container. "
+                "Senhas alteradas e resultados processados podem ser perdidos quando o Vercel reiniciar "
+                "a instância. Conecte DATABASE_URL/PostgreSQL antes de considerar os dados persistentes."
+            )
+        else:
+            st.success(f"Banco persistente ativo: {database_backend().upper()}.")
+
+        flash = st.session_state.get("_cop_upload_success")
+        if isinstance(flash, dict):
+            st.success(
+                f"PROCESSAMENTO CONCLUÍDO — {flash.get('source', '')}\n\n"
+                f"Arquivo: {flash.get('filename', '')}\n\n"
+                f"{flash.get('summary', '')}"
+            )
         latest_by_source = self.uploads.latest_by_source()
         c1, c2 = st.columns(2)
         c1.metric("Fontes oficiais", len(UPLOAD_SOURCES))
@@ -146,8 +164,8 @@ class AdminShell:
                 st.caption(source.description)
                 st.markdown(f"**Arquivo esperado:** {source.filename_hint}.xlsx")
                 if latest:
-                    st.caption(
-                        f"Último processamento: {latest['filename']} · {latest['created_at']} · "
+                    st.success(
+                        f"PROCESSADO · {latest['filename']} · {latest['created_at']} · "
                         f"por {latest['uploaded_by']}"
                     )
                 else:
@@ -183,6 +201,10 @@ class AdminShell:
                         for slug, result in results:
                             date_label = datetime.fromisoformat(result.data_through).strftime("%d/%m/%Y")
                             summary.append(f"{slug}: {result.indicator_name} · dados até {date_label}")
+                        st.session_state["_cop_upload_success"] = {
+                            "source": source.label,
+                            "filename": uploaded.filename,
+                            "summary": " | ".join(summary),
+                        }
                         clear_chunked_upload(upload_key)
-                        st.success("Processamento concluído — " + " | ".join(summary))
                         st.rerun()

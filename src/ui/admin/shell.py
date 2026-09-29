@@ -12,7 +12,7 @@ from src.application.upload_service import UploadProcessingService
 from src.domain.entities import AccessContext, Segment
 from src.features.ingestion.excel import ImportValidationError
 from src.features.ingestion.source_catalog import UPLOAD_SOURCES
-from src.infrastructure.database import database_backend, database_is_persistent
+from src.infrastructure.database import database_backend, database_is_persistent, persistence_diagnostics
 from src.infrastructure.repositories import IndicatorRepository, UploadRepository, UserRepository
 from src.ui.shared.chunked_upload import chunked_file_uploader, clear_chunked_upload
 from src.ui.shared.freshness import freshness_table_rows, render_indicator_freshness
@@ -138,11 +138,32 @@ class AdminShell:
         )
 
         if not database_is_persistent():
+            diag = persistence_diagnostics()
             st.error(
-                "BANCO TEMPORÁRIO: esta implantação ainda está usando SQLite no container. "
-                "Senhas alteradas e resultados processados podem ser perdidos quando o Vercel reiniciar "
-                "a instância. Conecte DATABASE_URL/PostgreSQL antes de considerar os dados persistentes."
+                "BANCO TEMPORÁRIO: este deployment ainda está usando SQLite. "
+                "Uploads e alterações persistentes estão bloqueados até o PostgreSQL estar conectado."
             )
+            st.markdown("**Diagnóstico do deployment**")
+            st.code(
+                "Backend: {backend}\n"
+                "DATABASE_URL detectada: {database_url}\n"
+                "POSTGRES_URL detectada: {postgres_url}\n"
+                "POSTGRES_URL_NON_POOLING detectada: {non_pooling}\n"
+                "Ambiente Vercel: {vercel_env}\n"
+                "Commit: {commit}".format(
+                    backend=diag["backend"],
+                    database_url="SIM" if diag["database_url_detected"] else "NÃO",
+                    postgres_url="SIM" if diag["postgres_url_detected"] else "NÃO",
+                    non_pooling="SIM" if diag["postgres_non_pooling_detected"] else "NÃO",
+                    vercel_env=diag["vercel_env"] or "não informado",
+                    commit=diag["commit"] or "não informado",
+                )
+            )
+            st.info(
+                "Vá em Vercel → Settings → Environment Variables e confirme que DATABASE_URL "
+                "está habilitada para Production. Depois faça um novo Redeploy da produção."
+            )
+            return
         else:
             st.success(f"Banco persistente ativo: {database_backend().upper()}.")
 

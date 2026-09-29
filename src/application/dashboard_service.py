@@ -16,11 +16,17 @@ class DashboardService:
         self.indicators = indicators or IndicatorRepository()
         self.scales = scales or ScaleRepository()
 
-    def analyst_payload(self, ctx: AccessContext, segment_id: int, target_user_id: int | None = None) -> dict:
+    def analyst_payload(
+        self,
+        ctx: AccessContext,
+        segment_id: int,
+        target_user_id: int | None = None,
+    ) -> dict:
         target_user_id = target_user_id or ctx.user.id
         self.access.assert_can_view_user(ctx, segment_id, target_user_id)
         return {
             "individual": self.indicators.results_for_user(segment_id, target_user_id),
             "team_averages": self.indicators.team_averages(segment_id),
+            "freshness": self.indicators.freshness(segment_id),
             "scale": self.scales.for_user(segment_id, target_user_id),
         }

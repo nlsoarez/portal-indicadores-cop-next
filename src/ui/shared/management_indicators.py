@@ -450,14 +450,14 @@ def _render_team_average_panel(
         return
 
     title = " e ".join(item["category"] for item in stats)
-    st.markdown(f"#### Média da equipe por analista — {title}")
-    st.caption("Média absoluta por analista; a aderência total da categoria aparece abaixo de cada valor.")
+    st.markdown(f"#### Aderentes e não aderentes por analista — {title}")
+    st.caption("Média absoluta da equipe por analista; a aderência total da categoria aparece abaixo de cada valor.")
 
     cards = []
     for item in stats:
-        cards.append((f"{item['category']} · aderentes", item["avg_successes"], item["adherence"]))
+        cards.append((f"Média equipe — {item['category']} ader.", item["avg_successes"], item["adherence"]))
     for item in stats:
-        cards.append((f"{item['category']} · não aderentes", item["avg_losses"], item["adherence"]))
+        cards.append((f"Média equipe — {item['category']} n. ader.", item["avg_losses"], item["adherence"]))
 
     columns = st.columns(len(cards))
     for column, (label, value, adherence) in zip(columns, cards):

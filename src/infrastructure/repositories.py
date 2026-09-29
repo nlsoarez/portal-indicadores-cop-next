@@ -1,12 +1,12 @@
 from __future__ import annotations
 
 from src.domain.entities import AccessContext, RoleCode, Segment, User
-from src.infrastructure.database import connect, transaction
+from src.infrastructure.database import connection, transaction
 
 
 class UserRepository:
     def get_by_login(self, login: str) -> User | None:
-        with connect() as conn:
+        with connection() as conn:
             row = conn.execute(
                 "SELECT id, login, full_name, display_name, active FROM users WHERE UPPER(login)=UPPER(?)",
                 (login.strip(),),
@@ -14,7 +14,7 @@ class UserRepository:
         return _user(row) if row else None
 
     def get_credentials(self, login: str):
-        with connect() as conn:
+        with connection() as conn:
             return conn.execute(
                 "SELECT id, login, password_hash, password_salt, must_change_password, active "
                 "FROM users WHERE UPPER(login)=UPPER(?)",
@@ -22,7 +22,7 @@ class UserRepository:
             ).fetchone()
 
     def get_by_id(self, user_id: int) -> User | None:
-        with connect() as conn:
+        with connection() as conn:
             row = conn.execute(
                 "SELECT id, login, full_name, display_name, active FROM users WHERE id=?",
                 (user_id,),
@@ -31,7 +31,7 @@ class UserRepository:
 
     def list_for_segment(self, segment_id: int) -> list[User]:
         """Lista somente analistas ativos do segmento; contas administrativas não viram pessoas da equipe."""
-        with connect() as conn:
+        with connection() as conn:
             rows = conn.execute(
                 "SELECT DISTINCT u.id, u.login, u.full_name, u.display_name, u.active "
                 "FROM users u "
@@ -44,7 +44,7 @@ class UserRepository:
         return [_user(row) for row in rows]
 
     def roles_for_user(self, user_id: int) -> frozenset[RoleCode]:
-        with connect() as conn:
+        with connection() as conn:
             rows = conn.execute(
                 "SELECT r.code FROM roles r JOIN user_roles ur ON ur.role_id=r.id WHERE ur.user_id=?",
                 (user_id,),
@@ -52,7 +52,7 @@ class UserRepository:
         return frozenset(RoleCode(row["code"]) for row in rows)
 
     def segment_ids_for_user(self, user_id: int) -> frozenset[int]:
-        with connect() as conn:
+        with connection() as conn:
             rows = conn.execute(
                 "SELECT segment_id FROM user_segments WHERE user_id=?", (user_id,)
             ).fetchall()
@@ -76,7 +76,7 @@ class UserRepository:
             )
 
     def last_access_for_segment(self, segment_id: int) -> list[dict]:
-        with connect() as conn:
+        with connection() as conn:
             rows = conn.execute(
                 """
                 SELECT u.id, u.login, u.display_name, MAX(al.created_at) AS last_access
@@ -94,7 +94,7 @@ class UserRepository:
 
 class SegmentRepository:
     def list_for_user(self, user_id: int) -> list[Segment]:
-        with connect() as conn:
+        with connection() as conn:
             rows = conn.execute(
                 "SELECT s.id, s.slug, s.name, s.active FROM segments s "
                 "JOIN user_segments us ON us.segment_id=s.id "
@@ -104,7 +104,7 @@ class SegmentRepository:
         return [_segment(row) for row in rows]
 
     def get_by_slug(self, slug: str) -> Segment | None:
-        with connect() as conn:
+        with connection() as conn:
             row = conn.execute(
                 "SELECT id, slug, name, active FROM segments WHERE slug=?", (slug,)
             ).fetchone()
@@ -113,7 +113,7 @@ class SegmentRepository:
 
 class IndicatorRepository:
     def definitions(self, segment_id: int) -> list[dict]:
-        with connect() as conn:
+        with connection() as conn:
             rows = conn.execute(
                 "SELECT id, indicator_key, name, target_value, direction FROM indicator_definitions "
                 "WHERE segment_id=? AND active=1 ORDER BY name",
@@ -122,7 +122,7 @@ class IndicatorRepository:
         return [dict(row) for row in rows]
 
     def get_definition(self, segment_id: int, indicator_key: str) -> dict | None:
-        with connect() as conn:
+        with connection() as conn:
             row = conn.execute(
                 "SELECT id, indicator_key, name, target_value, direction "
                 "FROM indicator_definitions WHERE segment_id=? AND indicator_key=? AND active=1",
@@ -141,7 +141,7 @@ class IndicatorRepository:
             sql += " AND ir.period=?"
             params.append(period)
         sql += " ORDER BY ir.period DESC, d.name"
-        with connect() as conn:
+        with connection() as conn:
             rows = conn.execute(sql, params).fetchall()
         return [dict(row) for row in rows]
 
@@ -156,9 +156,59 @@ class IndicatorRepository:
             sql += " AND ir.period=?"
             params.append(period)
         sql += " GROUP BY ir.period, d.indicator_key, d.name ORDER BY ir.period DESC, d.name"
-        with connect() as conn:
+        with connection() as conn:
             rows = conn.execute(sql, params).fetchall()
         return [dict(row) for row in rows]
+
+    def replace_results_for_months(
+        self,
+        *,
+        segment_id: int,
+        indicator_definition_id: int,
+        login_to_user_id: dict[str, int],
+        rows: tuple[dict, ...],
+        months: tuple[str, ...],
+    ) -> None:
+        """Substitui somente os meses presentes no upload, preservando histórico anterior."""
+        normalized_users = {str(login).upper(): int(user_id) for login, user_id in login_to_user_id.items()}
+        with transaction() as conn:
+            for month in months:
+                conn.execute(
+                    "DELETE FROM indicator_results WHERE segment_id=? AND indicator_definition_id=? AND period LIKE ?",
+                    (segment_id, indicator_definition_id, f"{month}-%"),
+                )
+
+            payload = []
+            for row in rows:
+                login = str(row.get("login", "")).strip().upper()
+                user_id = normalized_users.get(login)
+                if user_id is None:
+                    continue
+                payload.append(
+                    (
+                        segment_id,
+                        user_id,
+                        indicator_definition_id,
+                        str(row["period"]),
+                        float(row["value"]),
+                        int(row.get("volume", 0) or 0),
+                    )
+                )
+
+            if payload:
+                conn.executemany(
+                    """
+                    INSERT INTO indicator_results(
+                        segment_id, user_id, indicator_definition_id, period, value, volume
+                    ) VALUES (?, ?, ?, ?, ?, ?)
+                    ON CONFLICT(segment_id, user_id, indicator_definition_id, period)
+                    DO UPDATE SET
+                        value=excluded.value,
+                        volume=excluded.volume,
+                        created_at=CURRENT_TIMESTAMP
+                    """,
+                    payload,
+                )
 
     def upsert_freshness(
         self,
@@ -186,7 +236,7 @@ class IndicatorRepository:
 
     def freshness(self, segment_id: int) -> list[dict]:
         """Retorna todos os indicadores ativos, inclusive os que ainda nunca receberam upload."""
-        with connect() as conn:
+        with connection() as conn:
             rows = conn.execute(
                 """
                 SELECT
@@ -229,7 +279,7 @@ class UploadRepository:
             return int(cur.lastrowid)
 
     def list_recent(self, segment_id: int, limit: int = 20) -> list[dict]:
-        with connect() as conn:
+        with connection() as conn:
             rows = conn.execute(
                 """
                 SELECT up.id, up.source_key, up.filename, up.created_at, u.display_name AS uploaded_by
@@ -246,7 +296,7 @@ class UploadRepository:
 
 class ScaleRepository:
     def for_user(self, segment_id: int, user_id: int) -> list[dict]:
-        with connect() as conn:
+        with connection() as conn:
             rows = conn.execute(
                 "SELECT work_date, assignment FROM scales WHERE segment_id=? AND user_id=? ORDER BY work_date DESC",
                 (segment_id, user_id),

@@ -110,14 +110,60 @@ class UserRepository:
         return frozenset(int(row["segment_id"]) for row in rows)
 
     def access_context(self, user_id: int) -> AccessContext:
-        user = self.get_by_id(user_id)
-        if not user or not user.active:
-            raise PermissionError("Usuário inativo ou inexistente")
+        # Uma única conexão para montar todo o contexto de autorização.
+        with connection() as conn:
+            user_row = conn.execute(
+                "SELECT id, login, full_name, display_name, active FROM users WHERE id=?",
+                (user_id,),
+            ).fetchone()
+            if not user_row or not bool(user_row["active"]):
+                raise PermissionError("Usuário inativo ou inexistente")
+
+            role_rows = conn.execute(
+                "SELECT r.code FROM roles r "
+                "JOIN user_roles ur ON ur.role_id=r.id "
+                "WHERE ur.user_id=?",
+                (user_id,),
+            ).fetchall()
+            segment_rows = conn.execute(
+                "SELECT segment_id FROM user_segments WHERE user_id=?",
+                (user_id,),
+            ).fetchall()
+
         return AccessContext(
-            user=user,
-            roles=self.roles_for_user(user_id),
-            segment_ids=self.segment_ids_for_user(user_id),
+            user=_user(user_row),
+            roles=frozenset(RoleCode(row["code"]) for row in role_rows),
+            segment_ids=frozenset(int(row["segment_id"]) for row in segment_rows),
         )
+
+    def can_view_user_in_segment(
+        self,
+        target_user_id: int,
+        segment_id: int,
+        *,
+        include_subadmins: bool,
+    ) -> bool:
+        with connection() as conn:
+            row = conn.execute(
+                """
+                SELECT 1
+                FROM users u
+                JOIN user_roles ur ON ur.user_id=u.id
+                JOIN roles r ON r.id=ur.role_id
+                LEFT JOIN user_segments us
+                  ON us.user_id=u.id AND us.segment_id=?
+                LEFT JOIN user_performance_segments ups
+                  ON ups.user_id=u.id AND ups.segment_id=?
+                WHERE u.id=? AND u.active=1
+                  AND (
+                    (r.code='analyst' AND us.segment_id IS NOT NULL)
+                    OR (?=1 AND r.code='subadmin' AND ups.segment_id IS NOT NULL)
+                  )
+                LIMIT 1
+                """,
+                (segment_id, segment_id, target_user_id, int(include_subadmins)),
+            ).fetchone()
+        return row is not None
 
     def change_password(self, user_id: int, password_hash: str, salt: str) -> None:
         with transaction() as conn:

@@ -22,7 +22,6 @@ ENTERPRISE_INDICATORS: tuple[dict, ...] = (
         "direction": "higher_is_better",
         "unit": "percent",
     },
-
     {
         "indicator_key": "validacao_20m",
         "name": "Tempo de Validação do Formulário",
@@ -35,6 +34,13 @@ ENTERPRISE_INDICATORS: tuple[dict, ...] = (
         "name": "Tarefas Canceladas",
         "target_value": None,
         "direction": "lower_is_better",
+        "unit": "percent",
+    },
+    {
+        "indicator_key": "closing_assertiveness",
+        "name": "Assertividade Fechamento TOA x SIR",
+        "target_value": None,
+        "direction": "higher_is_better",
         "unit": "percent",
     },
     *GENERIC_OPERATIONAL_INDICATORS,

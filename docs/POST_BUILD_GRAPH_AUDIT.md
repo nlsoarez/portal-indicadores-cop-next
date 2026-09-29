@@ -4,8 +4,8 @@
 
 ## Resultado após migração de Chat e Validação
 
-- Módulos analisados: 35
-- Relações de import internas: 44
+- Módulos analisados: 36
+- Relações de import internas: 47
 - Ciclos detectados: 0
 
 ## Módulos mais conectados
@@ -14,8 +14,9 @@
 - `src.app` — grau 8 (entrada 0, saída 8)
 - `src.domain.entities` — grau 7 (entrada 7, saída 0)
 - `src.application.access_service` — grau 7 (entrada 5, saída 2)
-- `src.ui.admin.shell` — grau 7 (entrada 1, saída 6)
-- `src.application.upload_service` — grau 7 (entrada 1, saída 6)
+- `src.ui.admin.shell` — grau 8 (entrada 1, saída 7)
+- `src.application.upload_service` — grau 6 (entrada 1, saída 5)
+- `src.features.ingestion.registry` — grau 5 (entrada 2, saída 3)
 - `src.ui.analyst.shell` — grau 5 (entrada 1, saída 4)
 
 ## Novos caminhos relevantes
@@ -44,7 +45,7 @@ AnalystShell
 ## Avaliação
 
 - Nenhuma dependência circular interna foi encontrada.
-- Chat e Validação foram isolados em adapters próprios em `src.features.ingestion`.
+- Chat e Validação foram isolados em adapters próprios em `src.features.ingestion`, registrados por `registry.py`.
 - Os parsers recebem apenas os logins autorizados do segmento; não possuem lista hardcoded da equipe.
 - Reupload substitui apenas os meses presentes no arquivo para aquele indicador.
 - A camada de leitura SQLite passou a fechar conexões explicitamente.

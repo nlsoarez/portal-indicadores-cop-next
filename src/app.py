@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+import time
+
 import streamlit as st
 
 from src.application.access_service import AccessService
@@ -13,10 +15,35 @@ from src.ui.shared.style import inject_global_style
 from src.ui.subadmin.shell import SubadminShell
 
 
+ACCESS_SNAPSHOT_TTL_SECONDS = 30.0
+
+
 @st.cache_resource(show_spinner=False)
 def _bootstrap() -> None:
     initialize_database()
     seed_foundation()
+
+
+def _access_snapshot(user_id: int):
+    now = time.monotonic()
+    cached = st.session_state.get("_access_snapshot")
+    if (
+        isinstance(cached, dict)
+        and cached.get("user_id") == user_id
+        and now - float(cached.get("loaded_at", 0)) < ACCESS_SNAPSHOT_TTL_SECONDS
+    ):
+        return cached["ctx"], cached["segments"]
+
+    access = AccessService()
+    ctx = access.context(user_id)
+    segments = SegmentRepository().list_for_user(user_id)
+    st.session_state["_access_snapshot"] = {
+        "user_id": user_id,
+        "loaded_at": now,
+        "ctx": ctx,
+        "segments": segments,
+    }
+    return ctx, segments
 
 
 def _login() -> None:
@@ -75,6 +102,7 @@ def _change_password(user_id: int) -> None:
             st.error(str(exc))
             return
         st.session_state["must_change_password"] = False
+        st.session_state.pop("_access_snapshot", None)
         st.success("Senha alterada.")
         st.rerun()
 
@@ -92,9 +120,7 @@ def run() -> None:
         _change_password(int(user_id))
         return
 
-    access = AccessService()
-    ctx = access.context(int(user_id))
-    segments = SegmentRepository().list_for_user(ctx.user.id)
+    ctx, segments = _access_snapshot(int(user_id))
     if not segments:
         st.error("Seu usuário não possui segmento autorizado.")
         return

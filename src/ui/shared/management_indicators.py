@@ -445,49 +445,9 @@ def _render_team_average_panel(
     if rows.empty:
         return
 
-    universe = sorted(
-        login for login in people.get("login", pd.Series(dtype="object")).dropna().astype(str).unique()
-        if login.strip()
-    )
-    if not universe:
+    stats = _team_average_stats(people, rows, preferred)
+    if not stats:
         return
-
-    available_values = [str(value) for value in rows["dimension_value"].dropna().unique() if str(value).strip()]
-    if not available_values:
-        return
-
-    upper_map = {value.upper(): value for value in available_values}
-    categories = [upper_map[value] for value in preferred if value in upper_map]
-    if not categories:
-        volume_by_value = (
-            rows.assign(_volume=pd.to_numeric(rows["volume"], errors="coerce").fillna(0))
-            .groupby("dimension_value")["_volume"]
-            .sum()
-            .sort_values(ascending=False)
-        )
-        categories = [str(value) for value in volume_by_value.head(2).index]
-    categories = categories[:2]
-    if not categories:
-        return
-
-    stats = []
-    for category in categories:
-        part = rows[rows["dimension_value"].astype(str) == category].copy()
-        grouped = part.groupby("login", dropna=False).agg(
-            successes=("successes", "sum"),
-            losses=("losses", "sum"),
-            volume=("volume", "sum"),
-        )
-        grouped = grouped.reindex(universe, fill_value=0)
-        total_volume = float(pd.to_numeric(grouped["volume"], errors="coerce").fillna(0).sum())
-        total_successes = float(pd.to_numeric(grouped["successes"], errors="coerce").fillna(0).sum())
-        adherence = None if total_volume <= 0 else total_successes / total_volume * 100
-        stats.append({
-            "category": category,
-            "avg_successes": float(pd.to_numeric(grouped["successes"], errors="coerce").fillna(0).mean()),
-            "avg_losses": float(pd.to_numeric(grouped["losses"], errors="coerce").fillna(0).mean()),
-            "adherence": adherence,
-        })
 
     title = " e ".join(item["category"] for item in stats)
     st.markdown(f"#### Média da equipe por analista — {title}")
@@ -505,6 +465,58 @@ def _render_team_average_panel(
             st.metric(label, f"{value:.1f}")
             if adherence is not None:
                 st.caption(f"Aderência da categoria: {adherence:.1f}%")
+
+
+def _team_average_stats(
+    people: pd.DataFrame,
+    rows: pd.DataFrame,
+    preferred: tuple[str, ...],
+) -> list[dict]:
+    required = {"login", "dimension_value", "successes", "losses", "volume"}
+    if people is None or people.empty or rows is None or rows.empty or not required.issubset(rows.columns):
+        return []
+
+    universe = sorted(
+        login for login in people.get("login", pd.Series(dtype="object")).dropna().astype(str).unique()
+        if login.strip()
+    )
+    if not universe:
+        return []
+
+    available_values = [str(value) for value in rows["dimension_value"].dropna().unique() if str(value).strip()]
+    if not available_values:
+        return []
+
+    upper_map = {value.upper(): value for value in available_values}
+    categories = [upper_map[value.upper()] for value in preferred if value.upper() in upper_map]
+    if not categories:
+        volume_by_value = (
+            rows.assign(_volume=pd.to_numeric(rows["volume"], errors="coerce").fillna(0))
+            .groupby("dimension_value")["_volume"]
+            .sum()
+            .sort_values(ascending=False)
+        )
+        categories = [str(value) for value in volume_by_value.head(2).index]
+
+    stats: list[dict] = []
+    for category in categories[:2]:
+        part = rows[rows["dimension_value"].astype(str) == category].copy()
+        grouped = part.groupby("login", dropna=False).agg(
+            successes=("successes", "sum"),
+            losses=("losses", "sum"),
+            volume=("volume", "sum"),
+        )
+        grouped = grouped.reindex(universe, fill_value=0)
+        total_volume = float(pd.to_numeric(grouped["volume"], errors="coerce").fillna(0).sum())
+        total_successes = float(pd.to_numeric(grouped["successes"], errors="coerce").fillna(0).sum())
+        adherence = None if total_volume <= 0 else total_successes / total_volume * 100
+        stats.append({
+            "category": category,
+            "avg_successes": float(pd.to_numeric(grouped["successes"], errors="coerce").fillna(0).mean()),
+            "avg_losses": float(pd.to_numeric(grouped["losses"], errors="coerce").fillna(0).mean()),
+            "adherence": adherence,
+        })
+    return stats
 
 
 def _render_management_focus(

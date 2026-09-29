@@ -97,6 +97,57 @@ class ManagementIndicatorsTest(unittest.TestCase):
         self.assertEqual("OUTSIDE", payload["external"][0]["login"])
         self.assertEqual("23", payload["external"][0]["hour"])
 
+    def test_toa_indicators_are_shared_across_all_segments(self):
+        from src.features.ingestion.source_catalog import UPLOAD_SOURCE_BY_KEY
+        from src.infrastructure.repositories import IndicatorRepository, SegmentRepository
+
+        source = UPLOAD_SOURCE_BY_KEY["toa_indicators"]
+        self.assertEqual(
+            ("residencial", "empresarial", "preventiva"),
+            source.target_segment_slugs,
+        )
+
+        indicators = IndicatorRepository()
+        segments = SegmentRepository()
+        for slug in source.target_segment_slugs:
+            segment = segments.get_by_slug(slug)
+            self.assertIsNotNone(indicators.get_definition(segment.id, "validacao_20m"))
+            self.assertIsNotNone(indicators.get_definition(segment.id, "toa_cancellation_rate"))
+
+    def test_residential_parser_persists_service_scoped_cluster_and_city(self):
+        from src.features.ingestion.residential_indicators import parse_residential_indicators
+
+        df = pd.DataFrame({
+            "INDICADOR_NOME_ICG": ["ETIT GPON", "ETIT GPON"],
+            "VOLUME": [1, 1],
+            "INDICADOR": [1, 0],
+            "IN_REGIONAL": ["Leste", "Leste"],
+            "DT_INICIO": ["2026-09-29 22:10:00", "2026-09-29 23:10:00"],
+            "ANOMES": [202609, 202609],
+            "LOGIN_PRIMEIRO_ACIONAMENTO_GPON": ["N5772086", "N5772086"],
+            "IN_GRUPO": ["Rio e ES", "Rio e ES"],
+            "IN_CIDADE_UF": ["RIO DE JANEIRO/RJ", "RIO DE JANEIRO/RJ"],
+            "IN_UF": ["RJ", "RJ"],
+            "SERVICO": ["BROWNFIELD", "GREENFIELD"],
+            "NATUREZA": ["EMERGENCIAL", "EMERGENCIAL"],
+            "SOLUCAO": ["SOLUCAO A", "SOLUCAO B"],
+            "IMPACTO": ["NAO MASSIVO", "MASSIVO"],
+        })
+        raw = io.BytesIO()
+        with pd.ExcelWriter(raw, engine="openpyxl") as writer:
+            df.to_excel(writer, sheet_name="Analitico", index=False)
+
+        batches = parse_residential_indicators(raw.getvalue(), {"N5772086"})
+        gpon = next(batch for batch in batches if batch.indicator_key == "res_etit_gpon")
+        dimensions = {(row["dimension"], row["dimension_value"]) for row in gpon.breakdowns}
+
+        self.assertIn(("service", "BROWNFIELD"), dimensions)
+        self.assertIn(("service", "GREENFIELD"), dimensions)
+        self.assertIn(("group", "Rio e ES"), dimensions)
+        self.assertIn(("city", "RIO DE JANEIRO/RJ"), dimensions)
+        self.assertIn(("service__group", "BROWNFIELD|||Rio e ES"), dimensions)
+        self.assertIn(("service__city", "GREENFIELD|||RIO DE JANEIRO/RJ"), dimensions)
+
     def test_chat_parser_keeps_hour_zero_and_external_night_record(self):
         from src.features.ingestion.chat_toa import parse_chat_toa
 

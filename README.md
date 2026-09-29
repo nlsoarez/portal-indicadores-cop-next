@@ -1,3 +1,5 @@
+[![Deploy with Vercel](https://vercel.com/button)](https://vercel.com/new/clone?repository-url=https%3A%2F%2Fgithub.com%2Fnlsoarez%2Fportal-indicadores-cop-next)
+
 # Portal de Indicadores COP — Next
 
 Nova geração do Portal de Indicadores COP, construída sem alterar o repositório legado de referência.

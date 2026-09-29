@@ -130,7 +130,7 @@ def excel_hour(value: object | None) -> int | None:
         return int(numeric)
     if numeric > 1000:
         fraction = numeric - int(numeric)
-        return int(round(fraction * 24)) % 24
+        return int(fraction * 24) % 24
     return None
 
 

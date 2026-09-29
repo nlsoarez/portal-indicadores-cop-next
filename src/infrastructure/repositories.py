@@ -463,17 +463,21 @@ class IndicatorRepository:
             if include_external:
                 external = conn.execute(
                     f"""
-                    WITH base AS (
+                    WITH latest AS (
+                        SELECT d.indicator_key, MAX(ir.data_month) AS data_month
+                        FROM indicator_results ir
+                        JOIN indicator_definitions d ON d.id=ir.indicator_definition_id
+                        WHERE ir.segment_id IN ({placeholders})
+                        GROUP BY d.indicator_key
+                    ),
+                    base AS (
                         SELECT b.data_month, b.login, b.dimension_value, b.value, b.volume,
                                b.successes, b.losses, d.indicator_key, d.name
                         FROM indicator_breakdowns b
                         JOIN indicator_definitions d ON d.id=b.indicator_definition_id
+                        JOIN latest l ON l.indicator_key=d.indicator_key AND l.data_month=b.data_month
                         WHERE b.segment_id IN ({placeholders})
                           AND b.scope='external' AND b.dimension='external_hour'
-                    ),
-                    latest AS (
-                        SELECT indicator_key, MAX(data_month) AS data_month
-                        FROM base GROUP BY indicator_key
                     )
                     SELECT b.data_month AS period, b.indicator_key, b.name, b.login,
                            b.dimension_value AS hour,
@@ -486,7 +490,7 @@ class IndicatorRepository:
                     GROUP BY b.data_month, b.indicator_key, b.name, b.login, b.dimension_value
                     ORDER BY b.name, b.login, b.dimension_value
                     """,
-                    params,
+                    params + params,
                 ).fetchall()
 
         return {

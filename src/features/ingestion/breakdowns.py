@@ -22,7 +22,7 @@ def add_ratio(
     successes: float,
     volume: float,
 ) -> None:
-    value = str(dimension_value or "").strip()
+    value = "" if dimension_value is None else str(dimension_value).strip()
     login = str(login or "").strip().upper()
     if anomes <= 0 or not login or not period or not dimension or not value or volume <= 0:
         return

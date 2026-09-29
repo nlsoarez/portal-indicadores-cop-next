@@ -21,10 +21,12 @@ def seed_foundation() -> None:
         _ensure_user(conn, "ADMIN", "Administrador", "Administrador", "admin")
         preventiva_id = conn.execute("SELECT id FROM segments WHERE slug='preventiva'").fetchone()["id"]
         admin_id = conn.execute("SELECT id FROM users WHERE login='ADMIN'").fetchone()["id"]
-        conn.execute(
-            "INSERT OR IGNORE INTO user_segments(user_id, segment_id) VALUES (?, ?)",
-            (admin_id, preventiva_id),
-        )
+        active_segment_ids = conn.execute("SELECT id FROM segments WHERE active=1").fetchall()
+        for segment_row in active_segment_ids:
+            conn.execute(
+                "INSERT OR IGNORE INTO user_segments(user_id, segment_id) VALUES (?, ?)",
+                (admin_id, int(segment_row["id"])),
+            )
 
         for login, full_name, display_name in PREVENTIVA_ANALYSTS:
             user_id = _ensure_user(conn, login, full_name, display_name, "analyst")

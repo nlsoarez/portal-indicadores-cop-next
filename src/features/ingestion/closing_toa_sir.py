@@ -12,7 +12,7 @@ REQUIRED = {
     "LOGIN_VALIDOU_FECHAMENTO", "TURNO", "ANOMES", "VOLUME",
     "FECHAMENTO_ASSERTIVO", "IN_REGIONAL", "DIA",
 }
-OPTIONAL = {"IN_GRUPO", "DEMANDA", "CAUSA_TOA", "CAUSA_SIR"}
+OPTIONAL = {"IN_GRUPO", "DEMANDA", "CAUSA_TOA", "CAUSA_SIR", "CAUSA_TOA_TRATADO", "AREA", "AREA_ENVOLVIDA", "STATUS", "ID_ATIVIDADE", "ID_MOSTRA", "INCIDENTE", "ID_INCIDENTE", "NUMERO_INCIDENTE"}
 
 
 def parse_closing_toa_sir(raw_bytes: bytes, allowed_logins: set[str]) -> tuple[ParsedIndicatorBatch, ...]:
@@ -41,14 +41,16 @@ def parse_closing_toa_sir(raw_bytes: bytes, allowed_logins: set[str]) -> tuple[P
             period = date(year, month, day).isoformat()
         except ValueError:
             continue
+        incident_id = next((record.get(key) for key in ("ID_ATIVIDADE", "ID_MOSTRA", "INCIDENTE", "ID_INCIDENTE", "NUMERO_INCIDENTE") if record.get(key)), None)
         if login in allowed:
             latest_anomes = max(latest_anomes, anomes)
             aggregates[(anomes, login, day)][0] += assertive
             aggregates[(anomes, login, day)][1] += volume
             for dimension, dimension_value in (
-                ("overall", "Total"), ("region", region), ("group", record.get("IN_GRUPO")), ("turn", turn),
+                ("overall", "Total"), ("incident", incident_id), ("region", region), ("group", record.get("IN_GRUPO")), ("turn", turn),
                 ("demand", record.get("DEMANDA")), ("cause_toa", record.get("CAUSA_TOA")),
-                ("cause_sir", record.get("CAUSA_SIR")),
+                ("cause_sir", record.get("CAUSA_SIR")), ("cause_treated", record.get("CAUSA_TOA_TRATADO")),
+                ("area", record.get("AREA")), ("area_involved", record.get("AREA_ENVOLVIDA")), ("status", record.get("STATUS")),
             ):
                 add_ratio(breakdowns, anomes=anomes, scope="team", login=login, period=period,
                           dimension=dimension, dimension_value=dimension_value,

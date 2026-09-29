@@ -39,14 +39,14 @@ ENTERPRISE_INDICATORS: tuple[dict, ...] = (
     {
         "indicator_key": "toa_cancellation_rate",
         "name": "Tarefas Canceladas",
-        "target_value": 10.0,
+        "target_value": 15.0,
         "direction": "lower_is_better",
         "unit": "percent",
     },
     {
         "indicator_key": "closing_assertiveness",
         "name": "Assertividade Fechamento TOA x SIR",
-        "target_value": None,
+        "target_value": 80.0,
         "direction": "higher_is_better",
         "unit": "percent",
     },

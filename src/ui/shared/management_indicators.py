@@ -231,31 +231,6 @@ def _render_source(
     freshness_index: dict[str, dict],
 ) -> None:
     st.markdown(f"## {source_label}")
-    st.markdown("#### Resumo por indicador")
-
-    cols = st.columns(min(4, len(indicator_keys)))
-    for index, key in enumerate(indicator_keys):
-        rows = segment_df[segment_df["indicator_key"] == key]
-        if rows.empty:
-            continue
-        first = rows.iloc[0]
-        value = _weighted_value(rows)
-        detail = _overall_detail(breakdown_df, key)
-        with cols[index % len(cols)]:
-            with st.container(border=True):
-                st.caption(str(first["name"]))
-                st.metric("Resultado", _fmt(value, first.get("unit")))
-                if detail:
-                    st.caption(
-                        f"{_int(detail['volume'])} registros · "
-                        f"{_int(detail['successes'])} ganhos/aderentes · "
-                        f"{_int(detail['losses'])} perdas"
-                    )
-                else:
-                    st.caption(
-                        f"Base {_int(pd.to_numeric(rows['volume'], errors='coerce').fillna(0).sum())} · "
-                        f"{_int(pd.to_numeric(rows['analysts'], errors='coerce').fillna(0).sum())} analistas"
-                    )
 
     if len(indicator_keys) == 1:
         _render_indicator(
@@ -272,12 +247,21 @@ def _render_source(
         )
         return
 
-    indicator_names = [
-        str(segment_df[segment_df["indicator_key"] == key].iloc[0]["name"])
-        for key in indicator_keys
-    ]
+    indicator_names = []
+    visible_keys = []
+    for key in indicator_keys:
+        rows = _indicator_frame(segment_df, key)
+        if rows.empty:
+            continue
+        indicator_names.append(str(rows.iloc[0].get("name") or key))
+        visible_keys.append(key)
+
+    if not visible_keys:
+        st.info("Nenhum indicador desta fonte possui dados na competência atual.")
+        return
+
     indicator_tabs = st.tabs(indicator_names)
-    for indicator_tab, key in zip(indicator_tabs, indicator_keys):
+    for indicator_tab, key in zip(indicator_tabs, visible_keys):
         with indicator_tab:
             _render_indicator(
                 key,

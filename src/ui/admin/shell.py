@@ -10,14 +10,9 @@ from src.application.segment_context import switch_segment_state
 from src.application.upload_service import UploadProcessingService
 from src.domain.entities import AccessContext, Segment
 from src.features.ingestion.excel import ImportValidationError
+from src.features.ingestion.registry import sources_for_indicator_keys
 from src.infrastructure.repositories import IndicatorRepository, UploadRepository, UserRepository
 from src.ui.shared.freshness import freshness_table_rows, render_indicator_freshness
-
-
-SOURCE_OPTIONS = {
-    "Chat TOA — Chat 10 min": "chat_toa",
-    "Indicadores TOA — Tempo de Validação": "toa_validation",
-}
 
 
 class AdminShell:
@@ -108,8 +103,19 @@ class AdminShell:
             "Reenvios do mesmo mês substituem somente aquele mês e não duplicam resultados."
         )
 
-        source_label = st.selectbox("Fonte", tuple(SOURCE_OPTIONS), key=f"source:{segment.id}")
-        source_key = SOURCE_OPTIONS[source_label]
+        indicator_keys = {row["indicator_key"] for row in self.indicators.definitions(segment.id)}
+        available_sources = sources_for_indicator_keys(indicator_keys)
+        if not available_sources:
+            st.info("Este segmento ainda não possui fontes de upload configuradas.")
+            return
+
+        source = st.selectbox(
+            "Fonte",
+            available_sources,
+            format_func=lambda item: item.label,
+            key=f"source:{segment.id}",
+        )
+        source_key = source.key
         uploaded = st.file_uploader(
             "Planilha",
             type=["xlsx", "xls"],

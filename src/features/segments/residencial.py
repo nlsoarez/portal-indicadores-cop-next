@@ -40,6 +40,13 @@ RESIDENTIAL_INDICATORS: tuple[dict, ...] = (
     },
 
     {
+        "indicator_key": "chat_10m",
+        "name": "Chat 10 min",
+        "target_value": 75.0,
+        "direction": "higher_is_better",
+        "unit": "percent",
+    },
+    {
         "indicator_key": "validacao_20m",
         "name": "Tempo de Validação do Formulário",
         "target_value": 80.0,

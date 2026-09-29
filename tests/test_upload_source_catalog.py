@@ -19,13 +19,13 @@ class UploadSourceCatalogTest(unittest.TestCase):
         )
         self.assertEqual(7, len(UPLOAD_SOURCES))
 
-    def test_only_currently_integrated_sources_have_adapters(self):
-        from src.features.ingestion.source_catalog import UPLOAD_SOURCE_BY_KEY
+    def test_every_source_has_filename_contract(self):
+        from src.features.ingestion.source_catalog import UPLOAD_SOURCES
 
-        self.assertTrue(UPLOAD_SOURCE_BY_KEY["chat_toa"].implemented)
-        self.assertTrue(UPLOAD_SOURCE_BY_KEY["toa_indicators"].implemented)
-        self.assertFalse(UPLOAD_SOURCE_BY_KEY["productivity"].implemented)
-        self.assertFalse(UPLOAD_SOURCE_BY_KEY["dpa"].implemented)
+        for source in UPLOAD_SOURCES:
+            self.assertTrue(source.label)
+            self.assertTrue(source.filename_hint)
+            self.assertTrue(source.target_segment_slugs)
 
 
 if __name__ == "__main__":

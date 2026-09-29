@@ -376,6 +376,26 @@ class UploadRepository:
             )
             return int(cur.lastrowid)
 
+    def latest_by_source(self) -> dict[str, dict]:
+        with connection() as conn:
+            rows = conn.execute(
+                """
+                SELECT up.source_key, up.filename, up.created_at, s.slug AS segment_slug,
+                       u.display_name AS uploaded_by
+                FROM uploads up
+                JOIN users u ON u.id=up.uploaded_by
+                JOIN segments s ON s.id=up.segment_id
+                ORDER BY up.created_at DESC, up.id DESC
+                """
+            ).fetchall()
+
+        latest: dict[str, dict] = {}
+        for row in rows:
+            key = str(row["source_key"])
+            if key not in latest:
+                latest[key] = dict(row)
+        return latest
+
     def list_recent(self, segment_id: int, limit: int = 20) -> list[dict]:
         with connection() as conn:
             rows = conn.execute(

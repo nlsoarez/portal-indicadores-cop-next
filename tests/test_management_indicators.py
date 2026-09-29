@@ -334,6 +334,24 @@ class ManagementIndicatorsTest(unittest.TestCase):
         ]
         self.assertEqual("RAL|||INC000123", refs[0]["dimension_value"])
 
+    def test_analyst_cancellation_breakdown_uses_cancellation_rate(self):
+        from src.ui.analyst.shell import _detail_value, _team_value
+
+        mine = pd.Series({"value": 80.0, "volume": 10, "losses": 2})
+        team = pd.DataFrame({
+            "dimension": ["group"],
+            "dimension_value": ["Rio e ES"],
+            "team_avg": [85.0],
+            "team_volume": [20],
+            "team_losses": [3],
+        })
+
+        self.assertEqual(20.0, _detail_value(mine, "toa_cancellation_rate"))
+        self.assertEqual(
+            15.0,
+            _team_value(team, "group", "Rio e ES", "toa_cancellation_rate"),
+        )
+
     def test_chat_parser_keeps_hour_zero_and_external_night_record(self):
         from src.features.ingestion.chat_toa import parse_chat_toa
 

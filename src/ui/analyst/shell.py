@@ -26,7 +26,7 @@ class AnalystShell:
         switch_segment_state(st.session_state, segment.id)
         page = st.sidebar.radio(
             "Navegação",
-            ["Meu desempenho", "Minha evolução", "Minha escala", "Histórico"],
+            ["Meu desempenho", "Minha evolução", "Histórico"],
             label_visibility="collapsed",
         )
 
@@ -47,11 +47,6 @@ class AnalystShell:
                 st.dataframe(pd.DataFrame(payload["individual"]), use_container_width=True, hide_index=True)
             else:
                 st.info("Ainda não há evolução disponível para este segmento.")
-        elif page == "Minha escala":
-            if payload["scale"]:
-                st.dataframe(pd.DataFrame(payload["scale"]), use_container_width=True, hide_index=True)
-            else:
-                st.info("Nenhuma escala importada para você neste segmento.")
         else:
             if payload["summary"]:
                 st.dataframe(pd.DataFrame(payload["summary"]), use_container_width=True, hide_index=True)

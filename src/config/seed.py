@@ -21,7 +21,6 @@ def seed_foundation() -> None:
                 (segment["slug"], segment["name"], int(segment["active"])),
             )
 
-        _ensure_user(conn, "ADMIN", "Administrador", "Administrador", "admin")
         preventiva_id = conn.execute("SELECT id FROM segments WHERE slug='preventiva'").fetchone()["id"]
         residencial_id = conn.execute("SELECT id FROM segments WHERE slug='residencial'").fetchone()["id"]
         active_segment_ids = conn.execute("SELECT id FROM segments WHERE active=1").fetchall()

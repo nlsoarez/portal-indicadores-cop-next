@@ -369,8 +369,8 @@ def _render_operational_details(
     indicator_key: str,
     indicator_rows: pd.DataFrame,
 ) -> None:
-    segment_names = sorted(indicator_rows["segment_name"].dropna().astype(str).unique())
-    scopes = ["Geral", *segment_names] if len(segment_names) > 1 else segment_names
+    segment_names = _segment_names(indicator_rows)
+    scopes = ["Geral", *segment_names] if len(segment_names) > 1 else (segment_names or ["Geral"])
     scope_tabs = st.tabs(scopes)
 
     for scope_tab, scope in zip(scope_tabs, scopes):
@@ -489,6 +489,15 @@ def _render_time_details(
                         )
 
 
+def _segment_names(frame: pd.DataFrame) -> list[str]:
+    if frame is None or frame.empty or "segment_name" not in frame.columns:
+        return []
+    return sorted(
+        value for value in frame["segment_name"].dropna().astype(str).unique()
+        if value.strip()
+    )
+
+
 def _payload_frame(payload: dict, key: str) -> pd.DataFrame:
     """Cria DataFrame com schema estável mesmo quando o payload vem vazio/parcial."""
     columns = FRAME_SCHEMAS[key]
@@ -558,8 +567,8 @@ def _render_analyst_details(
         st.info("Nenhum analista com resultado para a competência atual.")
         return
 
-    segment_names = sorted(people["segment_name"].dropna().astype(str).unique())
-    scopes = ["Todos", *segment_names] if len(segment_names) > 1 else segment_names
+    segment_names = _segment_names(people)
+    scopes = ["Todos", *segment_names] if len(segment_names) > 1 else (segment_names or ["Todos"])
     scope_tabs = st.tabs(scopes)
     for scope_tab, scope in zip(scope_tabs, scopes):
         with scope_tab:

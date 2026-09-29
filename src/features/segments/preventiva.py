@@ -25,7 +25,7 @@ PREVENTIVA_INDICATORS: tuple[dict, ...] = (
     {
         "indicator_key": "toa_cancellation_rate",
         "name": "Tarefas Canceladas",
-        "target_value": 10.0,
+        "target_value": 15.0,
         "direction": "lower_is_better",
         "unit": "percent",
     },

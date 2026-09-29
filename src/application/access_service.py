@@ -19,17 +19,30 @@ class AccessService:
 
     def visible_users(self, ctx: AccessContext, segment_id: int) -> list[User]:
         self.assert_segment_access(ctx, segment_id)
-        if ctx.is_admin:
+        if ctx.is_admin or ctx.is_subadmin:
             return self.users.list_for_segment(segment_id)
-        # Fail-closed: analista recebe apenas a própria entidade.
         return [ctx.user]
+
+    def visible_subadmins(self, ctx: AccessContext, segment_id: int) -> list[User]:
+        self.assert_segment_access(ctx, segment_id)
+        if not ctx.is_admin:
+            raise PermissionError("Somente o administrador pode consultar a lista de líderes")
+        return self.users.list_subadmins_for_segment(segment_id)
 
     def assert_can_view_user(self, ctx: AccessContext, segment_id: int, target_user_id: int) -> None:
         self.assert_segment_access(ctx, segment_id)
+
+        analyst_ids = {user.id for user in self.users.list_for_segment(segment_id)}
         if ctx.is_admin:
-            segment_users = {user.id for user in self.users.list_for_segment(segment_id)}
-            if target_user_id not in segment_users:
-                raise PermissionError("Usuário-alvo não pertence ao segmento")
+            subadmin_ids = {user.id for user in self.users.list_subadmins_for_segment(segment_id)}
+            if target_user_id not in analyst_ids | subadmin_ids:
+                raise PermissionError("Usuário-alvo não pertence ao escopo gerencial do segmento")
             return
+
+        if ctx.is_subadmin:
+            if target_user_id not in analyst_ids:
+                raise PermissionError("Subadmin pode consultar somente dados individuais de analistas")
+            return
+
         if target_user_id != ctx.user.id:
             raise PermissionError("Analista não pode consultar dados individuais de outro analista")

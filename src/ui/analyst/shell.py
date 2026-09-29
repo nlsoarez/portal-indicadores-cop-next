@@ -8,7 +8,7 @@ from src.application.segment_context import switch_segment_state
 from src.domain.entities import AccessContext, Segment
 from src.features.analytics.tips import build_tips
 from src.ui.shared.freshness import render_indicator_freshness
-from src.ui.shared.metrics import format_delta, format_metric, format_target
+from src.ui.shared.metrics import format_metric, format_target
 
 
 class AnalystShell:
@@ -65,15 +65,44 @@ class AnalystShell:
                 value = float(row.get("value") or 0)
                 unit = row.get("unit")
                 team_avg = team.get("team_avg")
-                delta = None if team_avg is None else format_delta(value - float(team_avg), unit)
                 with cols[index % len(cols)]:
-                    st.metric(row["name"], format_metric(value, unit), delta=delta)
+                    st.metric(row["name"], _format_ptbr_metric(value, unit))
                     target_label = format_target(row.get("target_value"), unit, row.get("direction"))
-                    st.caption(f"{target_label} · Base {int(row.get('volume') or 0)} · {row['period']}")
+                    target_label = target_label.replace(".", ",")
+                    if team_avg is None:
+                        team_label = "Média da equipe: ainda sem base suficiente"
+                        comparison = "Comparação com a equipe ainda indisponível."
+                    else:
+                        team_value = float(team_avg)
+                        team_label = f"Média da equipe: {_format_ptbr_metric(team_value, unit)}"
+                        comparison = _comparison_text(value, team_value, unit)
+                    st.markdown(f"**{target_label}**")
+                    st.markdown(f"**{team_label}**")
+                    st.caption(comparison)
+                    st.caption(f"Base {int(row.get('volume') or 0)} · {row['period']}")
 
         st.subheader("Dicas baseadas nos seus dados")
         for tip in build_tips(latest, payload["team_averages"]):
             st.markdown(f"<div class='cop-tip'>{tip}</div>", unsafe_allow_html=True)
+
+
+def _format_ptbr_metric(value: float, unit: str | None) -> str:
+    formatted = format_metric(value, unit)
+    if (unit or "percent").lower() == "percent":
+        return formatted.replace(".", ",")
+    return formatted
+
+
+def _comparison_text(value: float, team_avg: float, unit: str | None) -> str:
+    delta = value - team_avg
+    if abs(delta) < 0.05:
+        return "Você está praticamente na mesma média da equipe."
+    direction = "acima" if delta > 0 else "abaixo"
+    if (unit or "percent").lower() == "percent":
+        amount = f"{abs(delta):.1f}".replace(".", ",")
+        return f"Você está {amount} pontos percentuais {direction} da média da equipe."
+    amount = f"{abs(delta):.1f}".replace(".", ",")
+    return f"Você está {amount} {direction} da média da equipe."
 
 
 def _latest_by_indicator(rows: list[dict]) -> list[dict]:

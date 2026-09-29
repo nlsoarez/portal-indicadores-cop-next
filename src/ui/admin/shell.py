@@ -52,10 +52,9 @@ class AdminShell:
             unsafe_allow_html=True,
         )
 
-        analysts = self.access.visible_users(ctx, segment.id)
-        freshness = self.indicators.freshness(segment.id)
-
         if page == "Visão geral":
+            analysts = self.access.visible_users(ctx, segment.id)
+            freshness = self.indicators.freshness(segment.id)
             c1, c2, c3 = st.columns(3)
             c1.metric("Analistas", len(analysts))
             c2.metric("Indicadores configurados", len(self.indicators.definitions(segment.id)))
@@ -66,6 +65,7 @@ class AdminShell:
             st.dataframe(pd.DataFrame(last_access), use_container_width=True, hide_index=True)
 
         elif page == "Analistas":
+            analysts = self.access.visible_users(ctx, segment.id)
             if not analysts:
                 st.info("Nenhum analista cadastrado neste segmento.")
             else:
@@ -109,6 +109,7 @@ class AdminShell:
 
         elif page == "Indicadores":
             definitions = self.indicators.definitions(segment.id)
+            freshness = self.indicators.freshness(segment.id)
             if definitions:
                 st.dataframe(pd.DataFrame(definitions), use_container_width=True, hide_index=True)
                 st.markdown("#### Cobertura atual dos dados")

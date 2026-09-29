@@ -162,6 +162,14 @@ class ManagementIndicatorsTest(unittest.TestCase):
         self.assertEqual(1, len(scoped))
         self.assertEqual("Residencial", scoped.iloc[0]["segment_name"])
 
+    def test_empty_payload_frames_keep_expected_columns(self):
+        from src.ui.shared.management_indicators import FRAME_SCHEMAS, _payload_frame
+
+        for key, expected in FRAME_SCHEMAS.items():
+            frame = _payload_frame({}, key)
+            self.assertTrue(frame.empty)
+            self.assertTrue(set(expected).issubset(set(frame.columns)))
+
     def test_chat_parser_keeps_hour_zero_and_external_night_record(self):
         from src.features.ingestion.chat_toa import parse_chat_toa
 

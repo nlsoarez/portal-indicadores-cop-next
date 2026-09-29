@@ -3,6 +3,7 @@ from __future__ import annotations
 import os
 import sqlite3
 from contextlib import contextmanager
+from functools import lru_cache
 from pathlib import Path
 from typing import Any, Iterable
 
@@ -15,6 +16,7 @@ DATABASE_URL = (
 ).strip()
 DB_PATH = Path(os.environ.get("COP_PORTAL_DB", "data/portal.db"))
 POSTGRES_APP_SCHEMA = "cop_portal"
+POSTGRES_POOL_MAX_SIZE = max(1, int(os.environ.get("DB_POOL_MAX_SIZE", "4")))
 
 
 SQLITE_SCHEMA = """
@@ -267,6 +269,7 @@ def persistence_diagnostics() -> dict[str, str | bool]:
         "vercel": os.environ.get("VERCEL") == "1",
         "vercel_env": os.environ.get("VERCEL_ENV", ""),
         "commit": os.environ.get("VERCEL_GIT_COMMIT_SHA", "")[:12],
+        "pool_max_size": POSTGRES_POOL_MAX_SIZE if using_postgres() else 0,
     }
 
 
@@ -275,9 +278,10 @@ def _postgres_sql(sql: str) -> str:
 
 
 class ConnectionAdapter:
-    def __init__(self, raw: Any, backend: str):
+    def __init__(self, raw: Any, backend: str, release=None):
         self.raw = raw
         self.backend = backend
+        self._release = release
 
     def execute(self, sql: str, params: Iterable[Any] | None = None):
         values = tuple(params or ())
@@ -306,6 +310,13 @@ class ConnectionAdapter:
         self.raw.rollback()
 
     def close(self) -> None:
+        if self._release is not None:
+            try:
+                self.raw.rollback()
+            except Exception:
+                pass
+            self._release(self.raw)
+            return
         self.raw.close()
 
 
@@ -313,24 +324,45 @@ def _split_statements(script: str) -> list[str]:
     return [part.strip() for part in script.split(";") if part.strip()]
 
 
+@lru_cache(maxsize=1)
+def _postgres_pool():
+    try:
+        from psycopg.rows import dict_row
+        from psycopg_pool import ConnectionPool
+    except ImportError as exc:
+        raise RuntimeError(
+            "DATABASE_URL foi configurada, mas o pool PostgreSQL não está instalado"
+        ) from exc
+
+    return ConnectionPool(
+        conninfo=DATABASE_URL,
+        min_size=0,
+        max_size=POSTGRES_POOL_MAX_SIZE,
+        timeout=10,
+        max_idle=60,
+        max_lifetime=1800,
+        kwargs={
+            "row_factory": dict_row,
+            "prepare_threshold": None,
+            "application_name": "portal-indicadores-cop",
+            "connect_timeout": 10,
+        },
+        open=True,
+    )
+
+
 def connect() -> ConnectionAdapter:
     if using_postgres():
+        pool = _postgres_pool()
+        raw = pool.getconn()
         try:
-            import psycopg
-            from psycopg.rows import dict_row
-        except ImportError as exc:
-            raise RuntimeError(
-                "DATABASE_URL foi configurada, mas o driver PostgreSQL não está instalado"
-            ) from exc
-
-        raw = psycopg.connect(
-            DATABASE_URL,
-            row_factory=dict_row,
-            prepare_threshold=None,
-            application_name="portal-indicadores-cop",
-        )
-        raw.execute("SET search_path TO cop_portal, public")
-        return ConnectionAdapter(raw, "postgresql")
+            # SET LOCAL vale somente para a transação atual e é seguro com
+            # Supavisor em transaction mode (porta 6543).
+            raw.execute("SET LOCAL search_path TO cop_portal, public")
+        except Exception:
+            pool.putconn(raw)
+            raise
+        return ConnectionAdapter(raw, "postgresql", release=pool.putconn)
 
     DB_PATH.parent.mkdir(parents=True, exist_ok=True)
     raw = sqlite3.connect(DB_PATH)

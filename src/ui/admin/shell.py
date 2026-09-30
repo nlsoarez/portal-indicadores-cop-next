@@ -578,6 +578,15 @@ class AdminShell:
                 {
                     "Fonte": label,
                     "Configuração": "OK" if config_row.get("configured") else "Pendente",
+                    "Localizador": (
+                        "Drive/Folder ID"
+                        if config_row.get("has_direct_ids")
+                        else "Usuário + caminho"
+                        if config_row.get("has_owner_path")
+                        else "Link compartilhado"
+                        if config_row.get("has_share_url")
+                        else "—"
+                    ),
                     "Status": state_row.get("status") or "Ainda não verificado",
                     "Arquivo remoto": remote.get("name") or "—",
                     "Competência": remote.get("competence") or "—",
@@ -595,8 +604,13 @@ class AdminShell:
         if not pilot_status.get("configured"):
             st.info(
                 "Configure M365_TENANT_ID e M365_CLIENT_ID em .env.vps. "
-                "Os links das pastas ETIT também precisam estar nas variáveis "
-                "M365_ETIT_RESIDENTIAL_URL e M365_ETIT_ENTERPRISE_URL."
+                "Para este piloto, use OWNER_UPN/FOLDER_PATH nas duas fontes ETIT; "
+                "isso mantém o acesso somente leitura e evita depender da resolução "
+                "de links compartilhados. O helper da VPS prepara essas variáveis."
+            )
+            st.code(
+                "bash deploy/hostinger/configure-m365-etit.sh",
+                language="bash",
             )
         elif not pilot_status.get("authenticated"):
             st.warning(

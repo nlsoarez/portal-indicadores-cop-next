@@ -617,7 +617,8 @@ class EtitM365Pilot:
             if not source.configured:
                 source_state["status"] = "not_configured"
                 source_state["last_error"] = (
-                    f"Configure {source.env_prefix}_URL ou DRIVE_ID/FOLDER_ID."
+                    f"Configure DRIVE_ID/FOLDER_ID, OWNER_UPN/FOLDER_PATH "
+                    f"ou {source.env_prefix}_URL."
                 )
                 state["sources"][source.source_key] = source_state
                 run["sources"][source.source_key] = source_state

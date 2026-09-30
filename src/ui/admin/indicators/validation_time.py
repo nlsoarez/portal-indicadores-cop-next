@@ -39,15 +39,17 @@ def render_admin_validation_time(
             f"Competência: {period or '—'} · Dados até: {data_through or period or '—'}"
         )
 
-    _render_kpis(summary)
+    _render_kpis(summary, target_num)
 
     st.markdown("#### 🏆 Ranking por Analista")
     ranking = build_ranking_table(people, metrics)
     if ranking.empty:
         st.info("Nenhum analista com resultado para a competência atual.")
     else:
+        # A referência exibe os 10 melhores; os destaques de melhor/pior
+        # continuam considerando toda a equipe, inclusive quem ficou fora do top 10.
         st.dataframe(
-            style_ranking_table(ranking, target_num),
+            style_ranking_table(ranking.head(10), target_num),
             use_container_width=True,
             hide_index=True,
         )
@@ -345,12 +347,16 @@ def build_group_table(details: pd.DataFrame) -> pd.DataFrame:
     )
 
 
-def _render_kpis(summary: dict) -> None:
+def _render_kpis(summary: dict, target: float | None) -> None:
     cards = (
         ("TOTAL", str(summary["total"]), "#2e86c1"),
         ("ADERENTES", str(summary["adherents"]), "#27ae60"),
         ("NÃO ADERENTES", str(summary["non_adherents"]), "#e74c3c"),
-        ("ADERÊNCIA", f"{summary['adherence']:.1f}%", "#e74c3c"),
+        (
+            "ADERÊNCIA",
+            f"{summary['adherence']:.1f}%",
+            _result_color(float(summary["adherence"]), target),
+        ),
         (
             "TMR MÉDIO (MIN)",
             "—" if summary["tmr_minutes"] is None else f"{summary['tmr_minutes']:.1f}",

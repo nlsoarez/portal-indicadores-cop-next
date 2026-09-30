@@ -9,6 +9,7 @@ from src.features.segments.residencial import RESIDENTIAL_ANALYSTS, RESIDENTIAL_
 from src.infrastructure.database import insert_returning_id, transaction
 
 DEFAULT_PASSWORD = "claro123"
+RETIRED_ANALYST_LOGINS = ("F218860",)
 
 
 def seed_foundation() -> None:
@@ -47,6 +48,22 @@ def seed_foundation() -> None:
         _seed_analysts(conn, segment_ids["preventiva"], PREVENTIVA_ANALYSTS)
         _seed_analysts(conn, segment_ids["residencial"], RESIDENTIAL_ANALYSTS)
         _seed_analysts(conn, segment_ids["empresarial"], ENTERPRISE_ANALYSTS)
+
+        # Ex-colaboradores permanecem no histórico, mas deixam de aparecer
+        # nas listas, uploads e visões individuais.
+        for retired_login in RETIRED_ANALYST_LOGINS:
+            retired = conn.execute(
+                "SELECT id FROM users WHERE UPPER(login)=UPPER(?)",
+                (retired_login,),
+            ).fetchone()
+            if retired:
+                retired_id = int(retired["id"])
+                conn.execute("UPDATE users SET active=0 WHERE id=?", (retired_id,))
+                conn.execute("DELETE FROM user_segments WHERE user_id=?", (retired_id,))
+                conn.execute(
+                    "DELETE FROM user_performance_segments WHERE user_id=?",
+                    (retired_id,),
+                )
 
         # Maristella é exclusiva da Preventiva neste portal.
         maristella = conn.execute("SELECT id FROM users WHERE login='N5577565'").fetchone()

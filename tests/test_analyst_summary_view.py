@@ -25,6 +25,7 @@ from src.ui.analyst.shell import (
     _productivity_chart_scale,
     _productivity_recent_rows,
     _productivity_user_summary,
+    _residential_occurrence_type,
     _validation_group_table,
     _validation_time_user_summary,
     _enterprise_certification_status,
@@ -210,6 +211,20 @@ class AnalystSummaryViewTest(unittest.TestCase):
         self.assertEqual("Centro-Oeste", group["dimension_value"])
         self.assertFalse(
             scoped["dimension_value"].astype(str).str.contains("GREENFIELD").any()
+        )
+
+    def test_residential_etit_occurrence_type_labels_inm_as_outage(self):
+        self.assertEqual(
+            "Outage",
+            _residential_occurrence_type("INM00002274788"),
+        )
+        self.assertEqual(
+            "Incidente",
+            _residential_occurrence_type("INC123456"),
+        )
+        self.assertEqual(
+            "Incidente",
+            _residential_occurrence_type("24057920"),
         )
 
     def test_etit_operational_summary_keeps_events_adherents_and_durations(self):

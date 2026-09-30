@@ -938,6 +938,301 @@ class AnalystShell:
         st.dataframe(pd.DataFrame(rows), use_container_width=True, hide_index=True)
 
 
+def _productivity_user_summary(
+    row: dict,
+    details: pd.DataFrame,
+    team: dict,
+    team_details: pd.DataFrame,
+) -> dict:
+    daily_avg = _number(row.get("value")) or 0.0
+    active_days = int(_number(row.get("volume")) or 0)
+
+    total_rows = _dimension_rows(details, "productivity_total")
+    if total_rows.empty:
+        volume_total = daily_avg * active_days
+    else:
+        volume_total = float(
+            pd.to_numeric(total_rows.get("successes"), errors="coerce")
+            .fillna(0)
+            .sum()
+        )
+
+    team_daily_avg = _number(team.get("team_avg"))
+    team_total_rows = _dimension_rows(team_details, "productivity_total")
+    team_volume_avg = None
+    if not team_total_rows.empty:
+        team_total = float(
+            pd.to_numeric(
+                team_total_rows.get("team_successes"),
+                errors="coerce",
+            )
+            .fillna(0)
+            .sum()
+        )
+        analysts = pd.to_numeric(
+            team_total_rows.get("team_analysts"),
+            errors="coerce",
+        ).fillna(0)
+        analyst_count = float(analysts.max()) if not analysts.empty else 0.0
+        if analyst_count > 0:
+            team_volume_avg = team_total / analyst_count
+
+    return {
+        "volume_total": volume_total,
+        "daily_avg": daily_avg,
+        "active_days": active_days,
+        "team_volume_avg": team_volume_avg,
+        "team_daily_avg": team_daily_avg,
+    }
+
+
+def _comparison_context(
+    value: float | None,
+    reference: float | None,
+    reference_label: str,
+) -> str:
+    current = _number(value)
+    baseline = _number(reference)
+    if current is None or baseline is None or baseline == 0:
+        return f"{reference_label.capitalize()} indisponível"
+
+    difference = (current / baseline - 1.0) * 100
+    direction = "acima" if difference >= 0 else "abaixo"
+    return (
+        f"{abs(difference):.0f}% {direction} da {reference_label}"
+    )
+
+
+def _productivity_quick_read(summary: dict) -> str:
+    daily_avg = _number(summary.get("daily_avg"))
+    team_daily_avg = _number(summary.get("team_daily_avg"))
+
+    if (
+        daily_avg is None
+        or team_daily_avg is None
+        or team_daily_avg <= 0
+    ):
+        text = (
+            "A leitura comparativa ficará disponível quando houver referência "
+            "suficiente da equipe para o período."
+        )
+        tone = "neutral"
+    else:
+        difference = (daily_avg / team_daily_avg - 1.0) * 100
+        if difference >= 5:
+            text = (
+                "Seu ritmo diário está acima da referência do setor. "
+                "O ponto principal é sustentar essa consistência ao longo do período."
+            )
+            tone = "good"
+        elif difference <= -5:
+            text = (
+                "Seu principal ponto de atenção agora é recuperar o ritmo diário "
+                "em relação à referência do setor."
+            )
+            tone = "attention"
+        else:
+            text = (
+                "Seu ritmo diário está próximo da referência do setor. "
+                "A prioridade é manter regularidade na produção."
+            )
+            tone = "neutral"
+
+    return (
+        f"<section class='cop-productivity-reading cop-productivity-reading-{tone}'>"
+        "<div class='cop-productivity-reading-title'>🎯 Leitura rápida do período</div>"
+        f"<div class='cop-productivity-reading-text'>{escape(text)}</div>"
+        "</section>"
+    )
+
+
+def _productivity_activity_table(details: pd.DataFrame) -> pd.DataFrame:
+    rows = _dimension_rows(details, "productivity_component")
+    if rows.empty:
+        return pd.DataFrame()
+
+    frame = rows.copy()
+    frame["successes"] = pd.to_numeric(
+        frame.get("successes"),
+        errors="coerce",
+    ).fillna(0)
+    grouped = (
+        frame.groupby("dimension_value", dropna=False)["successes"]
+        .sum()
+        .reset_index()
+        .rename(
+            columns={
+                "dimension_value": "Atividade",
+                "successes": "Volume",
+            }
+        )
+    )
+    grouped["Atividade"] = grouped["Atividade"].fillna("").astype(str).str.strip()
+    grouped = grouped[grouped["Atividade"].ne("")]
+    if grouped.empty:
+        return pd.DataFrame()
+
+    grouped["Volume"] = grouped["Volume"].round().astype(int)
+    return grouped.sort_values(
+        ["Volume", "Atividade"],
+        ascending=[False, True],
+    ).reset_index(drop=True)
+
+
+def _productivity_recent_rows(payload: dict) -> list[dict]:
+    individual = pd.DataFrame(payload.get("individual") or [])
+    if individual.empty or "indicator_key" not in individual.columns:
+        return []
+
+    mine = individual[
+        individual["indicator_key"] == "productivity_avg_daily"
+    ].copy()
+    if mine.empty:
+        return []
+
+    team = pd.DataFrame(payload.get("team_daily") or [])
+    if not team.empty and "indicator_key" in team.columns:
+        team = team[
+            team["indicator_key"] == "productivity_avg_daily"
+        ][["period", "team_avg"]].copy()
+    else:
+        team = pd.DataFrame(columns=["period", "team_avg"])
+
+    mine = mine[["period", "value"]].copy()
+    merged = mine.merge(team, on="period", how="left")
+    merged["period"] = pd.to_datetime(
+        merged["period"],
+        errors="coerce",
+    )
+    merged = (
+        merged.dropna(subset=["period"])
+        .sort_values("period", ascending=False)
+        .head(7)
+        .sort_values("period", ascending=True)
+    )
+    if merged.empty:
+        return []
+
+    return [
+        {
+            "date_label": item["period"].strftime("%d/%m"),
+            "period": item["period"].date().isoformat(),
+            "value": _number(item.get("value")),
+            "team_avg": _number(item.get("team_avg")),
+        }
+        for _, item in merged.iterrows()
+    ]
+
+
+def _productivity_chart_scale(rows: list[dict]) -> float:
+    values = [1.0]
+    for row in rows:
+        for key in ("value", "team_avg"):
+            value = _number(row.get(key))
+            if value is not None and value >= 0:
+                values.append(value)
+    maximum = max(values)
+    step = 10 if maximum <= 100 else 20
+    return float(((int(maximum) + step - 1) // step) * step)
+
+
+def _render_productivity_daily_chart(rows: list[dict]) -> None:
+    scale = _productivity_chart_scale(rows)
+    items: list[str] = []
+
+    for index, row in enumerate(rows):
+        mine = _number(row.get("value"))
+        team = _number(row.get("team_avg"))
+        mine_width = (
+            0.0
+            if mine is None
+            else min(max(mine / scale * 100, 0), 100)
+        )
+        team_width = (
+            0.0
+            if team is None
+            else min(max(team / scale * 100, 0), 100)
+        )
+        delay = index * 0.06
+
+        items.append(
+            (
+                "<div class='cop-productivity-chart-row'>"
+                f"<div class='cop-productivity-chart-date'>{escape(str(row['date_label']))}</div>"
+                "<div class='cop-productivity-chart-bars'>"
+                "<div class='cop-productivity-chart-line'>"
+                "<span class='cop-productivity-chart-series'>Meu volume</span>"
+                "<div class='cop-productivity-chart-track'>"
+                f"<div class='cop-productivity-chart-bar cop-productivity-chart-mine' style='width:{mine_width:.2f}%;animation-delay:{delay:.2f}s'></div>"
+                "</div>"
+                f"<strong>{escape(_format_decimal(mine))}</strong>"
+                "</div>"
+                "<div class='cop-productivity-chart-line'>"
+                "<span class='cop-productivity-chart-series'>Equipe</span>"
+                "<div class='cop-productivity-chart-track'>"
+                f"<div class='cop-productivity-chart-bar cop-productivity-chart-team' style='width:{team_width:.2f}%;animation-delay:{delay + .08:.2f}s'></div>"
+                "</div>"
+                f"<strong>{escape(_format_decimal(team))}</strong>"
+                "</div>"
+                "</div>"
+                "</div>"
+            )
+        )
+
+    st.markdown(
+        (
+            "<section class='cop-productivity-chart'>"
+            "<div class='cop-productivity-chart-scale'>"
+            "<span>0</span>"
+            f"<span>Escala até {int(scale)}</span>"
+            "</div>"
+            + "".join(items)
+            + "</section>"
+        ),
+        unsafe_allow_html=True,
+    )
+
+
+def _render_productivity_kpi(
+    label: str,
+    value: str,
+    context: str,
+    icon: str,
+) -> None:
+    icons = {
+        "box": "📦",
+        "chart": "📈",
+        "calendar": "🗓️",
+    }
+    st.markdown(
+        (
+            "<article class='cop-productivity-kpi'>"
+            "<div class='cop-productivity-kpi-head'>"
+            f"<span>{escape(label)}</span>"
+            f"<b>{escape(icons.get(icon, '•'))}</b>"
+            "</div>"
+            f"<strong>{escape(value)}</strong>"
+            f"<p>{escape(context)}</p>"
+            "</article>"
+        ),
+        unsafe_allow_html=True,
+    )
+
+
+def _format_integer(value: float | None) -> str:
+    number = _number(value)
+    if number is None:
+        return "—"
+    return f"{int(round(number)):,}".replace(",", ".")
+
+
+def _format_decimal(value: float | None) -> str:
+    number = _number(value)
+    if number is None:
+        return "—"
+    return f"{number:.1f}".replace(".", ",")
+
+
 def _dpa_recent_chart_rows(payload: dict) -> list[dict]:
     individual = pd.DataFrame(payload.get("individual") or [])
     if individual.empty or "indicator_key" not in individual.columns:

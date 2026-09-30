@@ -251,12 +251,168 @@ class AnalystShell:
             self._render_closing_assertiveness(payload, details, team_details)
             return
 
-        if indicator_key == "emp_etit_event":
-            self._render_ral_rec(details, team_details)
+        if indicator_key in {
+            "emp_etit_event",
+            "res_etit_fibra_hfc",
+            "res_etit_gpon",
+        }:
+            self._render_etit_operational(
+                payload,
+                details,
+                team_details,
+                indicator_key,
+                unit,
+            )
+            return
 
         self._render_focus(details, team_details, indicator_key, direction)
         self._render_loss_references(details, indicator_key)
         self._render_full_detail(details, team_details, indicator_key, direction)
+        self._render_recent_evolution(payload, indicator_key, unit)
+
+    def _render_etit_operational(
+        self,
+        payload: dict,
+        details: pd.DataFrame,
+        team_details: pd.DataFrame,
+        indicator_key: str,
+        unit: str | None,
+    ) -> None:
+        if details.empty:
+            st.info("Reprocesse a fonte do ETIT para liberar a análise operacional detalhada.")
+            return
+
+        summary = _etit_operational_summary(details)
+        st.markdown("#### Resumo operacional do período")
+        cols = st.columns(4)
+        cards = [
+            ("Eventos", str(summary["volume"])),
+            ("Aderentes", str(summary["successes"])),
+            ("TMA médio", _format_duration(summary["tma_seconds"])),
+            ("TMR médio", _format_duration(summary["tmr_seconds"])),
+        ]
+        for column, (label, value) in zip(cols, cards):
+            with column:
+                _render_etit_kpi(label, value)
+
+        if indicator_key == "emp_etit_event":
+            st.markdown("#### Aderentes e não aderentes — RAL e REC")
+            team_demand = _etit_team_demand_cards(team_details)
+            if team_demand:
+                cols = st.columns(len(team_demand))
+                for column, item in zip(cols, team_demand):
+                    with column:
+                        _render_etit_team_card(item)
+
+            left, right = st.columns(2, gap="large")
+            with left:
+                st.markdown("#### Por Demanda (RAL/REC)")
+                demand_table = _etit_dimension_table(
+                    details,
+                    team_details,
+                    "demand",
+                    "Demanda",
+                    include_duration=True,
+                )
+                if demand_table.empty:
+                    st.caption("Sem dados de RAL/REC no período.")
+                else:
+                    st.dataframe(
+                        demand_table,
+                        use_container_width=True,
+                        hide_index=True,
+                    )
+
+            with right:
+                st.markdown("#### Por Tipo")
+                type_table = _etit_dimension_table(
+                    details,
+                    team_details,
+                    "type",
+                    "Tipo",
+                )
+                if type_table.empty:
+                    st.caption("Sem dados por tipo no período.")
+                else:
+                    st.dataframe(
+                        type_table,
+                        use_container_width=True,
+                        hide_index=True,
+                    )
+        else:
+            service_title = (
+                "#### Por Serviço — Brownfield / Greenfield"
+                if indicator_key == "res_etit_gpon"
+                else "#### Por Serviço"
+            )
+            st.markdown(service_title)
+            service_table = _etit_dimension_table(
+                details,
+                team_details,
+                "service",
+                "Serviço",
+                include_duration=True,
+            )
+            if service_table.empty:
+                st.caption("Sem dados por serviço no período.")
+            else:
+                st.dataframe(
+                    service_table,
+                    use_container_width=True,
+                    hide_index=True,
+                )
+
+            nature_table = _etit_dimension_table(
+                details,
+                team_details,
+                "nature",
+                "Natureza",
+            )
+            if not nature_table.empty:
+                with st.expander("Ver distribuição por natureza", expanded=False):
+                    st.dataframe(
+                        nature_table,
+                        use_container_width=True,
+                        hide_index=True,
+                    )
+
+        left, right = st.columns(2, gap="large")
+        with left:
+            st.markdown("#### 🗺️ Por Grupo (IN_GRUPO) — Regional Leste")
+            group_table = _etit_dimension_table(
+                details,
+                team_details,
+                "group",
+                "Grupo",
+            )
+            if group_table.empty:
+                st.caption("Sem dados de grupo no período.")
+            else:
+                _render_etit_dimension_highlight(group_table, "Grupo")
+                st.dataframe(
+                    group_table,
+                    use_container_width=True,
+                    hide_index=True,
+                )
+
+        with right:
+            st.markdown("#### 🕒 Por Turno")
+            turn_table = _etit_dimension_table(
+                details,
+                team_details,
+                "turn",
+                "Turno",
+            )
+            if turn_table.empty:
+                st.caption("Sem dados de turno no período.")
+            else:
+                st.dataframe(
+                    turn_table,
+                    use_container_width=True,
+                    hide_index=True,
+                )
+
+        self._render_loss_references(details, indicator_key)
         self._render_recent_evolution(payload, indicator_key, unit)
 
     def _render_closing_assertiveness(

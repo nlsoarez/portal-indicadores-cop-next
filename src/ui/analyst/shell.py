@@ -534,14 +534,10 @@ def _render_identity_bar(
     periods = [str(row.get("period") or "") for row in latest if row.get("period")]
     period = max(periods) if periods else ""
     person_name = _short_display_name(display_name)
-    initials = "".join(part[:1] for part in person_name.split()[:2]).upper() or "A"
 
     st.markdown(
         (
             "<section class='cop-analyst-identity'>"
-            "<div class='cop-analyst-avatar-wrap'>"
-            f"<div class='cop-analyst-avatar'>{escape(initials)}</div>"
-            "</div>"
             "<div class='cop-analyst-identity-main'>"
             "<div class='cop-analyst-eyebrow'>MEU PAINEL DE DESEMPENHO</div>"
             f"<h1>Olá, {escape(person_name)}.</h1>"

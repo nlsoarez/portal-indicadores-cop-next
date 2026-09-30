@@ -854,19 +854,19 @@ def _inject_analyst_styles() -> None:
             position:relative;
             overflow:hidden;
             display:grid;
-            grid-template-columns:auto minmax(0, 1fr) auto;
-            align-items:center;
-            gap:1.4rem;
-            min-height:238px;
-            padding:2.15rem 2.3rem;
-            margin:.1rem 0 1.25rem;
+            grid-template-columns:minmax(0, 1fr) auto;
+            align-items:start;
+            gap:1.8rem;
+            min-height:255px;
+            padding:2.45rem 2.65rem;
+            margin:.1rem 0 1.35rem;
             border:1px solid rgba(148,163,184,.16);
-            border-radius:22px;
+            border-radius:24px;
             background:
-                radial-gradient(circle at 90% 10%, rgba(255,255,255,.09) 0 72px, transparent 73px),
-                radial-gradient(circle at 78% 115%, rgba(237,28,36,.28), transparent 31%),
-                linear-gradient(135deg, #111923 0%, #26171d 62%, #711019 100%);
-            box-shadow:0 22px 55px rgba(0,0,0,.25);
+                radial-gradient(circle at 91% 8%, rgba(255,255,255,.08) 0 82px, transparent 83px),
+                radial-gradient(circle at 80% 118%, rgba(237,28,36,.30), transparent 32%),
+                linear-gradient(135deg, #111923 0%, #28171d 62%, #741019 100%);
+            box-shadow:0 24px 58px rgba(0,0,0,.27);
         }
         .cop-analyst-identity::after {
             content:"";
@@ -878,58 +878,38 @@ def _inject_analyst_styles() -> None:
             border-radius:50%;
             background:rgba(237,28,36,.18);
         }
-        .cop-analyst-avatar-wrap {
-            position:relative;
-            z-index:2;
-            align-self:flex-start;
-            padding-top:.2rem;
-        }
-        .cop-analyst-avatar {
-            width:70px;
-            height:70px;
-            display:grid;
-            place-items:center;
-            border-radius:20px;
-            color:#fff;
-            font-size:1.15rem;
-            font-weight:900;
-            letter-spacing:.02em;
-            background:linear-gradient(145deg, #ed1c24, #86111a);
-            border:1px solid rgba(255,255,255,.14);
-            box-shadow:0 16px 36px rgba(237,28,36,.24);
-        }
         .cop-analyst-identity-main {
             position:relative;
             z-index:2;
-            max-width:900px;
+            max-width:980px;
         }
         .cop-analyst-eyebrow {
             color:#ff9aa1;
-            font-size:.82rem;
-            font-weight:850;
-            letter-spacing:.12em;
-            margin-bottom:.8rem;
+            font-size:.86rem;
+            font-weight:900;
+            letter-spacing:.13em;
+            margin-bottom:1rem;
         }
         .cop-analyst-identity h1 {
             margin:0 !important;
             color:#fff !important;
-            font-size:clamp(2.35rem, 3.6vw, 3.65rem) !important;
+            font-size:clamp(2.7rem, 4.2vw, 4.35rem) !important;
             line-height:1.05 !important;
             font-weight:900 !important;
             letter-spacing:-.045em !important;
         }
         .cop-analyst-identity p {
-            max-width:760px;
-            margin:.8rem 0 0 !important;
-            color:rgba(255,255,255,.78) !important;
-            font-size:1.06rem !important;
-            line-height:1.55 !important;
+            max-width:840px;
+            margin:1rem 0 0 !important;
+            color:rgba(255,255,255,.82) !important;
+            font-size:1.12rem !important;
+            line-height:1.6 !important;
         }
         .cop-analyst-chips {
             display:flex;
             flex-wrap:wrap;
-            gap:.55rem;
-            margin-top:1.25rem;
+            gap:.62rem;
+            margin-top:1.45rem;
         }
         .cop-analyst-chips span,
         .cop-analyst-private {
@@ -940,8 +920,8 @@ def _inject_analyst_styles() -> None:
             border-radius:999px;
             background:rgba(255,255,255,.08);
             color:#edf5fc;
-            padding:.42rem .75rem;
-            font-size:.80rem;
+            padding:.48rem .82rem;
+            font-size:.83rem;
             font-weight:760;
         }
         .cop-analyst-private {
@@ -1094,21 +1074,38 @@ def _inject_analyst_styles() -> None:
             font-weight:800;
             line-height:1.35;
         }
-        .cop-personal-status-head span {
+        .cop-personal-status-title {
+            display:flex;
+            align-items:flex-start;
+            gap:.55rem;
+            min-width:0;
+        }
+        .cop-personal-status-title strong {
+            color:#eaf2fa;
+            font-size:.78rem;
+            line-height:1.35;
+        }
+        .cop-personal-status-icon {
             flex:0 0 auto;
-            padding:.24rem .5rem;
+            font-size:1rem;
+            line-height:1.1;
+        }
+        .cop-personal-status-pill {
+            flex:0 0 auto;
+            padding:.26rem .52rem;
             border-radius:999px;
             color:#cbd7e4;
             background:rgba(148,163,184,.10);
             border:1px solid rgba(148,163,184,.15);
             font-size:.60rem;
+            font-weight:800;
         }
-        .cop-status-good .cop-personal-status-head span {
+        .cop-status-good .cop-personal-status-pill {
             color:#8af0bd;
             background:rgba(49,213,138,.09);
             border-color:rgba(49,213,138,.20);
         }
-        .cop-status-attention .cop-personal-status-head span {
+        .cop-status-attention .cop-personal-status-pill {
             color:#ffd183;
             background:rgba(247,184,75,.09);
             border-color:rgba(247,184,75,.22);
@@ -1164,25 +1161,15 @@ def _inject_analyst_styles() -> None:
                 padding:1.35rem;
                 display:block;
             }
-            .cop-analyst-avatar-wrap {
-                padding-top:0;
-                margin-bottom:.9rem;
-            }
-            .cop-analyst-avatar {
-                width:54px;
-                height:54px;
-                border-radius:16px;
-                font-size:.95rem;
-            }
             .cop-analyst-private {
                 margin-top:1rem;
                 width:max-content;
             }
             .cop-analyst-identity h1 {
-                font-size:2rem !important;
+                font-size:2.25rem !important;
             }
             .cop-analyst-identity p {
-                font-size:.9rem !important;
+                font-size:.96rem !important;
             }
         }
         </style>

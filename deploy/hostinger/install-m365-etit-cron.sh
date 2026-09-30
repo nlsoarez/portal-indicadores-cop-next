@@ -15,6 +15,8 @@ LOG_FILE="${M365_SYNC_LOG:-/var/log/portal-m365-etit.log}"
 cat > "${CRON_FILE}" <<EOF
 SHELL=/bin/bash
 PATH=/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin
+CRON_TZ=America/Sao_Paulo
+TZ=America/Sao_Paulo
 ${SYNC_MINUTE} ${SYNC_HOUR} * * * root cd ${APP_DIR} && bash deploy/hostinger/m365-etit.sh sync >> ${LOG_FILE} 2>&1
 EOF
 
@@ -26,4 +28,4 @@ echo "Agendamento instalado:"
 cat "${CRON_FILE}"
 echo
 echo "Log: ${LOG_FILE}"
-echo "Horário usa o timezone configurado no servidor."
+echo "Timezone do agendamento: America/Sao_Paulo."

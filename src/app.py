@@ -7,7 +7,12 @@ import streamlit as st
 from src.application.access_service import AccessService
 from src.application.auth_service import AuthService
 from src.config.seed import seed_foundation
-from src.infrastructure.database import database_is_persistent, initialize_database, persistence_diagnostics
+from src.infrastructure.database import (
+    DB_AUTO_MIGRATE,
+    database_is_persistent,
+    initialize_database,
+    persistence_diagnostics,
+)
 from src.infrastructure.repositories import SegmentRepository
 from src.ui.admin.shell import AdminShell
 from src.ui.analyst.shell import AnalystShell
@@ -23,7 +28,8 @@ MAX_SESSION_AGE_SECONDS = 12 * 60 * 60
 @st.cache_resource(show_spinner=False)
 def _bootstrap() -> None:
     initialize_database()
-    seed_foundation()
+    if DB_AUTO_MIGRATE:
+        seed_foundation()
 
 
 def _access_snapshot(user_id: int):

@@ -2521,6 +2521,154 @@ def _format_duration(seconds: float | None) -> str:
     return f"{hours:02d}:{minutes:02d}:{secs:02d}"
 
 
+def _assertiveness_dimension_table(
+    details: pd.DataFrame,
+    dimension: str,
+    label: str,
+    *,
+    top: int | None = None,
+) -> pd.DataFrame:
+    rows = _dimension_rows(details, dimension)
+    if rows.empty:
+        return pd.DataFrame()
+
+    records: list[dict] = []
+    for raw_value, part in rows.groupby("dimension_value", dropna=False):
+        value = str(raw_value or "").strip()
+        if not value:
+            continue
+
+        volume = float(
+            pd.to_numeric(part.get("volume"), errors="coerce").fillna(0).sum()
+        )
+        successes = float(
+            pd.to_numeric(part.get("successes"), errors="coerce").fillna(0).sum()
+        )
+        losses = float(
+            pd.to_numeric(part.get("losses"), errors="coerce").fillna(0).sum()
+        )
+        adherence = None if volume <= 0 else successes / volume * 100
+        non_adherence = (
+            None
+            if adherence is None
+            else max(0.0, 100.0 - adherence)
+        )
+
+        records.append(
+            {
+                label: value,
+                "Volume": int(round(volume)),
+                "Assertivos": int(round(successes)),
+                "Não Assertivos": int(round(losses)),
+                "Assertividade %": _pct(adherence),
+                "Não Assertividade %": _pct(non_adherence),
+                "_volume": volume,
+                "_result": -1.0 if adherence is None else adherence,
+            }
+        )
+
+    if not records:
+        return pd.DataFrame()
+
+    frame = pd.DataFrame(records).sort_values(
+        ["_volume", "_result", label],
+        ascending=[False, False, True],
+    )
+    if top is not None:
+        frame = frame.head(top)
+
+    return frame[
+        [
+            label,
+            "Volume",
+            "Assertivos",
+            "Não Assertivos",
+            "Assertividade %",
+            "Não Assertividade %",
+        ]
+    ].reset_index(drop=True)
+
+
+def _assertiveness_service_scoped_details(
+    rows: pd.DataFrame,
+    service: str,
+) -> pd.DataFrame:
+    if (
+        rows is None
+        or rows.empty
+        or not {"dimension", "dimension_value"}.issubset(rows.columns)
+    ):
+        return pd.DataFrame()
+
+    service_value = str(service or "").strip()
+    if not service_value:
+        return rows.copy()
+
+    direct_service = rows[
+        (rows["dimension"].astype(str) == "service")
+        & (rows["dimension_value"].astype(str) == service_value)
+    ].copy()
+
+    composite = rows[
+        rows["dimension"].astype(str).str.startswith("service__", na=False)
+    ].copy()
+    if composite.empty:
+        return direct_service
+
+    parts = composite["dimension_value"].astype(str).str.split(
+        "|||",
+        n=1,
+        expand=True,
+        regex=False,
+    )
+    if parts.shape[1] < 2:
+        return direct_service
+
+    mask = parts[0].astype(str) == service_value
+    composite = composite[mask].copy()
+    if composite.empty:
+        return direct_service
+
+    selected = composite["dimension_value"].astype(str).str.split(
+        "|||",
+        n=1,
+        expand=True,
+        regex=False,
+    )
+    composite["dimension_value"] = selected[1].values
+    composite["dimension"] = composite["dimension"].astype(str).str.replace(
+        r"^service__",
+        "",
+        regex=True,
+    )
+
+    return pd.concat(
+        [direct_service, composite],
+        ignore_index=True,
+    )
+
+
+def _render_assertiveness_kpi(
+    label: str,
+    value: str,
+    tone: str,
+) -> None:
+    safe_tone = (
+        tone
+        if tone in {"neutral", "good", "bad", "warning", "team"}
+        else "neutral"
+    )
+    st.markdown(
+        (
+            f"<article class='cop-assert-kpi cop-assert-{safe_tone}'>"
+            f"<span>{escape(label)}</span>"
+            f"<strong>{escape(value)}</strong>"
+            "</article>"
+        ),
+        unsafe_allow_html=True,
+    )
+
+
 def _render_etit_kpi(label: str, value: str) -> None:
     st.markdown(
         (

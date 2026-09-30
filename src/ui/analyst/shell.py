@@ -383,6 +383,18 @@ class AnalystShell:
             self._render_closing_assertiveness(payload, details, team_details)
             return
 
+        if indicator_key in {
+            "res_assert_fibra_hfc",
+            "res_assert_gpon",
+        }:
+            self._render_residential_assertiveness(
+                payload,
+                details,
+                team_details,
+                indicator_key,
+            )
+            return
+
         if indicator_key == "dpa_official":
             c1, c2, c3, c4 = st.columns(4)
             c1.metric("Meu resultado", _format_ptbr_metric(value, unit))
@@ -433,6 +445,184 @@ class AnalystShell:
         self._render_loss_references(details, indicator_key)
         self._render_full_detail(details, team_details, indicator_key, direction)
         self._render_recent_evolution(payload, indicator_key, unit)
+
+    def _render_residential_assertiveness(
+        self,
+        payload: dict,
+        details: pd.DataFrame,
+        team_details: pd.DataFrame,
+        indicator_key: str,
+    ) -> None:
+        if details.empty:
+            st.info(
+                "Reprocesse a fonte de Indicadores Residencial para liberar "
+                "a análise detalhada de assertividade."
+            )
+            return
+
+        is_gpon = indicator_key == "res_assert_gpon"
+        scoped_details = details.copy()
+
+        if is_gpon:
+            st.markdown("#### Consolidado por serviço GPON")
+            service_table = _assertiveness_dimension_table(
+                details,
+                "service",
+                "Serviço",
+            )
+            if service_table.empty:
+                st.caption(
+                    "A carga atual não possui Brownfield/Greenfield para este período."
+                )
+            else:
+                st.dataframe(
+                    service_table,
+                    use_container_width=True,
+                    hide_index=True,
+                )
+                available = [
+                    str(value)
+                    for value in service_table["Serviço"].dropna().tolist()
+                    if str(value).strip()
+                ]
+                preferred = []
+                canonical = {value.upper(): value for value in available}
+                for service in ("BROWNFIELD", "GREENFIELD"):
+                    if service in canonical:
+                        preferred.append(canonical[service])
+                extras = [
+                    value
+                    for value in available
+                    if value.upper() not in {"BROWNFIELD", "GREENFIELD"}
+                ]
+                options = ["Todos", *preferred, *extras]
+                service_choice = st.radio(
+                    "🌿 Serviço",
+                    options,
+                    horizontal=True,
+                    key=f"analyst_assert_service_{indicator_key}",
+                )
+                if service_choice != "Todos":
+                    scoped_details = _assertiveness_service_scoped_details(
+                        details,
+                        service_choice,
+                    )
+
+        summary = _etit_operational_summary(scoped_details)
+        st.markdown("#### Resumo operacional do período")
+
+        first_row = [
+            ("VOLUME", str(summary["volume"]), "neutral"),
+            ("ASSERTIVOS", str(summary["successes"]), "good"),
+            ("NÃO ASSERTIVOS", str(summary["losses"]), "bad"),
+            ("ASSERTIVIDADE", _pct(summary["adherence"]), "good"),
+            (
+                "NÃO ASSERTIVIDADE",
+                _pct(
+                    None
+                    if summary["adherence"] is None
+                    else max(0.0, 100.0 - summary["adherence"])
+                ),
+                "bad",
+            ),
+        ]
+        cols = st.columns(5)
+        for column, (label, value, tone) in zip(cols, first_row):
+            with column:
+                _render_assertiveness_kpi(label, value, tone)
+
+        second_row = [
+            ("TMA MÉDIO", _format_duration(summary["tma_seconds"]), "team"),
+            ("TMR MÉDIO", _format_duration(summary["tmr_seconds"]), "warning"),
+        ]
+        cols = st.columns(2)
+        for column, (label, value, tone) in zip(cols, second_row):
+            with column:
+                _render_assertiveness_kpi(label, value, tone)
+
+        left, right = st.columns(2, gap="large")
+        with left:
+            st.markdown("#### 🗺️ Por Grupo (IN_GRUPO) — Regional Leste")
+            group_table = _assertiveness_dimension_table(
+                scoped_details,
+                "group",
+                "IN_GRUPO",
+            )
+            if group_table.empty:
+                st.caption("Sem dados por grupo no período.")
+            else:
+                st.dataframe(
+                    group_table,
+                    use_container_width=True,
+                    hide_index=True,
+                )
+
+        with right:
+            st.markdown("#### Por Natureza")
+            nature_table = _assertiveness_dimension_table(
+                scoped_details,
+                "nature",
+                "Natureza",
+            )
+            if nature_table.empty:
+                st.caption("Sem dados por natureza no período.")
+            else:
+                st.dataframe(
+                    nature_table,
+                    use_container_width=True,
+                    hide_index=True,
+                )
+
+        st.markdown("#### Por Impacto")
+        impact_table = _assertiveness_dimension_table(
+            scoped_details,
+            "impact",
+            "Impacto",
+        )
+        if impact_table.empty:
+            st.caption("Sem dados por impacto no período.")
+        else:
+            st.dataframe(
+                impact_table,
+                use_container_width=True,
+                hide_index=True,
+            )
+
+        st.markdown("#### Top 15 Soluções")
+        solution_table = _assertiveness_dimension_table(
+            scoped_details,
+            "solution",
+            "Solução",
+            top=15,
+        )
+        if solution_table.empty:
+            st.caption("Sem dados de solução no período.")
+        else:
+            st.dataframe(
+                solution_table,
+                use_container_width=True,
+                hide_index=True,
+            )
+
+        rows = _indicator_recent_rows(
+            payload,
+            indicator_key,
+            limit=7,
+            include_team=True,
+        )
+        st.markdown("#### Últimos dias")
+        st.caption(
+            "Evolução diária da assertividade, com animação e referência da equipe."
+        )
+        if not rows:
+            st.caption("Sem histórico diário suficiente para exibir o gráfico.")
+        else:
+            _render_dual_percent_bar_chart(
+                rows,
+                chart_class="cop-assert-daily-chart",
+                mine_label="Minha assert.",
+                team_label="Equipe",
+            )
 
     def _render_validation_time_view(
         self,

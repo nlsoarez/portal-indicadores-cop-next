@@ -54,11 +54,11 @@ class AdminShell:
             "Analistas": "◎",
             "Líderes": "♛",
             "Uploads": "⇧",
-            "Auditoria": "⌁",
+            "Governança": "◇",
         }
         page = st.sidebar.radio(
             "Navegação",
-            ["Dashboard", "Indicadores", "Analista Certificado", "Analistas", "Líderes", "Uploads", "Auditoria"],
+            ["Dashboard", "Indicadores", "Analista Certificado", "Analistas", "Líderes", "Uploads", "Governança"],
             format_func=lambda item: f"{nav_icons.get(item, '•')}  {item}",
             label_visibility="collapsed",
         )
@@ -121,8 +121,8 @@ class AdminShell:
             )
         else:
             render_page_header(
-                title="Auditoria",
-                subtitle="Consulte último acesso e sinais básicos de uso por segmento.",
+                title="Governança do portal",
+                subtitle="Acompanhe adoção, acessos, cobertura dos dados e histórico recente de atualizações.",
                 eyebrow="Governança",
                 badge=segment_label,
             )
@@ -216,14 +216,9 @@ class AdminShell:
             self._render_uploads(ctx)
 
         else:
-            _, _, audit_rows, _ = self._dashboard_scope(
+            self._render_governance(
                 ctx,
                 scope_segments,
-            )
-            st.dataframe(
-                pd.DataFrame(audit_rows),
-                use_container_width=True,
-                hide_index=True,
             )
 
     def _dashboard_scope(

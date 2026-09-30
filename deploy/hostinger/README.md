@@ -82,3 +82,82 @@ PORTAL_PORT=8501
 ```
 
 Não faça commit da URI real do banco nem de senhas.
+
+
+## Piloto Microsoft 365 — ETIT Residencial e Empresarial
+
+O piloto verifica diariamente as pastas oficiais de ETIT via Microsoft Graph. Ele não depende de manter
+uma aba do SharePoint aberta no navegador. O fluxo usa autenticação delegada com device code e persiste
+o cache de token em um volume Docker privado.
+
+### Variáveis obrigatórias
+
+Adicione em `.env.vps`:
+
+```env
+M365_TENANT_ID=...
+M365_CLIENT_ID=...
+M365_SCOPES=Files.Read
+M365_ETIT_RESIDENTIAL_URL=https://...
+M365_ETIT_ENTERPRISE_URL=https://...
+```
+
+A App Registration do Microsoft Entra precisa permitir **public client flows/device code**.
+
+### Primeiro login
+
+Após o deploy:
+
+```bash
+cd /opt/portal-indicadores-cop-next
+bash deploy/hostinger/m365-etit.sh login
+```
+
+O comando mostra uma URL e um código Microsoft. Abra a URL em um navegador, informe o código e faça
+login com uma conta corporativa que tenha acesso às duas pastas.
+
+### Validar sem processar
+
+```bash
+bash deploy/hostinger/m365-etit.sh probe
+```
+
+O retorno deve identificar:
+
+- `Analítico Indicadores Residencial - YYYYMM.xlsx`
+- `Analítico Empresarial - YYYYMM.xlsx`
+
+### Sincronizar
+
+```bash
+bash deploy/hostinger/m365-etit.sh sync
+```
+
+Somente arquivos alterados são baixados e enviados ao pipeline de ingestão já existente. Para forçar
+um reprocessamento:
+
+```bash
+bash deploy/hostinger/m365-etit.sh sync --force
+```
+
+### Agendar 1 vez por dia
+
+O instalador usa 05:15 no timezone do servidor por padrão:
+
+```bash
+bash deploy/hostinger/install-m365-etit-cron.sh
+```
+
+Para outro horário:
+
+```bash
+SYNC_HOUR=6 SYNC_MINUTE=30 bash deploy/hostinger/install-m365-etit-cron.sh
+```
+
+Log:
+
+```text
+/var/log/portal-m365-etit.log
+```
+
+O upload manual permanece disponível como contingência.

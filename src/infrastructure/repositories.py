@@ -968,7 +968,8 @@ class IndicatorRepository:
                   AND b.dimension IN (
                     'overall', 'group', 'service', 'demand', 'cause', 'cause_toa', 'cause_sir',
                     'area', 'area_involved', 'network', 'activity_type', 'incident_type',
-                    'aging', 'hour', 'turn', 'base', 'queue', 'queue_type', 'productivity_component',
+                    'aging', 'hour', 'turn', 'base', 'queue', 'queue_type',
+                    'productivity_total', 'productivity_component',
                     'nature', 'impact', 'solution', 'city', 'technology', 'type'
                   )
                 GROUP BY b.data_month, d.indicator_key, d.name, d.unit,

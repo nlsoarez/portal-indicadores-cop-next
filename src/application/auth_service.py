@@ -61,12 +61,9 @@ class AuthService:
             return None
 
         row = self.users.get_credentials(normalized)
-        valid = bool(
-            row
-            and bool(row["active"])
-            and verify_password(password, row["password_hash"], row["password_salt"])
-        )
-        if not valid:
+        if not row or not bool(row["active"]):
+            return None
+        if not verify_password(password, row["password_hash"], row["password_salt"]):
             self._record_failure(normalized, now)
             return None
 

@@ -10,6 +10,7 @@ from src.ui.analyst.shell import (
     _closing_cause_table,
     _closing_dimension_table,
     _cancelled_tasks_user_summary,
+    _cancellation_etit_base_for_period,
     _build_analyst_performance_feedback,
     _closing_review_rows,
     _dpa_chart_scale,
@@ -25,6 +26,7 @@ from src.ui.analyst.shell import (
     _productivity_chart_scale,
     _productivity_recent_rows,
     _productivity_user_summary,
+    _residential_certification_status,
     _residential_occurrence_type,
     _validation_group_table,
     _validation_time_user_summary,
@@ -625,6 +627,69 @@ class AnalystSummaryViewTest(unittest.TestCase):
         self.assertEqual(70, minas["Total"])
         self.assertEqual(58, minas["Aderentes"])
         self.assertEqual("82,9%", minas["Aderência %"])
+
+    def test_residential_cancellation_base_sums_hfc_and_gpon_etit(self):
+        rows = [
+            {
+                "indicator_key": "res_etit_fibra_hfc",
+                "period": "2026-09",
+                "volume": 104,
+            },
+            {
+                "indicator_key": "res_etit_gpon",
+                "period": "2026-09",
+                "volume": 37,
+            },
+            {
+                "indicator_key": "toa_cancellation_rate",
+                "period": "2026-09",
+                "volume": 2,
+            },
+        ]
+
+        base = _cancellation_etit_base_for_period(rows, "2026-09")
+
+        self.assertEqual(141.0, base["volume"])
+        self.assertEqual("VOLUME ETIT HFC + GPON", base["label"])
+        self.assertEqual("res_etit_hfc_gpon", base["source"])
+
+    def test_residential_certification_uses_legacy_three_rule_model(self):
+        result = _residential_certification_status(
+            100.0,
+            83.2,
+            66.7,
+            94.6,
+        )
+
+        self.assertEqual("bad", result["status"])
+        self.assertEqual("❌ Você NÃO está certificando", result["title"])
+        self.assertAlmostEqual(80.65, result["assert_avg"], places=2)
+        self.assertIn("DPA individual abaixo de 85%", result["message"])
+        self.assertIn("Média Assertividade abaixo de 85%", result["message"])
+
+    def test_residential_certification_keeps_dpa_alert_as_certifying(self):
+        result = _residential_certification_status(
+            92.0,
+            87.0,
+            88.0,
+            90.0,
+        )
+
+        self.assertEqual("attention", result["status"])
+        self.assertEqual("⚠️ Você está certificando", result["title"])
+        self.assertAlmostEqual(89.0, result["assert_avg"], places=2)
+
+    def test_residential_certification_treats_missing_values_as_non_blocking(self):
+        result = _residential_certification_status(
+            None,
+            92.0,
+            None,
+            None,
+        )
+
+        self.assertEqual("good", result["status"])
+        self.assertIn("Sem dados de ETIT Fibra HFC", result["message"])
+        self.assertIn("Média Assertividade", result["message"])
 
     def test_enterprise_certification_green_requires_etit_and_dpa_at_90(self):
         result = _enterprise_certification_status(90.5, 92.5)

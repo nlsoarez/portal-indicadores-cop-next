@@ -310,7 +310,12 @@ def _render_indicator(
     daily = _indicator_frame(daily_df, indicator_key)
     ext = _indicator_frame(external_df, indicator_key) if ctx.is_admin else external_df.iloc[0:0].copy()
 
-    if ctx.is_admin and indicator_key in {"res_etit_gpon", "res_etit_fibra_hfc"}:
+    if ctx.is_admin and indicator_key in {
+        "res_etit_gpon",
+        "res_etit_fibra_hfc",
+        "res_assert_gpon",
+        "res_assert_fibra_hfc",
+    }:
         from src.ui.admin.indicators.etit_residential import render_admin_residential_etit
 
         render_admin_residential_etit(

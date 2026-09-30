@@ -6,6 +6,11 @@ import streamlit as st
 from src.application.dashboard_service import DashboardService
 from src.application.segment_context import switch_segment_state
 from src.domain.entities import AccessContext, Segment
+from src.ui.shared.chrome import (
+    render_dashboard_hero,
+    render_page_header,
+    render_sidebar_brand,
+)
 from src.ui.shared.freshness import render_indicator_freshness
 from src.ui.shared.metrics import format_metric, format_target
 
@@ -55,11 +60,8 @@ class AnalystShell:
         self.dashboard = DashboardService()
 
     def render(self, ctx: AccessContext, segments: list[Segment]) -> None:
-        st.sidebar.markdown("<span class='cop-role-analyst'>ANALISTA</span>", unsafe_allow_html=True)
-        st.sidebar.markdown(f"### {ctx.user.display_name}")
         if len(segments) == 1:
             segment = segments[0]
-            st.sidebar.caption(f"Segmento: {segment.name}")
         else:
             segment = st.sidebar.selectbox(
                 "Meu segmento",
@@ -68,22 +70,44 @@ class AnalystShell:
                 key="analyst_segment_selector",
             )
         switch_segment_state(st.session_state, segment.id)
+
+        render_sidebar_brand(
+            role="analyst",
+            user_name=ctx.user.display_name,
+            segment_name=segment.name,
+        )
+
         page = st.sidebar.radio(
             "Navegação",
             ["Meu painel", "Histórico"],
+            format_func=lambda item: f"{'◉' if item == 'Meu painel' else '↺'}  {item}",
             label_visibility="collapsed",
         )
 
-        st.markdown("<div class='cop-eyebrow'>Desempenho individual</div>", unsafe_allow_html=True)
-        st.markdown(f"<div class='cop-title'>Olá, {ctx.user.display_name}</div>", unsafe_allow_html=True)
-        st.markdown(
-            "<div class='cop-subtitle'>Somente seus resultados e médias agregadas da equipe. "
-            "Nenhum número individual de outro analista é exibido.</div>",
-            unsafe_allow_html=True,
+        render_page_header(
+            title="Meu desempenho" if page == "Meu painel" else "Histórico",
+            subtitle=(
+                "Seus resultados, comparação agregada com a equipe e foco de atuação."
+                if page == "Meu painel"
+                else "Evolução dos seus indicadores ao longo das competências processadas."
+            ),
+            eyebrow="Desempenho individual",
+            badge=segment.name,
         )
 
+        if page == "Meu painel":
+            render_dashboard_hero(
+                title=f"Olá, {ctx.user.display_name}.",
+                subtitle="Use o painel para entender onde você está acima da referência e onde existe maior oportunidade de ganho.",
+                kicker="Meu resultado · Minha evolução",
+            )
+
         payload = self.dashboard.analyst_payload(ctx, segment.id)
-        render_indicator_freshness(payload.get("freshness") or [], compact=True)
+        with st.expander("Atualização dos meus indicadores", expanded=False):
+            render_indicator_freshness(
+                payload.get("freshness") or [],
+                compact=True,
+            )
 
         if page == "Meu painel":
             self._render_panel(payload)

@@ -1,16 +1,14 @@
 from __future__ import annotations
 
+from html import escape
+
 import pandas as pd
 import streamlit as st
 
 from src.application.dashboard_service import DashboardService
 from src.application.segment_context import switch_segment_state
 from src.domain.entities import AccessContext, Segment
-from src.ui.shared.chrome import (
-    render_dashboard_hero,
-    render_page_header,
-    render_sidebar_brand,
-)
+from src.ui.shared.chrome import render_sidebar_brand
 from src.ui.shared.freshness import render_indicator_freshness
 from src.ui.shared.metrics import format_metric, format_target
 
@@ -76,79 +74,133 @@ class AnalystShell:
             )
         switch_segment_state(st.session_state, segment.id)
 
-        page = st.sidebar.radio(
-            "Navegação",
-            ["Meu painel", "Histórico"],
-            format_func=lambda item: f"{'◉' if item == 'Meu painel' else '↺'}  {item}",
-            label_visibility="collapsed",
-        )
-
-        render_page_header(
-            title="Meu desempenho" if page == "Meu painel" else "Histórico",
-            subtitle=(
-                "Seus resultados, comparação agregada com a equipe e foco de atuação."
-                if page == "Meu painel"
-                else "Evolução dos seus indicadores ao longo das competências processadas."
-            ),
-            eyebrow="Desempenho individual",
-            badge=segment.name,
-        )
-
-        if page == "Meu painel":
-            render_dashboard_hero(
-                title=f"Olá, {ctx.user.display_name}.",
-                subtitle="Use o painel para entender onde você está acima da referência e onde existe maior oportunidade de ganho.",
-                kicker="Meu resultado · Minha evolução",
-            )
-
         payload = self.dashboard.analyst_payload(ctx, segment.id)
-        with st.expander("Atualização dos meus indicadores", expanded=False):
-            render_indicator_freshness(
-                payload.get("freshness") or [],
-                compact=True,
-                show_title=False,
-            )
+        latest = _latest_by_indicator(payload.get("summary") or [])
 
-        if page == "Meu painel":
-            self._render_panel(payload)
-        else:
+        _inject_analyst_styles()
+        st.markdown("<div class='cop-analyst-shell'></div>", unsafe_allow_html=True)
+        _render_identity_bar(
+            ctx.user.display_name,
+            segment.name,
+            latest,
+        )
+
+        summary_tab, indicators_tab, history_tab = st.tabs(
+            ["🏠 Resumo", "📊 Indicadores", "↺ Histórico"]
+        )
+
+        with summary_tab:
+            self._render_summary(payload, latest)
+            with st.expander("Atualização dos meus indicadores", expanded=False):
+                render_indicator_freshness(
+                    payload.get("freshness") or [],
+                    compact=True,
+                    show_title=False,
+                    columns=3,
+                )
+
+        with indicators_tab:
+            self._render_indicator_tabs(payload, latest)
+
+        with history_tab:
             self._render_history(payload)
 
-    def _render_panel(self, payload: dict) -> None:
-        latest = _latest_by_indicator(payload.get("summary") or [])
+    def _render_summary(self, payload: dict, latest: list[dict]) -> None:
         if not latest:
             st.info("Ainda não há resultados individuais processados para este segmento.")
             return
 
-        team_index = {
-            (str(row.get("period")), str(row.get("indicator_key"))): row
-            for row in payload.get("team_averages") or []
-        }
+        team_index = _team_index(payload)
+        snapshot = _build_summary_snapshot(
+            latest,
+            team_index,
+            payload.get("freshness") or [],
+        )
+
+        st.markdown("### Visão geral do período")
+        kpi_cols = st.columns(4)
+        kpis = [
+            (
+                "Indicadores acompanhados",
+                str(snapshot["tracked"]),
+                "Visão consolidada do período",
+                "neutral",
+            ),
+            (
+                "Dentro da meta",
+                f"{snapshot['met']}/{snapshot['with_target']}",
+                "Indicadores com meta configurada",
+                "good" if snapshot["met"] == snapshot["with_target"] and snapshot["with_target"] else "neutral",
+            ),
+            (
+                "Acima da equipe",
+                f"{snapshot['above_team']}/{snapshot['with_team']}",
+                "Comparação com média agregada",
+                "good" if snapshot["above_team"] else "neutral",
+            ),
+            (
+                "Dados mais recentes",
+                snapshot["freshness_label"],
+                "Cobertura mais atual disponível",
+                "neutral",
+            ),
+        ]
+        for column, (label, value, context, tone) in zip(kpi_cols, kpis):
+            with column:
+                _render_summary_kpi(label, value, context, tone)
+
+        st.markdown("### Leitura rápida")
+        insight_cols = st.columns(2)
+        with insight_cols[0]:
+            _render_summary_insight(
+                "Ponto forte",
+                snapshot["best_title"],
+                snapshot["best_text"],
+                "good",
+            )
+        with insight_cols[1]:
+            _render_summary_insight(
+                "Prioridade",
+                snapshot["attention_title"],
+                snapshot["attention_text"],
+                "attention",
+            )
 
         st.markdown("### Minha situação")
-        overview_rows = []
-        for row in latest:
-            period = str(row.get("period"))
-            key = str(row.get("indicator_key"))
-            team = team_index.get((period, key), {})
-            value = _number(row.get("value"))
-            team_avg = _number(team.get("team_avg"))
-            overview_rows.append({
-                "Indicador": str(row.get("name") or key),
-                "Meu resultado": _format_ptbr_metric(value, row.get("unit")),
-                "Média da equipe": "—" if team_avg is None else _format_ptbr_metric(team_avg, row.get("unit")),
-                "Comparação": _comparison_label(value, team_avg, str(row.get("direction") or "higher_is_better"), row.get("unit")),
-                "Meta": _target_text(row),
-                "Volume": int(row.get("volume") or 0),
-            })
-        st.dataframe(pd.DataFrame(overview_rows), use_container_width=True, hide_index=True)
+        st.caption(
+            "Cada card mostra seu resultado, a referência da equipe e a meta do indicador."
+        )
+        for start in range(0, len(latest), 3):
+            cols = st.columns(3)
+            for column, row in zip(cols, latest[start:start + 3]):
+                key = str(row.get("indicator_key"))
+                period = str(row.get("period"))
+                team = team_index.get((period, key), {})
+                with column:
+                    _render_indicator_status_card(row, team)
 
-        options = {str(row.get("name") or row.get("indicator_key")): str(row.get("indicator_key")) for row in latest}
-        selected_name = st.selectbox("Analisar indicador", list(options), key="analyst_indicator_focus")
-        indicator_key = options[selected_name]
-        row = next(item for item in latest if str(item.get("indicator_key")) == indicator_key)
-        team = team_index.get((str(row.get("period")), indicator_key), {})
-        self._render_indicator(payload, row, team)
+    def _render_indicator_tabs(self, payload: dict, latest: list[dict]) -> None:
+        if not latest:
+            st.info("Ainda não há indicadores processados para este segmento.")
+            return
+
+        team_index = _team_index(payload)
+        st.markdown("### Meus indicadores")
+        st.caption(
+            "Abra cada indicador para ver comparação com a equipe, foco de atuação, perdas e evolução recente."
+        )
+
+        labels = [
+            _indicator_tab_label(str(row.get("indicator_key")), str(row.get("name") or "Indicador"))
+            for row in latest
+        ]
+        tabs = st.tabs(labels)
+
+        for tab, row in zip(tabs, latest):
+            with tab:
+                key = str(row.get("indicator_key"))
+                team = team_index.get((str(row.get("period")), key), {})
+                self._render_indicator(payload, row, team)
 
     def _render_indicator(self, payload: dict, row: dict, team: dict) -> None:
         indicator_key = str(row.get("indicator_key"))

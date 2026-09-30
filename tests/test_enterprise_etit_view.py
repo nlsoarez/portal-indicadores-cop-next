@@ -77,6 +77,7 @@ class EnterpriseEtitAdminViewTest(unittest.TestCase):
 
         table = build_ranking_table(people, metrics, demand)
 
+        self.assertEqual("SANDRO", table.iloc[0]["Nome"])
         sandro = table[table["Nome"] == "SANDRO"].iloc[0]
         self.assertEqual(137, int(sandro["Eventos"]))
         self.assertEqual(124, int(sandro["Aderentes"]))

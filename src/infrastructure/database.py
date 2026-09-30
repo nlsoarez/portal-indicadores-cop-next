@@ -30,6 +30,7 @@ CREATE TABLE IF NOT EXISTS users (
     password_hash TEXT NOT NULL,
     password_salt TEXT NOT NULL,
     must_change_password INTEGER NOT NULL DEFAULT 1,
+    auth_version INTEGER NOT NULL DEFAULT 1,
     active INTEGER NOT NULL DEFAULT 1,
     created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
 );
@@ -117,6 +118,14 @@ CREATE TABLE IF NOT EXISTS access_logs (
     created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
 );
 
+CREATE TABLE IF NOT EXISTS auth_throttle (
+    login TEXT PRIMARY KEY,
+    failure_count INTEGER NOT NULL DEFAULT 0,
+    window_started_at TEXT NOT NULL,
+    blocked_until TEXT
+);
+
+CREATE INDEX IF NOT EXISTS idx_auth_throttle_blocked ON auth_throttle(blocked_until);
 CREATE INDEX IF NOT EXISTS idx_results_segment_period ON indicator_results(segment_id, period);
 CREATE INDEX IF NOT EXISTS idx_results_user_segment ON indicator_results(user_id, segment_id);
 CREATE INDEX IF NOT EXISTS idx_uploads_segment_created ON uploads(segment_id, created_at DESC);
@@ -140,6 +149,7 @@ CREATE TABLE IF NOT EXISTS users (
     password_hash TEXT NOT NULL,
     password_salt TEXT NOT NULL,
     must_change_password INTEGER NOT NULL DEFAULT 1,
+    auth_version INTEGER NOT NULL DEFAULT 1,
     active INTEGER NOT NULL DEFAULT 1,
     created_at TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP
 );
@@ -227,6 +237,14 @@ CREATE TABLE IF NOT EXISTS access_logs (
     created_at TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP
 );
 
+CREATE TABLE IF NOT EXISTS auth_throttle (
+    login TEXT PRIMARY KEY,
+    failure_count INTEGER NOT NULL DEFAULT 0,
+    window_started_at TIMESTAMPTZ NOT NULL,
+    blocked_until TIMESTAMPTZ
+);
+
+CREATE INDEX IF NOT EXISTS idx_auth_throttle_blocked ON auth_throttle(blocked_until);
 CREATE INDEX IF NOT EXISTS idx_results_segment_period ON indicator_results(segment_id, period);
 CREATE INDEX IF NOT EXISTS idx_results_user_segment ON indicator_results(user_id, segment_id);
 CREATE INDEX IF NOT EXISTS idx_results_segment_month ON indicator_results(segment_id, data_month);
@@ -415,6 +433,9 @@ def initialize_database() -> None:
             conn.executescript(POSTGRES_SCHEMA)
             conn.execute("DROP TABLE IF EXISTS scales")
             conn.execute(
+                "ALTER TABLE users ADD COLUMN IF NOT EXISTS auth_version INTEGER NOT NULL DEFAULT 1"
+            )
+            conn.execute(
                 "ALTER TABLE indicator_definitions ADD COLUMN IF NOT EXISTS unit TEXT NOT NULL DEFAULT 'percent'"
             )
             conn.execute(
@@ -475,6 +496,7 @@ def initialize_database() -> None:
     with transaction() as conn:
         conn.executescript(SQLITE_SCHEMA)
         conn.execute("DROP TABLE IF EXISTS scales")
+        _ensure_column_sqlite(conn, "users", "auth_version", "INTEGER NOT NULL DEFAULT 1")
         _ensure_column_sqlite(conn, "indicator_definitions", "unit", "TEXT NOT NULL DEFAULT 'percent'")
         _ensure_column_sqlite(conn, "indicator_results", "data_month", "TEXT NOT NULL DEFAULT ''")
         conn.execute(

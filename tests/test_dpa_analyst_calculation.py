@@ -101,5 +101,74 @@ class DpaAnalystCalculationTest(unittest.TestCase):
         self.assertEqual(90.0, float(day["team_avg"]))
 
 
+    def test_productivity_team_reference_is_mean_of_analyst_monthly_averages(self):
+        from src.infrastructure.database import transaction
+        from src.infrastructure.repositories import (
+            IndicatorRepository,
+            SegmentRepository,
+            UserRepository,
+        )
+
+        users = UserRepository()
+        segment = SegmentRepository().get_by_slug("empresarial")
+        sandro = users.get_by_login("N5737414")
+        fernanda = users.get_by_login("F201714")
+
+        with transaction() as conn:
+            definition = conn.execute(
+                """
+                SELECT id
+                FROM indicator_definitions
+                WHERE segment_id=? AND indicator_key='productivity_avg_daily'
+                """,
+                (segment.id,),
+            ).fetchone()
+            definition_id = int(definition["id"])
+
+            rows = [
+                # Sandro: média mensal = (60 + 80) / 2 = 70.
+                (sandro.id, "2026-09-28", 60.0),
+                (sandro.id, "2026-09-29", 80.0),
+                # Fernanda: média mensal = 100.
+                (fernanda.id, "2026-09-29", 100.0),
+            ]
+            for user_id, period, value in rows:
+                conn.execute(
+                    """
+                    INSERT INTO indicator_results(
+                        segment_id, user_id, indicator_definition_id,
+                        period, data_month, value, volume
+                    ) VALUES (?, ?, ?, ?, '2026-09', ?, 1)
+                    """,
+                    (
+                        segment.id,
+                        user_id,
+                        definition_id,
+                        period,
+                        value,
+                    ),
+                )
+
+        payload = IndicatorRepository().dashboard_payload(segment.id, sandro.id)
+
+        personal = next(
+            row
+            for row in payload["summary"]
+            if row["indicator_key"] == "productivity_avg_daily"
+            and row["period"] == "2026-09"
+        )
+        team = next(
+            row
+            for row in payload["team_averages"]
+            if row["indicator_key"] == "productivity_avg_daily"
+            and row["period"] == "2026-09"
+        )
+
+        self.assertEqual(70.0, float(personal["value"]))
+        # Referência do setor = média das médias individuais:
+        # (70 + 100) / 2 = 85.
+        self.assertEqual(85.0, float(team["team_avg"]))
+
+
 if __name__ == "__main__":
     unittest.main()

@@ -15,6 +15,7 @@ from src.features.ingestion.source_catalog import UPLOAD_SOURCES
 from src.infrastructure.database import database_backend, database_is_persistent, persistence_diagnostics
 from src.infrastructure.repositories import IndicatorRepository, UploadRepository, UserRepository
 from src.ui.admin.certified_analysts import render_certified_analysts
+from src.ui.admin.leaders_overview import render_leaders_overview
 from src.ui.shared.chunked_upload import chunked_file_uploader, clear_chunked_upload
 from src.ui.shared.freshness import render_indicator_freshness
 from src.ui.shared.management_indicators import render_management_indicators
@@ -63,6 +64,12 @@ class AdminShell:
                 "<div class='cop-subtitle'>Status de certificação consolidado da equipe Residencial e Empresarial.</div>",
                 unsafe_allow_html=True,
             )
+        elif page == "Líderes":
+            st.markdown("<div class='cop-title'>👑 Visão dos Líderes</div>", unsafe_allow_html=True)
+            st.markdown(
+                "<div class='cop-subtitle'>Comparação entre os líderes e as médias das suas equipes.</div>",
+                unsafe_allow_html=True,
+            )
         else:
             st.markdown(f"<div class='cop-title'>{segment.name}</div>", unsafe_allow_html=True)
             st.markdown(
@@ -107,34 +114,13 @@ class AdminShell:
                 render_person_performance(ctx, segment.id, target, self.dashboard)
 
         elif page == "Líderes":
-            leaders = self.access.visible_subadmins(ctx)
-            st.caption("Área exclusiva do Admin. Líderes não aparecem na lista de analistas.")
-            if not leaders:
-                st.info("Nenhum líder cadastrado.")
-            else:
-                leader = st.selectbox(
-                    "Líder",
-                    leaders,
-                    format_func=lambda user: f"{user.display_name} · {user.login}",
-                    key="admin_leader",
-                )
-                performance_segments = self.users.performance_segments_for_user(leader.id)
-                if not performance_segments:
-                    st.info("Este líder ainda não possui segmento operacional para indicadores.")
-                else:
-                    perf_segment = performance_segments[0]
-                    st.caption(f"Indicadores operacionais: {perf_segment.name}")
-                    render_person_performance(
-                        ctx,
-                        perf_segment.id,
-                        leader,
-                        self.dashboard,
-                        comparison_label="vs média dos analistas",
-                    )
-                access_rows = self.users.last_access_for_subadmins()
-                current = next((row for row in access_rows if int(row["id"]) == leader.id), None)
-                if current:
-                    st.caption(f"Último acesso: {current.get('last_access') or 'Nunca acessou'}")
+            render_leaders_overview(
+                ctx,
+                segments,
+                self.dashboard,
+                self.access,
+                self.users,
+            )
 
         elif page == "Uploads":
             self._render_uploads(ctx)

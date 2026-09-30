@@ -371,6 +371,18 @@ def _render_indicator(
         )
         return
 
+    if ctx.is_admin and indicator_key == "toa_cancellation_rate":
+        from src.ui.admin.indicators.cancelled_tasks import render_admin_cancelled_tasks
+
+        render_admin_cancelled_tasks(
+            people=people,
+            metrics=metrics,
+            details=details,
+            period=period,
+            data_through=fresh.get("data_through") or period or "—",
+        )
+        return
+
     st.markdown(f"### {name}")
     st.caption(
         f"Competência: {period or '—'} · "

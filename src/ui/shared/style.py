@@ -542,7 +542,38 @@ def inject_global_style() -> None:
         }
 
         [data-testid="stCaptionContainer"] {
-            color:#8395ab;
+            color:#8ea0b5;
+            line-height:1.5;
+            margin-top:.1rem;
+            margin-bottom:.45rem;
+            max-width:1180px;
+        }
+
+        .main .block-container h2 {
+            margin-top:1.55rem;
+            margin-bottom:.62rem;
+            line-height:1.12;
+        }
+
+        .main .block-container h3 {
+            margin-top:1.25rem;
+            margin-bottom:.55rem;
+            line-height:1.16;
+        }
+
+        .main .block-container h4 {
+            margin-top:1rem;
+            margin-bottom:.45rem;
+            line-height:1.18;
+        }
+
+        .stTabs [data-baseweb="tab-panel"] > div[data-testid="stVerticalBlock"] {
+            gap:.9rem;
+        }
+
+        div[data-testid="stDataFrame"],
+        [data-testid="stExpander"] {
+            margin-top:.15rem;
         }
 
         ::-webkit-scrollbar {
@@ -572,21 +603,72 @@ def inject_global_style() -> None:
         }
 
         .stTabs [data-baseweb="tab-list"] {
-            gap:.35rem;
-            border-bottom:1px solid var(--cop-line);
+            gap:.42rem;
+            overflow-x:auto;
+            overflow-y:hidden;
+            padding:.3rem;
+            border:1px solid rgba(148,163,184,.12);
+            border-radius:14px;
+            background:
+                linear-gradient(180deg, rgba(12,28,46,.82), rgba(7,18,31,.88));
+            box-shadow:
+                inset 0 1px 0 rgba(255,255,255,.025),
+                0 10px 26px rgba(0,0,0,.08);
+            scrollbar-width:thin;
         }
 
         .stTabs [data-baseweb="tab"] {
-            height:40px;
-            border-radius:10px 10px 0 0;
-            padding:0 .8rem;
-            color:#91a2b7;
+            position:relative;
+            min-height:44px;
+            height:auto;
+            border:1px solid transparent !important;
+            border-radius:10px;
+            padding:.62rem .92rem;
+            color:#8fa0b6;
+            font-weight:720;
+            white-space:nowrap;
+            transition:
+                color .18s ease,
+                background .18s ease,
+                border-color .18s ease,
+                box-shadow .18s ease,
+                transform .18s ease;
+        }
+
+        .stTabs [data-baseweb="tab"]:hover {
+            color:#dce7f3;
+            background:rgba(255,255,255,.035);
+            border-color:rgba(148,163,184,.10) !important;
+            transform:translateY(-1px);
         }
 
         .stTabs [aria-selected="true"] {
-            background:rgba(237,28,36,.09);
             color:#fff !important;
-            border-bottom:2px solid var(--cop-red);
+            border-color:rgba(125,211,252,.18) !important;
+            background:
+                linear-gradient(135deg, rgba(24,54,82,.96), rgba(14,31,50,.98)) !important;
+            box-shadow:
+                0 8px 24px rgba(0,0,0,.18),
+                inset 0 0 0 1px rgba(255,255,255,.025);
+            transform:translateY(-1px);
+        }
+
+        .stTabs [aria-selected="true"]::after {
+            content:"";
+            position:absolute;
+            left:12px;
+            right:12px;
+            bottom:4px;
+            height:2px;
+            border-radius:999px;
+            background:linear-gradient(90deg, var(--cop-red), var(--cop-cyan));
+            box-shadow:0 0 14px rgba(56,189,248,.32);
+            animation:copTabAccent .34s ease both;
+        }
+
+        .stTabs [data-baseweb="tab-panel"] {
+            padding-top:1.1rem;
+            animation:copTabEnter .30s cubic-bezier(.2,.75,.25,1) both;
         }
 
         div[data-baseweb="select"] > div,
@@ -1063,6 +1145,30 @@ def inject_global_style() -> None:
         }
 
         /* Motion */
+        @keyframes copTabEnter {
+            from {
+                opacity:0;
+                transform:translateY(6px);
+                filter:blur(1.2px);
+            }
+            to {
+                opacity:1;
+                transform:translateY(0);
+                filter:blur(0);
+            }
+        }
+
+        @keyframes copTabAccent {
+            from {
+                opacity:0;
+                transform:scaleX(.35);
+            }
+            to {
+                opacity:1;
+                transform:scaleX(1);
+            }
+        }
+
         @keyframes copFadeUp {
             from { opacity:0; transform:translateY(8px); }
             to { opacity:1; transform:translateY(0); }

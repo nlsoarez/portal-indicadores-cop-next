@@ -239,8 +239,10 @@ def build_ranking_table(
         lambda row: _ratio(row["successes"], row["volume"]),
         axis=1,
     )
+    # O ranking operacional segue o volume de eventos, como na referência:
+    # quem atuou em mais eventos aparece primeiro; aderência desempata.
     totals = totals.sort_values(
-        ["Aderência %", "volume", "display_name"],
+        ["volume", "Aderência %", "display_name"],
         ascending=[False, False, True],
     ).reset_index(drop=True)
     totals.insert(0, "#", range(1, len(totals) + 1))

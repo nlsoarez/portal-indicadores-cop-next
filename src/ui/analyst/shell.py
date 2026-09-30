@@ -2595,6 +2595,59 @@ def _inject_analyst_styles() -> None:
             box-shadow:inset 3px 0 0 #ed1c24;
         }
 
+        .cop-validation-kpi {
+            min-height:116px;
+            padding:1rem 1.05rem;
+            border:1px solid rgba(148,163,184,.15);
+            border-top:3px solid #64748b;
+            border-radius:16px;
+            background:linear-gradient(180deg, rgba(16,38,61,.92), rgba(8,21,36,.98));
+            box-shadow:0 14px 30px rgba(0,0,0,.13);
+        }
+        .cop-validation-kpi span {
+            display:block;
+            color:#8fa0b6;
+            font-size:.66rem;
+            font-weight:900;
+            letter-spacing:.075em;
+            text-transform:uppercase;
+        }
+        .cop-validation-kpi strong {
+            display:block;
+            margin-top:.68rem;
+            color:#f7fbff;
+            font-size:1.72rem;
+            line-height:1;
+            font-weight:900;
+            letter-spacing:-.035em;
+        }
+        .cop-validation-good {
+            border-top-color:#31d58a;
+        }
+        .cop-validation-good strong {
+            color:#65e3a5;
+        }
+        .cop-validation-bad {
+            border-top-color:#ff4d5f;
+        }
+        .cop-validation-bad strong {
+            color:#ff6b79;
+        }
+        .cop-validation-attention,
+        .cop-validation-warning {
+            border-top-color:#f7b84b;
+        }
+        .cop-validation-attention strong,
+        .cop-validation-warning strong {
+            color:#ffc966;
+        }
+        .cop-validation-team {
+            border-top-color:#38bdf8;
+        }
+        .cop-validation-team strong {
+            color:#7dd3fc;
+        }
+
         .cop-cancel-user-kpi {
             min-height:118px;
             padding:1rem 1.05rem;

@@ -17,6 +17,7 @@ from src.ui.subadmin.shell import SubadminShell
 
 
 ACCESS_SNAPSHOT_TTL_SECONDS = 30.0
+MAX_SESSION_AGE_SECONDS = 12 * 60 * 60
 
 
 @st.cache_resource(show_spinner=False)
@@ -92,6 +93,8 @@ def _login() -> None:
             return
         st.session_state["user_id"] = result.user_id
         st.session_state["must_change_password"] = result.must_change_password
+        st.session_state["auth_version"] = result.auth_version
+        st.session_state["session_started_at"] = time.time()
         st.rerun()
 
 
@@ -128,11 +131,12 @@ def _change_password(user_id: int) -> None:
             st.error("As senhas não conferem.")
             return
         try:
-            AuthService().change_password(user_id, p1)
+            new_auth_version = AuthService().change_password(user_id, p1)
         except ValueError as exc:
             st.error(str(exc))
             return
         st.session_state["must_change_password"] = False
+        st.session_state["auth_version"] = new_auth_version
         st.session_state.pop("_access_snapshot", None)
         st.success("Senha alterada.")
         st.rerun()
@@ -147,6 +151,24 @@ def run() -> None:
     if not user_id:
         _login()
         return
+
+    auth_version = st.session_state.get("auth_version")
+    session_started_at = float(st.session_state.get("session_started_at") or 0)
+    session_expired = (
+        session_started_at <= 0
+        or time.time() - session_started_at > MAX_SESSION_AGE_SECONDS
+    )
+    auth = AuthService()
+    if (
+        session_expired
+        or auth_version is None
+        or not auth.session_is_valid(int(user_id), int(auth_version))
+    ):
+        st.session_state.clear()
+        st.warning("Sua sessão expirou ou foi revogada. Entre novamente.")
+        _login()
+        return
+
     if st.session_state.get("must_change_password"):
         _change_password(int(user_id))
         return

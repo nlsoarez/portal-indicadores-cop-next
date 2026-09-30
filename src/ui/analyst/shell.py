@@ -53,6 +53,21 @@ DETAIL_DIMENSIONS = {
 }
 
 
+INDICATOR_TAB_LABELS = {
+    "res_assert_fibra_hfc": "📡 Assert. HFC",
+    "res_assert_gpon": "📶 Assert. GPON",
+    "chat_10m": "💬 Chat",
+    "dpa_official": "⏱️ DPA",
+    "res_etit_fibra_hfc": "⚡ ETIT HFC",
+    "res_etit_gpon": "🔎 ETIT GPON",
+    "emp_etit_event": "⚡ ETIT Evento",
+    "productivity_avg_daily": "📦 Produtividade",
+    "validacao_20m": "✅ Validação",
+    "toa_cancellation_rate": "❌ Canceladas",
+    "closing_assertiveness": "🌙 Fechamento",
+}
+
+
 class AnalystShell:
     def __init__(self):
         self.dashboard = DashboardService()
@@ -464,6 +479,580 @@ class AnalystShell:
         st.markdown("### Histórico mensal")
         st.caption("A equipe aparece somente como média agregada de referência.")
         st.dataframe(pd.DataFrame(rows), use_container_width=True, hide_index=True)
+
+
+def _team_index(payload: dict) -> dict[tuple[str, str], dict]:
+    return {
+        (str(row.get("period")), str(row.get("indicator_key"))): row
+        for row in payload.get("team_averages") or []
+    }
+
+
+def _indicator_tab_label(indicator_key: str, name: str) -> str:
+    return INDICATOR_TAB_LABELS.get(indicator_key, f"📊 {name}")
+
+
+def _period_label(value: object) -> str:
+    text = str(value or "").strip()
+    if len(text) == 6 and text.isdigit():
+        months = (
+            "Janeiro",
+            "Fevereiro",
+            "Março",
+            "Abril",
+            "Maio",
+            "Junho",
+            "Julho",
+            "Agosto",
+            "Setembro",
+            "Outubro",
+            "Novembro",
+            "Dezembro",
+        )
+        month = int(text[4:6])
+        if 1 <= month <= 12:
+            return f"{months[month - 1]} {text[:4]}"
+    return text or "Período atual"
+
+
+def _render_identity_bar(
+    display_name: str,
+    segment_name: str,
+    latest: list[dict],
+) -> None:
+    periods = [str(row.get("period") or "") for row in latest if row.get("period")]
+    period = max(periods) if periods else ""
+    first_name = str(display_name or "").split()[0] if str(display_name or "").strip() else "Analista"
+
+    st.markdown(
+        (
+            "<section class='cop-analyst-identity'>"
+            "<div class='cop-analyst-identity-main'>"
+            "<div class='cop-analyst-eyebrow'>MEU PAINEL DE DESEMPENHO</div>"
+            f"<h1>Olá, {escape(first_name)}.</h1>"
+            "<p>Acompanhe seus resultados, entenda sua evolução e veja como você está "
+            "em relação à referência da sua equipe.</p>"
+            "<div class='cop-analyst-chips'>"
+            f"<span>📅 {escape(_period_label(period))}</span>"
+            f"<span>🏷️ {escape(segment_name)}</span>"
+            "<span>📍 Regional Leste</span>"
+            "</div>"
+            "</div>"
+            "<div class='cop-analyst-private'>🔒 Visão privada</div>"
+            "</section>"
+        ),
+        unsafe_allow_html=True,
+    )
+
+
+def _build_summary_snapshot(
+    latest: list[dict],
+    team_index: dict[tuple[str, str], dict],
+    freshness: list[dict],
+) -> dict:
+    tracked = len(latest)
+    with_target = 0
+    met = 0
+    with_team = 0
+    above_team = 0
+    best: tuple[float, dict, float] | None = None
+    attention: tuple[float, dict, float | None] | None = None
+
+    for row in latest:
+        value = _number(row.get("value"))
+        target = _number(row.get("target_value"))
+        direction = str(row.get("direction") or "higher_is_better")
+        key = str(row.get("indicator_key"))
+        period = str(row.get("period"))
+        team_avg = _number(team_index.get((period, key), {}).get("team_avg"))
+
+        if value is not None and target is not None:
+            with_target += 1
+            if _meets_target(value, target, direction):
+                met += 1
+            else:
+                shortfall = (
+                    target - value
+                    if direction != "lower_is_better"
+                    else value - target
+                )
+                if attention is None or shortfall > attention[0]:
+                    attention = (shortfall, row, team_avg)
+
+        if value is not None and team_avg is not None:
+            with_team += 1
+            score = (
+                value - team_avg
+                if direction != "lower_is_better"
+                else team_avg - value
+            )
+            if score >= 0:
+                above_team += 1
+            if best is None or score > best[0]:
+                best = (score, row, team_avg)
+
+    if attention is None:
+        worst: tuple[float, dict, float] | None = None
+        for row in latest:
+            value = _number(row.get("value"))
+            key = str(row.get("indicator_key"))
+            period = str(row.get("period"))
+            team_avg = _number(team_index.get((period, key), {}).get("team_avg"))
+            if value is None or team_avg is None:
+                continue
+            direction = str(row.get("direction") or "higher_is_better")
+            score = (
+                value - team_avg
+                if direction != "lower_is_better"
+                else team_avg - value
+            )
+            if worst is None or score < worst[0]:
+                worst = (score, row, team_avg)
+        if worst is not None and worst[0] < 0:
+            attention = (abs(worst[0]), worst[1], worst[2])
+
+    freshness_dates = [
+        pd.to_datetime(row.get("data_through"), errors="coerce")
+        for row in freshness
+        if row.get("data_through")
+    ]
+    freshness_dates = [value for value in freshness_dates if not pd.isna(value)]
+    if freshness_dates:
+        freshness_label = max(freshness_dates).strftime("%d/%m/%Y")
+    else:
+        periods = [str(row.get("period") or "") for row in latest if row.get("period")]
+        freshness_label = _period_label(max(periods) if periods else "")
+
+    if best is not None:
+        _, best_row, best_team = best
+        best_value = _number(best_row.get("value"))
+        best_title = str(best_row.get("name") or best_row.get("indicator_key") or "Indicador")
+        best_text = (
+            f"{_format_ptbr_metric(best_value, best_row.get('unit'))} vs "
+            f"{_format_ptbr_metric(best_team, best_row.get('unit'))} da equipe · "
+            f"{_comparison_label(best_value, best_team, str(best_row.get('direction') or 'higher_is_better'), best_row.get('unit'))}."
+        )
+    else:
+        best_title = "Comparação ainda indisponível"
+        best_text = "Os próximos processamentos vão ampliar a comparação com a equipe."
+
+    if attention is not None:
+        _, attention_row, attention_team = attention
+        attention_value = _number(attention_row.get("value"))
+        attention_title = str(
+            attention_row.get("name") or attention_row.get("indicator_key") or "Indicador"
+        )
+        comparison = _comparison_label(
+            attention_value,
+            attention_team,
+            str(attention_row.get("direction") or "higher_is_better"),
+            attention_row.get("unit"),
+        )
+        attention_text = (
+            f"Resultado {_format_ptbr_metric(attention_value, attention_row.get('unit'))} · "
+            f"{_target_text(attention_row)}"
+        )
+        if comparison != "—":
+            attention_text += f" · {comparison} que a equipe."
+    else:
+        attention_title = "Nenhuma meta crítica"
+        attention_text = (
+            "Os indicadores com meta configurada estão dentro do esperado neste período."
+        )
+
+    return {
+        "tracked": tracked,
+        "with_target": with_target,
+        "met": met,
+        "with_team": with_team,
+        "above_team": above_team,
+        "freshness_label": freshness_label,
+        "best_title": best_title,
+        "best_text": best_text,
+        "attention_title": attention_title,
+        "attention_text": attention_text,
+    }
+
+
+def _meets_target(value: float, target: float, direction: str) -> bool:
+    if direction == "lower_is_better":
+        return value <= target
+    return value >= target
+
+
+def _render_summary_kpi(
+    label: str,
+    value: str,
+    context: str,
+    tone: str,
+) -> None:
+    tone_class = " cop-personal-kpi-good" if tone == "good" else ""
+    st.markdown(
+        (
+            f"<div class='cop-personal-kpi{tone_class}'>"
+            f"<div class='cop-personal-kpi-label'>{escape(label)}</div>"
+            f"<div class='cop-personal-kpi-value'>{escape(value)}</div>"
+            f"<div class='cop-personal-kpi-context'>{escape(context)}</div>"
+            "</div>"
+        ),
+        unsafe_allow_html=True,
+    )
+
+
+def _render_summary_insight(
+    label: str,
+    title: str,
+    text: str,
+    tone: str,
+) -> None:
+    st.markdown(
+        (
+            f"<div class='cop-personal-insight cop-personal-insight-{escape(tone)}'>"
+            f"<div class='cop-personal-insight-label'>{escape(label)}</div>"
+            f"<div class='cop-personal-insight-title'>{escape(title)}</div>"
+            f"<div class='cop-personal-insight-text'>{escape(text)}</div>"
+            "</div>"
+        ),
+        unsafe_allow_html=True,
+    )
+
+
+def _render_indicator_status_card(row: dict, team: dict) -> None:
+    key = str(row.get("indicator_key"))
+    name = str(row.get("name") or key)
+    value = _number(row.get("value"))
+    team_avg = _number(team.get("team_avg"))
+    target = _number(row.get("target_value"))
+    direction = str(row.get("direction") or "higher_is_better")
+    unit = row.get("unit")
+
+    if target is None or value is None:
+        status = "Sem meta"
+        status_class = "neutral"
+    elif _meets_target(value, target, direction):
+        status = "Dentro da meta"
+        status_class = "good"
+    else:
+        status = "Atenção"
+        status_class = "attention"
+
+    comparison = _comparison_label(value, team_avg, direction, unit)
+    team_text = "—" if team_avg is None else _format_ptbr_metric(team_avg, unit)
+    volume = int(row.get("volume") or 0)
+    volume_html = (
+        ""
+        if key == "dpa_official"
+        else f"<span>Volume <b>{volume:,}</b></span>".replace(",", ".")
+    )
+
+    st.markdown(
+        (
+            f"<article class='cop-personal-status-card cop-status-{status_class}'>"
+            "<div class='cop-personal-status-head'>"
+            f"<div>{escape(name)}</div>"
+            f"<span>{escape(status)}</span>"
+            "</div>"
+            f"<div class='cop-personal-status-value'>{escape(_format_ptbr_metric(value, unit))}</div>"
+            "<div class='cop-personal-status-grid'>"
+            "<div><small>Média da equipe</small>"
+            f"<strong>{escape(team_text)}</strong></div>"
+            "<div><small>Comparação</small>"
+            f"<strong>{escape(comparison)}</strong></div>"
+            "</div>"
+            "<div class='cop-personal-status-footer'>"
+            f"<span>{escape(_target_text(row))}</span>"
+            f"{volume_html}"
+            "</div>"
+            "</article>"
+        ),
+        unsafe_allow_html=True,
+    )
+
+
+def _inject_analyst_styles() -> None:
+    st.markdown(
+        """
+        <style>
+        .cop-analyst-shell { height:0; overflow:hidden; }
+
+        .cop-analyst-identity {
+            position:relative;
+            overflow:hidden;
+            display:flex;
+            justify-content:space-between;
+            gap:2rem;
+            min-height:210px;
+            padding:2rem 2.15rem;
+            margin:.1rem 0 1.25rem;
+            border:1px solid rgba(148,163,184,.16);
+            border-radius:22px;
+            background:
+                radial-gradient(circle at 90% 10%, rgba(255,255,255,.09) 0 72px, transparent 73px),
+                radial-gradient(circle at 78% 115%, rgba(237,28,36,.28), transparent 31%),
+                linear-gradient(135deg, #111923 0%, #26171d 62%, #711019 100%);
+            box-shadow:0 22px 55px rgba(0,0,0,.25);
+        }
+        .cop-analyst-identity::after {
+            content:"";
+            position:absolute;
+            width:260px;
+            height:260px;
+            right:4%;
+            bottom:-145px;
+            border-radius:50%;
+            background:rgba(237,28,36,.18);
+        }
+        .cop-analyst-identity-main {
+            position:relative;
+            z-index:2;
+            max-width:850px;
+        }
+        .cop-analyst-eyebrow {
+            color:#ff9aa1;
+            font-size:.76rem;
+            font-weight:850;
+            letter-spacing:.12em;
+            margin-bottom:.8rem;
+        }
+        .cop-analyst-identity h1 {
+            margin:0 !important;
+            color:#fff !important;
+            font-size:clamp(2rem, 3vw, 3rem) !important;
+            line-height:1.05 !important;
+            font-weight:900 !important;
+            letter-spacing:-.045em !important;
+        }
+        .cop-analyst-identity p {
+            max-width:760px;
+            margin:.8rem 0 0 !important;
+            color:rgba(255,255,255,.78) !important;
+            font-size:1rem !important;
+            line-height:1.55 !important;
+        }
+        .cop-analyst-chips {
+            display:flex;
+            flex-wrap:wrap;
+            gap:.55rem;
+            margin-top:1.25rem;
+        }
+        .cop-analyst-chips span,
+        .cop-analyst-private {
+            display:inline-flex;
+            align-items:center;
+            gap:.35rem;
+            border:1px solid rgba(255,255,255,.13);
+            border-radius:999px;
+            background:rgba(255,255,255,.08);
+            color:#edf5fc;
+            padding:.42rem .75rem;
+            font-size:.76rem;
+            font-weight:750;
+        }
+        .cop-analyst-private {
+            position:relative;
+            z-index:2;
+            height:max-content;
+            color:#bff4d7;
+            background:rgba(39,174,96,.14);
+            border-color:rgba(84,224,142,.25);
+            white-space:nowrap;
+        }
+
+        .stApp:has(.cop-analyst-shell) .stTabs [data-baseweb="tab-list"] {
+            gap:.42rem;
+            overflow-x:auto;
+            padding:.3rem;
+            margin-bottom:.85rem;
+            border:1px solid rgba(148,163,184,.13);
+            border-radius:14px;
+            background:rgba(8,20,34,.78);
+        }
+        .stApp:has(.cop-analyst-shell) .stTabs [data-baseweb="tab"] {
+            min-height:44px;
+            border-radius:10px;
+            padding:.6rem .95rem;
+            color:#91a2b7;
+            font-weight:750;
+            white-space:nowrap;
+        }
+        .stApp:has(.cop-analyst-shell) .stTabs [aria-selected="true"] {
+            color:#fff !important;
+            border:1px solid rgba(237,28,36,.28);
+            border-bottom:1px solid rgba(237,28,36,.28) !important;
+            background:linear-gradient(135deg, rgba(237,28,36,.18), rgba(59,130,246,.08));
+            box-shadow:inset 3px 0 0 #ed1c24;
+        }
+
+        .cop-personal-kpi {
+            min-height:130px;
+            padding:1rem 1.05rem;
+            border:1px solid rgba(148,163,184,.15);
+            border-top:3px solid #38bdf8;
+            border-radius:16px;
+            background:linear-gradient(180deg, rgba(16,38,61,.88), rgba(9,22,37,.96));
+            box-shadow:0 14px 32px rgba(0,0,0,.14);
+        }
+        .cop-personal-kpi-good { border-top-color:#31d58a; }
+        .cop-personal-kpi-label {
+            color:#8fa0b6;
+            font-size:.68rem;
+            font-weight:850;
+            letter-spacing:.08em;
+            text-transform:uppercase;
+        }
+        .cop-personal-kpi-value {
+            margin-top:.55rem;
+            color:#f7fbff;
+            font-size:1.8rem;
+            line-height:1;
+            font-weight:900;
+            letter-spacing:-.04em;
+        }
+        .cop-personal-kpi-context {
+            margin-top:.55rem;
+            color:#8294aa;
+            font-size:.72rem;
+            line-height:1.35;
+        }
+
+        .cop-personal-insight {
+            min-height:122px;
+            padding:1rem 1.1rem;
+            border:1px solid rgba(148,163,184,.14);
+            border-left:4px solid;
+            border-radius:15px;
+            background:rgba(12,28,46,.84);
+        }
+        .cop-personal-insight-good { border-left-color:#31d58a; }
+        .cop-personal-insight-attention { border-left-color:#f7b84b; }
+        .cop-personal-insight-label {
+            color:#8294aa;
+            font-size:.66rem;
+            font-weight:850;
+            letter-spacing:.08em;
+            text-transform:uppercase;
+        }
+        .cop-personal-insight-title {
+            margin-top:.35rem;
+            color:#f6fbff;
+            font-size:1rem;
+            font-weight:850;
+        }
+        .cop-personal-insight-text {
+            margin-top:.4rem;
+            color:#a8b7c8;
+            font-size:.78rem;
+            line-height:1.45;
+        }
+
+        .cop-personal-status-card {
+            min-height:230px;
+            margin-bottom:12px;
+            padding:1rem 1.05rem;
+            border:1px solid rgba(148,163,184,.15);
+            border-top:3px solid #64748b;
+            border-radius:16px;
+            background:linear-gradient(180deg, rgba(16,38,61,.90), rgba(8,21,36,.97));
+            box-shadow:0 14px 30px rgba(0,0,0,.13);
+        }
+        .cop-status-good { border-top-color:#31d58a; }
+        .cop-status-attention { border-top-color:#f7b84b; }
+        .cop-personal-status-head {
+            min-height:44px;
+            display:flex;
+            justify-content:space-between;
+            gap:.65rem;
+            align-items:flex-start;
+            color:#dce8f4;
+            font-size:.76rem;
+            font-weight:800;
+            line-height:1.35;
+        }
+        .cop-personal-status-head span {
+            flex:0 0 auto;
+            padding:.24rem .5rem;
+            border-radius:999px;
+            color:#cbd7e4;
+            background:rgba(148,163,184,.10);
+            border:1px solid rgba(148,163,184,.15);
+            font-size:.60rem;
+        }
+        .cop-status-good .cop-personal-status-head span {
+            color:#8af0bd;
+            background:rgba(49,213,138,.09);
+            border-color:rgba(49,213,138,.20);
+        }
+        .cop-status-attention .cop-personal-status-head span {
+            color:#ffd183;
+            background:rgba(247,184,75,.09);
+            border-color:rgba(247,184,75,.22);
+        }
+        .cop-personal-status-value {
+            margin-top:.45rem;
+            color:#fff;
+            font-size:1.85rem;
+            font-weight:900;
+            letter-spacing:-.045em;
+        }
+        .cop-personal-status-grid {
+            display:grid;
+            grid-template-columns:1fr 1fr;
+            gap:.55rem;
+            margin-top:.8rem;
+        }
+        .cop-personal-status-grid > div {
+            padding:.6rem .65rem;
+            border-radius:10px;
+            background:rgba(255,255,255,.035);
+            border:1px solid rgba(148,163,184,.10);
+        }
+        .cop-personal-status-grid small {
+            display:block;
+            color:#73859a;
+            font-size:.60rem;
+            text-transform:uppercase;
+            letter-spacing:.06em;
+        }
+        .cop-personal-status-grid strong {
+            display:block;
+            margin-top:.22rem;
+            color:#dfe9f4;
+            font-size:.75rem;
+        }
+        .cop-personal-status-footer {
+            display:flex;
+            justify-content:space-between;
+            gap:.5rem;
+            flex-wrap:wrap;
+            margin-top:.75rem;
+            padding-top:.65rem;
+            border-top:1px solid rgba(148,163,184,.10);
+            color:#8294aa;
+            font-size:.67rem;
+        }
+        .cop-personal-status-footer b { color:#b9c8d7; }
+
+        @media (max-width: 900px) {
+            .cop-analyst-identity {
+                min-height:auto;
+                padding:1.35rem;
+                display:block;
+            }
+            .cop-analyst-private {
+                margin-top:1rem;
+                width:max-content;
+            }
+            .cop-analyst-identity h1 {
+                font-size:2rem !important;
+            }
+            .cop-analyst-identity p {
+                font-size:.9rem !important;
+            }
+        }
+        </style>
+        """,
+        unsafe_allow_html=True,
+    )
 
 
 def _latest_by_indicator(rows: list[dict]) -> list[dict]:

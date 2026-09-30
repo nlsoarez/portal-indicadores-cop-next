@@ -17,9 +17,11 @@ def render_admin_residential_etit(
     period: str,
     data_through: str,
 ) -> None:
-    """Visão operacional dedicada ao Admin para ETIT GPON/HFC."""
+    """Visão operacional dedicada ao Admin para ETIT/Assertividade GPON e HFC."""
 
-    title = "ETIT GPON" if indicator_key == "res_etit_gpon" else "ETIT HFC"
+    labels = _indicator_labels(indicator_key)
+    title = labels["title"]
+    is_gpon = labels["is_gpon"]
     base_detail = _overall_detail(details, indicator_key)
     base_numbers = _overall_numbers(rows, base_detail)
 
@@ -27,7 +29,7 @@ def render_admin_residential_etit(
 
     header = (
         f"🔎 {title} — {base_numbers['volume']} registros · "
-        f"{base_numbers['adherence']:.1f}% aderência"
+        f"{base_numbers['adherence']:.1f}% {labels['rate_lower']}"
     )
     with st.expander(header, expanded=True):
         st.caption(
@@ -38,14 +40,15 @@ def render_admin_residential_etit(
         scoped_details = details.copy()
         scoped_analyst_breakdowns = analyst_breakdowns.copy()
 
-        # Regra de negócio: somente GPON é segmentado por Brownfield/Greenfield.
-        if indicator_key == "res_etit_gpon":
+        # Regra de negócio: GPON é segmentado por Brownfield/Greenfield;
+        # HFC permanece consolidado, tanto em ETIT quanto em Assertividade.
+        if is_gpon:
             service_rows = _dimension_rows(details, "service")
             service_table = dimension_table(service_rows, "Serviço")
             if not service_table.empty:
                 st.markdown("#### Consolidado por serviço GPON")
                 st.dataframe(
-                    style_table(service_table, volume_cmap="Blues"),
+                    style_table(_presentation_table(service_table, labels), volume_cmap="Blues"),
                     use_container_width=True,
                     hide_index=True,
                 )
@@ -84,7 +87,7 @@ def render_admin_residential_etit(
         selected_detail = _overall_detail(scoped_details, indicator_key)
         numbers = _overall_numbers(rows, selected_detail)
 
-        _render_metric_cards(numbers)
+        _render_metric_cards(numbers, labels)
 
         st.markdown("#### 👥 Por Analista")
         analyst_table = analyst_table_for_etit(
@@ -92,7 +95,7 @@ def render_admin_residential_etit(
             metrics,
             service_rows=(
                 scoped_analyst_breakdowns
-                if indicator_key == "res_etit_gpon" and service_choice != "Todos"
+                if is_gpon and service_choice != "Todos"
                 else None
             ),
         )
@@ -100,7 +103,7 @@ def render_admin_residential_etit(
             st.info("Nenhum analista com resultado para este recorte.")
         else:
             st.dataframe(
-                style_table(analyst_table, volume_cmap="Blues"),
+                style_table(_presentation_table(analyst_table, labels), volume_cmap="Blues"),
                 use_container_width=True,
                 hide_index=True,
             )
@@ -127,7 +130,7 @@ def render_admin_residential_etit(
                 unsafe_allow_html=True,
             )
             st.dataframe(
-                style_table(group_table, volume_cmap="Blues"),
+                style_table(_presentation_table(group_table, labels), volume_cmap="Blues"),
                 use_container_width=True,
                 hide_index=True,
             )
@@ -137,7 +140,7 @@ def render_admin_residential_etit(
         if not solution_table.empty:
             st.markdown("#### Top 15 Soluções")
             st.dataframe(
-                style_table(solution_table, volume_cmap="YlOrRd"),
+                style_table(_presentation_table(solution_table, labels), volume_cmap="YlOrRd"),
                 use_container_width=True,
                 hide_index=True,
             )
@@ -147,7 +150,7 @@ def render_admin_residential_etit(
         if not impact_table.empty:
             st.markdown("#### Por Impacto")
             st.dataframe(
-                style_table(impact_table, volume_cmap="Blues"),
+                style_table(_presentation_table(impact_table, labels), volume_cmap="Blues"),
                 use_container_width=True,
                 hide_index=True,
             )
@@ -319,22 +322,88 @@ def analyst_table_for_etit(
 
 
 def style_table(frame: pd.DataFrame, *, volume_cmap: str = "Blues"):
+    percent_columns = [
+        column
+        for column in (
+            "Aderência %",
+            "Não Aderência %",
+            "Assertividade %",
+            "Não Assertividade %",
+        )
+        if column in frame.columns
+    ]
     styler = frame.style.format(
-        {
-            "Aderência %": "{:.1f}",
-            "Não Aderência %": "{:.1f}",
-        },
+        {column: "{:.1f}" for column in percent_columns},
         na_rep="—",
     )
     if "Volume" in frame.columns and pd.to_numeric(
         frame["Volume"], errors="coerce"
     ).notna().any():
         styler = styler.background_gradient(cmap=volume_cmap, subset=["Volume"])
-    if "Aderência %" in frame.columns and pd.to_numeric(
-        frame["Aderência %"], errors="coerce"
+
+    result_column = next(
+        (
+            column
+            for column in ("Aderência %", "Assertividade %")
+            if column in frame.columns
+        ),
+        None,
+    )
+    if result_column and pd.to_numeric(
+        frame[result_column], errors="coerce"
     ).notna().any():
-        styler = styler.background_gradient(cmap="Greens", subset=["Aderência %"])
+        styler = styler.background_gradient(cmap="Greens", subset=[result_column])
     return styler
+
+
+def _indicator_labels(indicator_key: str) -> dict:
+    is_assertiveness = indicator_key in {
+        "res_assert_gpon",
+        "res_assert_fibra_hfc",
+    }
+    is_gpon = indicator_key in {
+        "res_etit_gpon",
+        "res_assert_gpon",
+    }
+
+    if is_assertiveness:
+        title = "Assertividade GPON" if is_gpon else "Assertividade HFC"
+        return {
+            "title": title,
+            "is_gpon": is_gpon,
+            "is_assertiveness": True,
+            "success": "Assertivos",
+            "loss": "Não Assertivos",
+            "rate": "Assertividade",
+            "non_rate": "Não Assertividade",
+            "rate_lower": "assertividade",
+        }
+
+    title = "ETIT GPON" if is_gpon else "ETIT HFC"
+    return {
+        "title": title,
+        "is_gpon": is_gpon,
+        "is_assertiveness": False,
+        "success": "Aderentes",
+        "loss": "Não Aderentes",
+        "rate": "Aderência",
+        "non_rate": "Não Aderência",
+        "rate_lower": "aderência",
+    }
+
+
+def _presentation_table(frame: pd.DataFrame, labels: dict) -> pd.DataFrame:
+    if frame is None or frame.empty or not labels.get("is_assertiveness"):
+        return frame
+
+    return frame.rename(
+        columns={
+            "Aderentes": labels["success"],
+            "Não Aderentes": labels["loss"],
+            "Aderência %": f"{labels['rate']} %",
+            "Não Aderência %": f"{labels['non_rate']} %",
+        }
+    )
 
 
 def _inject_styles() -> None:
@@ -378,13 +447,13 @@ def _inject_styles() -> None:
     )
 
 
-def _render_metric_cards(numbers: dict) -> None:
+def _render_metric_cards(numbers: dict, labels: dict) -> None:
     first_row = (
         ("VOLUME", str(numbers["volume"]), "#8e44ad"),
-        ("ADERENTES", str(numbers["successes"]), "#27ae60"),
-        ("NÃO ADERENTES", str(numbers["losses"]), "#e74c3c"),
-        ("ADERÊNCIA", f"{numbers['adherence']:.1f}%", "#27ae60"),
-        ("NÃO ADERÊNCIA", f"{numbers['non_adherence']:.1f}%", "#e74c3c"),
+        (labels["success"].upper(), str(numbers["successes"]), "#27ae60"),
+        (labels["loss"].upper(), str(numbers["losses"]), "#e74c3c"),
+        (labels["rate"].upper(), f"{numbers['adherence']:.1f}%", "#27ae60"),
+        (labels["non_rate"].upper(), f"{numbers['non_adherence']:.1f}%", "#e74c3c"),
     )
     columns = st.columns(5)
     for column, (label, value, color) in zip(columns, first_row):

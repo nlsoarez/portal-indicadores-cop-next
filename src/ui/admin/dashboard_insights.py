@@ -235,13 +235,14 @@ def _inject_styles() -> None:
         """
         <style>
         .cop-dashboard-insight {
-            background:#fff;
-            border:1px solid rgba(15,23,42,.07);
+            background:linear-gradient(180deg, rgba(15,32,52,.96), rgba(9,22,37,.98));
+            border:1px solid rgba(148,163,184,.16);
             border-left:3px solid;
-            border-radius:12px;
-            padding:14px 16px;
-            min-height:88px;
-            margin-bottom:10px;
+            border-radius:14px;
+            padding:16px 18px;
+            min-height:104px;
+            margin-bottom:12px;
+            color:#eef5fb;
         }
         .cop-dashboard-insight-head {
             display:flex;
@@ -252,29 +253,35 @@ def _inject_styles() -> None:
         }
         .cop-dashboard-sector {
             display:inline-block;
-            background:#eef7fd;
-            border:1px solid #b9d9ee;
+            background:rgba(56,189,248,.10);
+            border:1px solid rgba(56,189,248,.28);
+            color:#9be2ff;
             border-radius:7px;
             padding:2px 7px;
-            margin-left:6px;
+            margin-left:7px;
             font-size:.62rem;
             font-weight:800;
         }
         .cop-dashboard-rank {
             display:inline-block;
-            background:#f3f4f6;
-            border:1px solid #e5e7eb;
+            background:rgba(148,163,184,.10);
+            border:1px solid rgba(148,163,184,.18);
+            color:#cbd7e6;
             border-radius:7px;
             padding:2px 7px;
             margin-left:6px;
             font-size:.61rem;
         }
+        .cop-dashboard-insight strong {
+            color:#f8fbff;
+        }
         .cop-dashboard-metric {
             white-space:nowrap;
             text-align:right;
+            color:#dce7f3;
         }
         .cop-dashboard-dpa {
-            color:#9ca3af;
+            color:#8fa1b6;
             font-size:.70rem;
             margin-left:6px;
         }
@@ -283,7 +290,7 @@ def _inject_styles() -> None:
             font-size:.72rem;
         }
         .cop-dashboard-label {
-            color:#a1a1aa;
+            color:#8fa1b6;
         }
         .cop-dashboard-gap {
             margin-left:9px;
@@ -297,17 +304,17 @@ def _inject_styles() -> None:
             font-weight:700;
         }
         .cop-dashboard-tag-green {
-            color:#0b6b2d;
-            background:rgba(34,197,94,.11);
-            border:1px solid rgba(34,197,94,.28);
+            color:#72e8ad;
+            background:rgba(34,197,94,.10);
+            border:1px solid rgba(34,197,94,.30);
         }
         .cop-dashboard-tag-red {
-            color:#b42318;
+            color:#ff8b94;
             background:rgba(239,68,68,.10);
-            border:1px solid rgba(239,68,68,.28);
+            border:1px solid rgba(239,68,68,.32);
         }
         .cop-dashboard-empty {
-            color:#c5c7cc;
+            color:#66788d;
         }
         </style>
         """,

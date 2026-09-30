@@ -155,6 +155,57 @@ class AnalystShell:
                 self._render_history(payload)
             return
 
+        if segment.slug == "residencial":
+            latest_index = {
+                str(row.get("indicator_key")): row
+                for row in latest
+            }
+            summary_tab, indicators_tab, cancelled_tab, certified_tab, history_tab = st.tabs(
+                [
+                    "🏠 Resumo",
+                    "📊 Indicadores",
+                    "❌ Canceladas",
+                    "✅ Analista Certificado",
+                    "↺ Histórico",
+                ]
+            )
+
+            with summary_tab:
+                self._render_summary(payload, latest)
+                with st.expander("Atualização dos meus indicadores", expanded=False):
+                    render_indicator_freshness(
+                        payload.get("freshness") or [],
+                        compact=True,
+                        show_title=False,
+                        columns=3,
+                    )
+
+            with indicators_tab:
+                residential_indicators = [
+                    row
+                    for row in latest
+                    if str(row.get("indicator_key")) != "toa_cancellation_rate"
+                ]
+                self._render_indicator_tabs(payload, residential_indicators)
+
+            with cancelled_tab:
+                row = latest_index.get("toa_cancellation_rate")
+                if row is None:
+                    st.info("Ainda não há dados processados de Tarefas Canceladas.")
+                else:
+                    team = _team_index(payload).get(
+                        (str(row.get("period")), "toa_cancellation_rate"),
+                        {},
+                    )
+                    self._render_indicator(payload, row, team)
+
+            with certified_tab:
+                self._render_residential_certification(payload, latest)
+
+            with history_tab:
+                self._render_history(payload)
+            return
+
         summary_tab, indicators_tab, history_tab = st.tabs(
             ["🏠 Resumo", "📊 Indicadores", "↺ Histórico"]
         )
@@ -213,6 +264,76 @@ class AnalystShell:
                 dpa,
                 "dpa",
             )
+
+        st.markdown("### 🧭 Leitura do seu desempenho")
+        feedback = _build_analyst_performance_feedback(
+            latest,
+            _team_index(payload),
+            payload.get("breakdowns") or [],
+            payload.get("team_breakdowns") or [],
+        )
+        _render_performance_reading(feedback)
+
+    def _render_residential_certification(
+        self,
+        payload: dict,
+        latest: list[dict],
+    ) -> None:
+        latest_index = {
+            str(row.get("indicator_key")): row
+            for row in latest
+        }
+
+        etit_hfc = _number(
+            (latest_index.get("res_etit_fibra_hfc") or {}).get("value")
+        )
+        dpa = _number(
+            (latest_index.get("dpa_official") or {}).get("value")
+        )
+        assert_hfc = _number(
+            (latest_index.get("res_assert_fibra_hfc") or {}).get("value")
+        )
+        assert_gpon = _number(
+            (latest_index.get("res_assert_gpon") or {}).get("value")
+        )
+        assert_values = [
+            value
+            for value in (assert_hfc, assert_gpon)
+            if value is not None
+        ]
+        assert_avg = (
+            sum(assert_values) / len(assert_values)
+            if assert_values
+            else None
+        )
+
+        certification = _residential_certification_status(
+            etit_hfc,
+            dpa,
+            assert_hfc,
+            assert_gpon,
+        )
+
+        st.markdown(
+            "### 🎯 Status de Certificação — ETIT Fibra HFC & DPA & Assertividade"
+        )
+        _render_residential_certification_status(certification)
+
+        cols = st.columns(5)
+        metrics = [
+            ("ETIT FIBRA HFC %", etit_hfc, "etit"),
+            ("DPA INDIVIDUAL %", dpa, "dpa"),
+            ("ASSERT. FIBRA HFC %", assert_hfc, "assert"),
+            ("ASSERT. GPON %", assert_gpon, "assert"),
+            ("MÉDIA ASSERTIVIDADE %", assert_avg, "assert"),
+        ]
+        for column, (label, value, kind) in zip(cols, metrics):
+            with column:
+                _render_residential_certification_metric(
+                    label,
+                    value,
+                    kind,
+                )
 
         st.markdown("### 🧭 Leitura do seu desempenho")
         feedback = _build_analyst_performance_feedback(

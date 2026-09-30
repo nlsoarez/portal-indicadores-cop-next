@@ -127,6 +127,22 @@ Como alternativas, cada fonte também aceita `DRIVE_ID/FOLDER_ID` ou a URL compa
 A App Registration do Microsoft Entra precisa permitir **public client flows/device code**.
 Não é necessário client secret para este piloto.
 
+### Criar a App Registration
+
+No Microsoft Entra, use uma aplicação dedicada ao piloto:
+
+1. **App registrations → New registration**.
+2. Nome sugerido: `Portal Indicadores COP - ETIT`.
+3. Tipos de conta: somente contas deste diretório organizacional (single tenant).
+4. Não configure Redirect URI.
+5. Em **Authentication**, habilite **Allow public client flows**.
+6. Em **API permissions**, adicione **Microsoft Graph → Delegated permissions → Files.Read.All**.
+7. Em **Overview**, copie **Directory (tenant) ID** e **Application (client) ID** para `.env.vps`.
+
+A permissão delegada `Files.Read.All` é somente leitura. Ela não exige consentimento
+administrativo por definição do Microsoft Graph, mas uma política corporativa do tenant pode
+bloquear consentimento pelo próprio usuário; nesse caso, TI precisa aprovar a aplicação.
+
 ### Primeiro login
 
 Após o deploy:
@@ -171,11 +187,18 @@ O instalador usa 18:30 (America/Sao_Paulo) por padrão, para capturar atualizaç
 bash deploy/hostinger/install-m365-etit-cron.sh
 ```
 
+O cron é instalado de forma independente do timezone configurado na VPS: ele avalia o relógio
+de `America/Sao_Paulo` antes de executar o sincronismo. Isso evita deslocamento de horário em
+hosts configurados em UTC e também evita depender do suporte do daemon a `CRON_TZ`.
+
 Para outro horário:
 
 ```bash
 SYNC_HOUR=6 SYNC_MINUTE=30 bash deploy/hostinger/install-m365-etit-cron.sh
 ```
+
+Use `bash deploy/hostinger/check.sh` para comparar o horário do host, o horário de São Paulo e
+confirmar a entrada instalada em `/etc/cron.d/portal-indicadores-m365-etit`.
 
 Log:
 

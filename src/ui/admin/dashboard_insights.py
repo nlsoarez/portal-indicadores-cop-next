@@ -48,6 +48,10 @@ def render_dashboard_insights(
 
     _inject_styles()
     st.markdown("### 💡 Insights — Pontos Fortes e Oportunidades")
+    st.caption(
+        "Leitura comparativa dos analistas dentro do próprio setor, priorizando volume, "
+        "ritmo e componentes que realmente diferenciam a atuação."
+    )
     _render_insight_cards(insights)
 
 

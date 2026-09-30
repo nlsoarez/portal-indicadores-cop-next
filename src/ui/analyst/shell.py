@@ -352,6 +352,7 @@ class AnalystShell:
 
         if indicator_key == "toa_cancellation_rate":
             self._render_cancelled_tasks_view(
+                payload,
                 row,
                 team,
                 details,
@@ -483,22 +484,28 @@ class AnalystShell:
 
     def _render_cancelled_tasks_view(
         self,
+        payload: dict,
         row: dict,
         team: dict,
         details: pd.DataFrame,
         team_details: pd.DataFrame,
     ) -> None:
+        etit_volume = _indicator_volume_for_period(
+            payload.get("summary") or [],
+            "emp_etit_event",
+            str(row.get("period") or ""),
+        )
         summary = _cancelled_tasks_user_summary(
             details,
             team_details,
-            analyst_pct=_number(row.get("value")),
+            etit_volume=etit_volume,
             target_pct=_number(row.get("target_value")) or 15.0,
         )
 
         cards = [
             (
-                "TOTAL — TAREFAS CANCELADAS",
-                _format_integer(summary["cancelled"]),
+                "VOLUME ETIT",
+                _format_integer(summary["etit_volume"]),
                 "neutral",
             ),
             (
@@ -1675,7 +1682,7 @@ def _cancelled_tasks_user_summary(
     details: pd.DataFrame,
     team_details: pd.DataFrame,
     *,
-    analyst_pct: float | None = None,
+    etit_volume: float | None = None,
     target_pct: float = 15.0,
 ) -> dict:
     overall = _dimension_rows(details, "overall")
@@ -1707,15 +1714,17 @@ def _cancelled_tasks_user_summary(
         if analyst_count > 0:
             team_average = team_losses / analyst_count
 
-    pct = _number(analyst_pct)
+    # A taxa de cancelamento usa como denominador o volume total do ETIT por
+    # Evento do mesmo analista/período. A planilha de Tarefas Canceladas contém
+    # apenas as ocorrências de cancelamento e, portanto, não pode ser usada como
+    # denominador da própria taxa.
+    base_volume = _number(etit_volume)
+    pct = (
+        None
+        if base_volume is None or base_volume <= 0
+        else cancelled / base_volume * 100
+    )
     target = float(target_pct)
-    if pct is None:
-        volume = float(
-            pd.to_numeric(overall.get("volume"), errors="coerce")
-            .fillna(0)
-            .sum()
-        ) if not overall.empty else 0.0
-        pct = None if volume <= 0 else cancelled / volume * 100
 
     # Meta operacional oficial: até 15% de cancelamento. Quanto menor, melhor.
     tone = "neutral"
@@ -1729,6 +1738,7 @@ def _cancelled_tasks_user_summary(
 
     return {
         "cancelled": cancelled,
+        "etit_volume": base_volume,
         "team_average": team_average,
         "analyst_pct": pct,
         "target_pct": target,
@@ -2841,6 +2851,33 @@ def _closing_infer_demand_for_day(details: pd.DataFrame, day: str) -> str:
     if len(positive_demands) == 1:
         return next(iter(positive_demands))
     return ""
+
+
+def _indicator_volume_for_period(
+    rows: list[dict],
+    indicator_key: str,
+    period: str,
+) -> float | None:
+    candidates = [
+        row
+        for row in rows or []
+        if str(row.get("indicator_key") or "") == indicator_key
+    ]
+    if not candidates:
+        return None
+
+    exact = [
+        row
+        for row in candidates
+        if str(row.get("period") or "") == str(period or "")
+    ]
+    selected = exact if exact else candidates
+    selected = sorted(
+        selected,
+        key=lambda row: str(row.get("period") or ""),
+        reverse=True,
+    )
+    return _number(selected[0].get("volume"))
 
 
 def _team_index(payload: dict) -> dict[tuple[str, str], dict]:

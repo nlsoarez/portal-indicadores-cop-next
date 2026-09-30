@@ -3022,6 +3022,151 @@ def _inject_analyst_styles() -> None:
             box-shadow:inset 3px 0 0 #ed1c24;
         }
 
+        .cop-user-cert-status {
+            margin:.2rem 0 .75rem;
+            padding:1.3rem 1.45rem 1.2rem;
+            border:1px solid rgba(148,163,184,.15);
+            border-left:4px solid #64748b;
+            border-radius:17px;
+            background:linear-gradient(135deg, rgba(15,35,56,.95), rgba(9,22,37,.98));
+            text-align:center;
+            box-shadow:0 16px 34px rgba(0,0,0,.14);
+        }
+        .cop-user-cert-team {
+            color:#8497ad;
+            font-size:.67rem;
+            font-weight:900;
+            letter-spacing:.085em;
+        }
+        .cop-user-cert-title {
+            margin-top:.38rem;
+            color:#f6fbff;
+            font-size:1.32rem;
+            line-height:1.15;
+            font-weight:900;
+            letter-spacing:-.025em;
+        }
+        .cop-user-cert-message {
+            margin-top:.42rem;
+            color:#9fb0c2;
+            font-size:.76rem;
+            line-height:1.5;
+        }
+        .cop-user-cert-good {
+            border-left-color:#31d58a;
+        }
+        .cop-user-cert-good .cop-user-cert-title {
+            color:#65e3a5;
+        }
+        .cop-user-cert-attention {
+            border-left-color:#f7b84b;
+        }
+        .cop-user-cert-attention .cop-user-cert-title {
+            color:#ffc966;
+        }
+        .cop-user-cert-bad {
+            border-left-color:#ff4d5f;
+        }
+        .cop-user-cert-bad .cop-user-cert-title {
+            color:#ff6b79;
+        }
+
+        .cop-user-cert-metric {
+            min-height:118px;
+            padding:1rem 1.05rem;
+            border:1px solid rgba(148,163,184,.15);
+            border-left:4px solid #64748b;
+            border-radius:16px;
+            background:linear-gradient(180deg, rgba(16,38,61,.92), rgba(8,21,36,.98));
+            text-align:center;
+            box-shadow:0 14px 30px rgba(0,0,0,.13);
+        }
+        .cop-user-cert-metric span {
+            display:block;
+            color:#8fa0b6;
+            font-size:.67rem;
+            font-weight:900;
+            letter-spacing:.075em;
+        }
+        .cop-user-cert-metric strong {
+            display:block;
+            margin-top:.7rem;
+            color:#f7fbff;
+            font-size:1.85rem;
+            line-height:1;
+            font-weight:900;
+        }
+        .cop-user-cert-metric-good {
+            border-left-color:#31d58a;
+        }
+        .cop-user-cert-metric-good strong {
+            color:#65e3a5;
+        }
+        .cop-user-cert-metric-attention {
+            border-left-color:#f7b84b;
+        }
+        .cop-user-cert-metric-attention strong {
+            color:#ffc966;
+        }
+        .cop-user-cert-metric-bad {
+            border-left-color:#ff4d5f;
+        }
+        .cop-user-cert-metric-bad strong {
+            color:#ff6b79;
+        }
+
+        .cop-user-reading-summary {
+            margin:.25rem 0 .9rem;
+            padding:1.05rem 1.2rem;
+            border:1px solid rgba(148,163,184,.15);
+            border-left:4px solid #64748b;
+            border-radius:16px;
+            background:linear-gradient(135deg, rgba(14,31,50,.92), rgba(9,22,37,.98));
+            color:#dce7f2;
+            font-size:.82rem;
+            line-height:1.55;
+            text-align:center;
+        }
+        .cop-user-reading-card {
+            min-height:150px;
+            padding:1.05rem 1.1rem;
+            border:1px solid rgba(148,163,184,.15);
+            border-left:4px solid #64748b;
+            border-radius:16px;
+            background:linear-gradient(180deg, rgba(16,38,61,.91), rgba(8,21,36,.98));
+            box-shadow:0 14px 30px rgba(0,0,0,.12);
+            text-align:center;
+        }
+        .cop-user-reading-card > div {
+            font-size:.67rem;
+            font-weight:900;
+            letter-spacing:.075em;
+        }
+        .cop-user-reading-card p {
+            margin:.75rem 0 0;
+            color:#c7d4e2;
+            font-size:.77rem;
+            line-height:1.55;
+        }
+        .cop-user-reading-good {
+            border-left-color:#31d58a;
+        }
+        .cop-user-reading-good > div {
+            color:#65e3a5;
+        }
+        .cop-user-reading-attention {
+            border-left-color:#f7b84b;
+        }
+        .cop-user-reading-attention > div {
+            color:#ffc966;
+        }
+        .cop-user-reading-suggestion {
+            border-left-color:#38bdf8;
+        }
+        .cop-user-reading-suggestion > div {
+            color:#7dd3fc;
+        }
+
         .cop-validation-kpi {
             min-height:116px;
             padding:1rem 1.05rem;

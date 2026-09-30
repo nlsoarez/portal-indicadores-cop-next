@@ -249,6 +249,18 @@ class AnalystShell:
             self._render_cancelled_tasks_view(details, team_details)
             return
 
+        if indicator_key == "validacao_20m":
+            details = _latest_indicator_rows(
+                payload.get("breakdowns") or [],
+                indicator_key,
+            )
+            self._render_validation_time_view(
+                row,
+                team,
+                details,
+            )
+            return
+
         if indicator_key == "productivity_avg_daily":
             details = _latest_indicator_rows(
                 payload.get("breakdowns") or [],
@@ -328,6 +340,38 @@ class AnalystShell:
         self._render_loss_references(details, indicator_key)
         self._render_full_detail(details, team_details, indicator_key, direction)
         self._render_recent_evolution(payload, indicator_key, unit)
+
+    def _render_validation_time_view(
+        self,
+        row: dict,
+        team: dict,
+        details: pd.DataFrame,
+    ) -> None:
+        summary = _validation_time_user_summary(row, team, details)
+
+        cols = st.columns(6)
+        cards = [
+            ("TOTAL", _format_integer(summary["total"]), "neutral"),
+            ("ADERENTES", _format_integer(summary["successes"]), "good"),
+            ("NÃO ADERENTES", _format_integer(summary["losses"]), "bad"),
+            ("ADERÊNCIA", _pct(summary["adherence"]), "good" if summary["adherence"] is not None and summary["adherence"] >= 85 else "attention"),
+            ("TMR MÉDIO (MIN)", _format_decimal(summary["tmr_minutes"]), "warning"),
+            ("MÉDIA DA EQUIPE", _pct(summary["team_avg"]), "team"),
+        ]
+        for column, (label, value, tone) in zip(cols, cards):
+            with column:
+                _render_validation_kpi(label, value, tone)
+
+        st.markdown("#### 🗺️ Por Grupo (IN_GRUPO) — Regional Leste")
+        group_table = _validation_group_table(details)
+        if group_table.empty:
+            st.caption("Sem dados por grupo disponíveis para este período.")
+        else:
+            st.dataframe(
+                group_table,
+                use_container_width=True,
+                hide_index=True,
+            )
 
     def _render_cancelled_tasks_view(
         self,

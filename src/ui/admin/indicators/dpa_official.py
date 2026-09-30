@@ -34,7 +34,7 @@ def render_admin_dpa(
         "Os percentuais representam o consolidado de ocupação disponível para cada analista."
     )
 
-    _render_kpis(summary)
+    _render_kpis(summary, period or data_through)
 
     st.markdown("#### 🏆 Ranking de Ocupação DPA por Analista")
     ranking = build_dpa_ranking(people)
@@ -230,9 +230,22 @@ def format_month_label(value: str | None) -> str:
     return f"{months[date.month - 1]} {date.year}"
 
 
-def _render_kpis(summary: dict) -> None:
+def _month_abbrev(value: str | None) -> str:
+    raw = str(value or "").strip()
+    try:
+        date = datetime.strptime(raw[:7], "%Y-%m")
+    except ValueError:
+        return "ATUAL"
+    abbreviations = (
+        "JAN", "FEV", "MAR", "ABR", "MAI", "JUN",
+        "JUL", "AGO", "SET", "OUT", "NOV", "DEZ",
+    )
+    return abbreviations[date.month - 1]
+
+
+def _render_kpis(summary: dict, period: str | None) -> None:
     cards = (
-        ("DPA EQUIPE", f"{summary['team_dpa']:.1f}%", "#18a957"),
+        (f"DPA EQUIPE ({_month_abbrev(period)})", f"{summary['team_dpa']:.1f}%", "#18a957"),
         ("ANALISTAS MONITORADOS", str(summary["monitored"]), "#2e86c1"),
         ("≥ 90% 🟢", str(summary["green"]), "#18a957"),
         ("ABAIXO DE 85% 🔴", str(summary["red"]), "#e74c3c"),

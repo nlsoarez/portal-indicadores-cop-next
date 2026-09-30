@@ -14,10 +14,12 @@ def main() -> int:
     os.environ["DATABASE_URL"] = admin_url
     os.environ["COP_DB_AUTO_MIGRATE"] = "1"
 
+    from src.config.seed import seed_foundation
     from src.infrastructure.database import initialize_database
 
     initialize_database()
-    print("Migração de schema concluída.")
+    seed_foundation()
+    print("Migração de schema e seed de configuração concluídos.")
     return 0
 
 

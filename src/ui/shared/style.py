@@ -125,6 +125,24 @@ def inject_global_style() -> None:
             border-radius:11px !important;
         }
 
+        .cop-sidebar-section {
+            margin:.95rem 0 .35rem;
+            color:#66788d;
+            font-size:.58rem;
+            font-weight:850;
+            letter-spacing:.14em;
+        }
+
+        [data-testid="stSidebar"] [data-testid="stSelectbox"] {
+            margin-bottom:.25rem;
+        }
+
+        [data-testid="stSidebar"] [data-testid="stSelectbox"] label {
+            color:#8fa0b6 !important;
+            font-size:.68rem !important;
+            font-weight:700 !important;
+        }
+
         .cop-brand-shell {
             padding:.25rem .1rem 1.05rem;
             border-bottom:1px solid var(--cop-line);

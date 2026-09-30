@@ -148,6 +148,27 @@ def _atomic_json_write(path: Path, payload: dict[str, Any]) -> None:
         pass
 
 
+def _looks_like_placeholder(value: str) -> bool:
+    normalized = value.strip().upper()
+    if not normalized:
+        return False
+    explicit = {
+        "SEU_TENANT_ID",
+        "SEU_CLIENT_ID",
+        "TENANT_ID",
+        "CLIENT_ID",
+        "YOUR_TENANT_ID",
+        "YOUR_CLIENT_ID",
+    }
+    return (
+        normalized in explicit
+        or normalized.startswith("SEU_")
+        or normalized.startswith("YOUR_")
+        or normalized.startswith("<")
+        or normalized.endswith(">")
+    )
+
+
 class M365TokenProvider:
     def __init__(
         self,
@@ -167,10 +188,21 @@ class M365TokenProvider:
 
     @property
     def configured(self) -> bool:
-        return bool(self.tenant_id and self.client_id and self.scopes)
+        return bool(
+            self.tenant_id
+            and self.client_id
+            and self.scopes
+            and not _looks_like_placeholder(self.tenant_id)
+            and not _looks_like_placeholder(self.client_id)
+        )
 
     def _build_app(self):
         if not self.configured:
+            if _looks_like_placeholder(self.tenant_id) or _looks_like_placeholder(self.client_id):
+                raise M365ConfigurationError(
+                    "M365_TENANT_ID/M365_CLIENT_ID ainda contêm valores de exemplo. "
+                    "Substitua pelos IDs reais da App Registration antes de autenticar."
+                )
             raise M365ConfigurationError(
                 "Configure M365_TENANT_ID e M365_CLIENT_ID antes de autenticar."
             )

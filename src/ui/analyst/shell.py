@@ -1810,6 +1810,64 @@ def _inject_analyst_styles() -> None:
             box-shadow:inset 3px 0 0 #ed1c24;
         }
 
+        .cop-etit-user-kpi {
+            min-height:112px;
+            padding:1rem 1.05rem;
+            border:1px solid rgba(148,163,184,.15);
+            border-top:3px solid #38bdf8;
+            border-radius:16px;
+            background:linear-gradient(180deg, rgba(16,38,61,.90), rgba(8,21,36,.97));
+            box-shadow:0 14px 30px rgba(0,0,0,.13);
+        }
+        .cop-etit-user-kpi span,
+        .cop-etit-team-card span {
+            display:block;
+            color:#8294aa;
+            font-size:.66rem;
+            font-weight:850;
+            letter-spacing:.07em;
+            text-transform:uppercase;
+        }
+        .cop-etit-user-kpi strong {
+            display:block;
+            margin-top:.6rem;
+            color:#f7fbff;
+            font-size:1.7rem;
+            line-height:1;
+            font-weight:900;
+            letter-spacing:-.035em;
+        }
+        .cop-etit-team-card {
+            min-height:118px;
+            padding:1rem 1.05rem;
+            margin-bottom:.65rem;
+            border:1px solid rgba(148,163,184,.15);
+            border-top:3px solid #64748b;
+            border-radius:16px;
+            background:linear-gradient(180deg, rgba(16,38,61,.90), rgba(8,21,36,.97));
+        }
+        .cop-etit-team-card strong {
+            display:block;
+            margin-top:.62rem;
+            color:#f5f9fd;
+            font-size:1.75rem;
+            line-height:1;
+            font-weight:900;
+            letter-spacing:-.035em;
+        }
+        .cop-etit-team-good {
+            border-top-color:#31d58a;
+        }
+        .cop-etit-team-good strong {
+            color:#65e3a5;
+        }
+        .cop-etit-team-attention {
+            border-top-color:#f7b84b;
+        }
+        .cop-etit-team-attention strong {
+            color:#ffc966;
+        }
+
         .cop-personal-kpi {
             min-height:130px;
             padding:1rem 1.05rem;

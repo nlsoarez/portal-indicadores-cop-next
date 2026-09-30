@@ -1954,6 +1954,89 @@ def _inject_analyst_styles() -> None:
             box-shadow:inset 3px 0 0 #ed1c24;
         }
 
+        .cop-dpa-chart {
+            margin-top:.4rem;
+            padding:1rem 1.05rem .8rem;
+            border:1px solid rgba(148,163,184,.15);
+            border-radius:16px;
+            background:linear-gradient(180deg, rgba(16,38,61,.90), rgba(8,21,36,.97));
+            box-shadow:0 14px 30px rgba(0,0,0,.12);
+        }
+        .cop-dpa-chart-scale {
+            display:flex;
+            justify-content:space-between;
+            gap:1rem;
+            margin-bottom:.65rem;
+            color:#6f8196;
+            font-size:.65rem;
+        }
+        .cop-dpa-chart-row {
+            display:grid;
+            grid-template-columns:72px minmax(0,1fr);
+            gap:.8rem;
+            align-items:center;
+            padding:.72rem 0;
+            border-top:1px solid rgba(148,163,184,.08);
+        }
+        .cop-dpa-chart-row:first-of-type {
+            border-top:0;
+        }
+        .cop-dpa-chart-date {
+            color:#dbe7f3;
+            font-size:.78rem;
+            font-weight:850;
+        }
+        .cop-dpa-chart-bars {
+            display:grid;
+            gap:.42rem;
+        }
+        .cop-dpa-chart-line {
+            display:grid;
+            grid-template-columns:72px minmax(0,1fr) 56px;
+            gap:.6rem;
+            align-items:center;
+        }
+        .cop-dpa-chart-series {
+            color:#8395aa;
+            font-size:.64rem;
+            font-weight:750;
+        }
+        .cop-dpa-chart-line strong {
+            color:#f4f8fc;
+            font-size:.72rem;
+            text-align:right;
+        }
+        .cop-dpa-chart-track {
+            position:relative;
+            height:10px;
+            overflow:hidden;
+            border-radius:999px;
+            background:rgba(148,163,184,.10);
+        }
+        .cop-dpa-chart-bar {
+            height:100%;
+            border-radius:inherit;
+            transform:scaleX(0);
+            transform-origin:left center;
+            animation:copDpaBarGrow .78s cubic-bezier(.2,.75,.25,1) forwards;
+        }
+        .cop-dpa-chart-mine {
+            background:linear-gradient(90deg, #38bdf8, #60a5fa);
+        }
+        .cop-dpa-chart-team {
+            background:linear-gradient(90deg, #31d58a, #6ee7b7);
+        }
+        @keyframes copDpaBarGrow {
+            from { transform:scaleX(0); opacity:.35; }
+            to { transform:scaleX(1); opacity:1; }
+        }
+        @media (prefers-reduced-motion: reduce) {
+            .cop-dpa-chart-bar {
+                animation:none;
+                transform:scaleX(1);
+            }
+        }
+
         .cop-etit-user-kpi {
             min-height:112px;
             padding:1rem 1.05rem;

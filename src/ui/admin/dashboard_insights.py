@@ -199,11 +199,14 @@ def _render_insight_cards(insights: list[dict]) -> None:
 
 
 def _short_name(value) -> str:
+    # Mesma regra do dashboard legado: primeiro + último sobrenome.
     text = " ".join(str(value or "").split())
     if not text:
         return "—"
     parts = text.split()
-    return " ".join(parts[:2]).upper()
+    if len(parts) <= 2:
+        return text.upper()
+    return f"{parts[0]} {parts[-1]}".upper()
 
 
 def _sector_abbrev(value: str) -> str:

@@ -357,6 +357,20 @@ def _render_indicator(
         )
         return
 
+    if ctx.is_admin and indicator_key == "validacao_20m":
+        from src.ui.admin.indicators.validation_time import render_admin_validation_time
+
+        render_admin_validation_time(
+            rows=rows,
+            people=people,
+            metrics=metrics,
+            details=details,
+            period=period,
+            data_through=fresh.get("data_through") or period or "—",
+            target=target,
+        )
+        return
+
     st.markdown(f"### {name}")
     st.caption(
         f"Competência: {period or '—'} · "

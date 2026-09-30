@@ -42,6 +42,10 @@ class AdminShell:
         )
 
     def render(self, ctx: AccessContext, segments: list[Segment]) -> None:
+        render_sidebar_brand(
+            role="admin",
+            user_name=ctx.user.display_name,
+        )
         segment = st.sidebar.selectbox(
             "Segmento em foco",
             segments,
@@ -49,12 +53,6 @@ class AdminShell:
             key="admin_segment_selector",
         )
         switch_segment_state(st.session_state, segment.id)
-
-        render_sidebar_brand(
-            role="admin",
-            user_name=ctx.user.display_name,
-            segment_name=segment.name,
-        )
 
         nav_icons = {
             "Dashboard": "◉",

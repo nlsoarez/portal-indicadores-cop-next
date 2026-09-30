@@ -1,9 +1,11 @@
 import unittest
 
 from src.integrations.m365_etit import (
+    EtitPilotSource,
     PILOT_SOURCES,
     graph_share_id,
     remote_changed,
+    resolve_folder_by_owner_path,
     select_latest_file,
 )
 
@@ -76,6 +78,58 @@ class M365EtitPilotTest(unittest.TestCase):
 
         self.assertEqual("emp", latest.item_id)
         self.assertEqual("202609", latest.competence)
+
+    def test_source_accepts_owner_and_folder_path_configuration(self):
+        source = EtitPilotSource(
+            source_key="x",
+            label="X",
+            env_prefix="TEST_M365",
+            filename_regex=r".*",
+        )
+        import os
+        previous_owner = os.environ.get("TEST_M365_OWNER_UPN")
+        previous_path = os.environ.get("TEST_M365_FOLDER_PATH")
+        try:
+            os.environ["TEST_M365_OWNER_UPN"] = "user@example.com"
+            os.environ["TEST_M365_FOLDER_PATH"] = "Indicadores/Novo BI"
+            self.assertTrue(source.configured)
+            self.assertEqual("user@example.com", source.owner_upn)
+            self.assertEqual("Indicadores/Novo BI", source.folder_path)
+        finally:
+            if previous_owner is None:
+                os.environ.pop("TEST_M365_OWNER_UPN", None)
+            else:
+                os.environ["TEST_M365_OWNER_UPN"] = previous_owner
+            if previous_path is None:
+                os.environ.pop("TEST_M365_FOLDER_PATH", None)
+            else:
+                os.environ["TEST_M365_FOLDER_PATH"] = previous_path
+
+    def test_owner_path_resolver_uses_user_drive_path(self):
+        class FakeClient:
+            def __init__(self):
+                self.path = None
+
+            def get_json(self, path):
+                self.path = path
+                return {
+                    "id": "folder-id",
+                    "name": "Novo BI",
+                    "parentReference": {"driveId": "drive-id"},
+                    "folder": {},
+                }
+
+        client = FakeClient()
+        drive_id, folder_id = resolve_folder_by_owner_path(
+            client,
+            "fernando@example.com",
+            "Indicadores COP/Analítico Residencial/Novo BI",
+        )
+
+        self.assertEqual("drive-id", drive_id)
+        self.assertEqual("folder-id", folder_id)
+        self.assertIn("/users/fernando%40example.com/drive/root:/", client.path)
+        self.assertIn("Anal%C3%ADtico%20Residencial", client.path)
 
     def test_remote_changed_uses_etag_and_metadata(self):
         source = next(

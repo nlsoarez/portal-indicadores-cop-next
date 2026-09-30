@@ -503,6 +503,11 @@ def _indicator_tab_label(indicator_key: str, name: str) -> str:
     return INDICATOR_TAB_LABELS.get(indicator_key, f"📊 {name}")
 
 
+def _indicator_icon(indicator_key: str) -> str:
+    label = INDICATOR_TAB_LABELS.get(indicator_key, "📊")
+    return label.split(" ", 1)[0] if label else "📊"
+
+
 def _period_label(value: object) -> str:
     text = str(value or "").strip()
     if len(text) == 6 and text.isdigit():
@@ -810,12 +815,17 @@ def _render_indicator_status_card(row: dict, team: dict) -> None:
         else f"<span>Volume <b>{volume:,}</b></span>".replace(",", ".")
     )
 
+    icon = _indicator_icon(key)
+
     st.markdown(
         (
             f"<article class='cop-personal-status-card cop-status-{status_class}'>"
             "<div class='cop-personal-status-head'>"
-            f"<div>{escape(name)}</div>"
-            f"<span>{escape(status)}</span>"
+            "<div class='cop-personal-status-title'>"
+            f"<span class='cop-personal-status-icon'>{escape(icon)}</span>"
+            f"<strong>{escape(name)}</strong>"
+            "</div>"
+            f"<span class='cop-personal-status-pill'>{escape(status)}</span>"
             "</div>"
             f"<div class='cop-personal-status-value'>{escape(_format_ptbr_metric(value, unit))}</div>"
             "<div class='cop-personal-status-grid'>"

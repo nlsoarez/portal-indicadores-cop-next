@@ -839,44 +839,111 @@ class IndicatorRepository:
 
             team_averages = conn.execute(
                 """
+                WITH user_month AS (
+                    SELECT
+                        ir.data_month AS period,
+                        d.indicator_key,
+                        d.name,
+                        d.unit,
+                        ir.user_id,
+                        ROUND(
+                            CAST(SUM(ir.value * ir.volume) AS NUMERIC)
+                            / NULLIF(SUM(ir.volume), 0),
+                            4
+                        ) AS user_avg,
+                        SUM(ir.value * ir.volume) AS weighted_value,
+                        SUM(ir.volume) AS user_volume
+                    FROM indicator_results ir
+                    JOIN indicator_definitions d ON d.id=ir.indicator_definition_id
+                    JOIN users u ON u.id=ir.user_id AND u.active=1
+                    JOIN user_roles ur ON ur.user_id=ir.user_id
+                    JOIN roles r ON r.id=ur.role_id AND r.code='analyst'
+                    WHERE ir.segment_id=? AND d.active=1
+                    GROUP BY
+                        ir.data_month,
+                        d.indicator_key,
+                        d.name,
+                        d.unit,
+                        ir.user_id
+                )
                 SELECT
-                    ir.data_month AS period,
-                    d.indicator_key,
-                    d.name,
-                    d.unit,
-                    ROUND(CAST(SUM(ir.value * ir.volume) AS NUMERIC) / NULLIF(SUM(ir.volume), 0), 1) AS team_avg,
-                    SUM(ir.volume) AS team_volume,
-                    COUNT(DISTINCT ir.user_id) AS analysts_with_data,
-                    ROUND(CAST(SUM(ir.volume) AS NUMERIC) / NULLIF(COUNT(DISTINCT ir.user_id), 0), 1)
-                        AS avg_volume_per_analyst
-                FROM indicator_results ir
-                JOIN indicator_definitions d ON d.id=ir.indicator_definition_id
-                JOIN user_roles ur ON ur.user_id=ir.user_id
-                JOIN roles r ON r.id=ur.role_id AND r.code='analyst'
-                WHERE ir.segment_id=? AND d.active=1
-                GROUP BY ir.data_month, d.indicator_key, d.name, d.unit
-                ORDER BY period DESC, d.name
+                    period,
+                    indicator_key,
+                    name,
+                    unit,
+                    CASE
+                        WHEN indicator_key='dpa_official'
+                            THEN ROUND(AVG(user_avg), 1)
+                        ELSE ROUND(
+                            CAST(SUM(weighted_value) AS NUMERIC)
+                            / NULLIF(SUM(user_volume), 0),
+                            1
+                        )
+                    END AS team_avg,
+                    SUM(user_volume) AS team_volume,
+                    COUNT(*) AS analysts_with_data,
+                    ROUND(
+                        CAST(SUM(user_volume) AS NUMERIC)
+                        / NULLIF(COUNT(*), 0),
+                        1
+                    ) AS avg_volume_per_analyst
+                FROM user_month
+                GROUP BY period, indicator_key, name, unit
+                ORDER BY period DESC, name
                 """,
                 (segment_id,),
             ).fetchall()
 
             team_daily = conn.execute(
                 """
+                WITH user_day AS (
+                    SELECT
+                        ir.period,
+                        ir.data_month,
+                        d.indicator_key,
+                        d.name,
+                        d.unit,
+                        ir.user_id,
+                        ROUND(
+                            CAST(SUM(ir.value * ir.volume) AS NUMERIC)
+                            / NULLIF(SUM(ir.volume), 0),
+                            4
+                        ) AS user_avg,
+                        SUM(ir.value * ir.volume) AS weighted_value,
+                        SUM(ir.volume) AS user_volume
+                    FROM indicator_results ir
+                    JOIN indicator_definitions d ON d.id=ir.indicator_definition_id
+                    JOIN users u ON u.id=ir.user_id AND u.active=1
+                    JOIN user_roles ur ON ur.user_id=ir.user_id
+                    JOIN roles r ON r.id=ur.role_id AND r.code='analyst'
+                    WHERE ir.segment_id=? AND d.active=1
+                    GROUP BY
+                        ir.period,
+                        ir.data_month,
+                        d.indicator_key,
+                        d.name,
+                        d.unit,
+                        ir.user_id
+                )
                 SELECT
-                    ir.period,
-                    ir.data_month,
-                    d.indicator_key,
-                    d.name,
-                    d.unit,
-                    ROUND(CAST(SUM(ir.value * ir.volume) AS NUMERIC) / NULLIF(SUM(ir.volume), 0), 1) AS team_avg,
-                    SUM(ir.volume) AS team_volume
-                FROM indicator_results ir
-                JOIN indicator_definitions d ON d.id=ir.indicator_definition_id
-                JOIN user_roles ur ON ur.user_id=ir.user_id
-                JOIN roles r ON r.id=ur.role_id AND r.code='analyst'
-                WHERE ir.segment_id=? AND d.active=1
-                GROUP BY ir.period, ir.data_month, d.indicator_key, d.name, d.unit
-                ORDER BY ir.period, d.name
+                    period,
+                    data_month,
+                    indicator_key,
+                    name,
+                    unit,
+                    CASE
+                        WHEN indicator_key='dpa_official'
+                            THEN ROUND(AVG(user_avg), 1)
+                        ELSE ROUND(
+                            CAST(SUM(weighted_value) AS NUMERIC)
+                            / NULLIF(SUM(user_volume), 0),
+                            1
+                        )
+                    END AS team_avg,
+                    SUM(user_volume) AS team_volume
+                FROM user_day
+                GROUP BY period, data_month, indicator_key, name, unit
+                ORDER BY period, name
                 """,
                 (segment_id,),
             ).fetchall()

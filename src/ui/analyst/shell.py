@@ -537,8 +537,14 @@ class AnalystShell:
         team_avg = _number(team.get("team_avg"))
         target = _number(row.get("target_value"))
         volume = int(_number(row.get("volume")) or 0)
-        summary = _etit_operational_summary(details)
-        losses = summary["losses"]
+        if details.empty:
+            losses = (
+                0
+                if value is None or volume <= 0
+                else int(round(volume * max(100.0 - value, 0.0) / 100.0))
+            )
+        else:
+            losses = _etit_operational_summary(details)["losses"]
 
         cards = [
             ("Meu resultado", _pct(value)),

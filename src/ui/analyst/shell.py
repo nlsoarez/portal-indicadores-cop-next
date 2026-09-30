@@ -160,12 +160,10 @@ class AnalystShell:
                 str(row.get("indicator_key")): row
                 for row in latest
             }
-            summary_tab, indicators_tab, cancelled_tab, certified_tab, history_tab = st.tabs(
+            summary_tab, indicators_tab, history_tab = st.tabs(
                 [
                     "🏠 Resumo",
                     "📊 Indicadores",
-                    "❌ Canceladas",
-                    "✅ Analista Certificado",
                     "↺ Histórico",
                 ]
             )
@@ -181,26 +179,51 @@ class AnalystShell:
                     )
 
             with indicators_tab:
-                residential_indicators = [
+                residential_order = [
+                    "res_etit_fibra_hfc",
+                    "res_etit_gpon",
+                    "res_assert_fibra_hfc",
+                    "res_assert_gpon",
+                    "dpa_official",
+                    "validacao_20m",
+                    "chat_10m",
+                    "productivity_avg_daily",
+                    "toa_cancellation_rate",
+                ]
+                ordered_rows = [
+                    latest_index[key]
+                    for key in residential_order
+                    if key in latest_index
+                ]
+                remaining_rows = [
                     row
                     for row in latest
-                    if str(row.get("indicator_key")) != "toa_cancellation_rate"
+                    if str(row.get("indicator_key")) not in residential_order
                 ]
-                self._render_indicator_tabs(payload, residential_indicators)
+                ordered_rows.extend(remaining_rows)
 
-            with cancelled_tab:
-                row = latest_index.get("toa_cancellation_rate")
-                if row is None:
-                    st.info("Ainda não há dados processados de Tarefas Canceladas.")
-                else:
-                    team = _team_index(payload).get(
-                        (str(row.get("period")), "toa_cancellation_rate"),
-                        {},
+                sub_labels = [
+                    _indicator_tab_label(
+                        str(row.get("indicator_key")),
+                        str(row.get("name") or "Indicador"),
                     )
-                    self._render_indicator(payload, row, team)
+                    for row in ordered_rows
+                ]
+                sub_labels.append("✅ Analista Certificado")
+                sub_tabs = st.tabs(sub_labels)
 
-            with certified_tab:
-                self._render_residential_certification(payload, latest)
+                team_index = _team_index(payload)
+                for tab, row in zip(sub_tabs[:-1], ordered_rows):
+                    with tab:
+                        key = str(row.get("indicator_key"))
+                        team = team_index.get(
+                            (str(row.get("period")), key),
+                            {},
+                        )
+                        self._render_indicator(payload, row, team)
+
+                with sub_tabs[-1]:
+                    self._render_residential_certification(payload, latest)
 
             with history_tab:
                 self._render_history(payload)

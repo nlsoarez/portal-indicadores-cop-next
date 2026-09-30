@@ -260,6 +260,19 @@ def _render_source(
         st.info("Nenhum indicador desta fonte possui dados na competência atual.")
         return
 
+    if ctx.is_admin and source_label == "Indicadores Residencial":
+        from src.ui.admin.indicators.residential_overview import (
+            render_admin_residential_overview,
+        )
+
+        render_admin_residential_overview(
+            indicator_keys=tuple(visible_keys),
+            segment_df=segment_df,
+            analyst_df=analyst_df,
+            analyst_breakdowns_df=analyst_breakdowns_df,
+            breakdown_df=breakdown_df,
+        )
+
     indicator_tabs = st.tabs(indicator_names)
     for indicator_tab, key in zip(indicator_tabs, visible_keys):
         with indicator_tab:

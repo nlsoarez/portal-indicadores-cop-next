@@ -128,14 +128,15 @@ def run() -> None:
         st.error("Seu usuário não possui segmento autorizado.")
         return
 
-    with st.sidebar:
-        if st.button("Sair", use_container_width=True):
-            st.session_state.clear()
-            st.rerun()
-
     if ctx.is_admin:
         AdminShell().render(ctx, segments)
     elif ctx.is_subadmin:
         SubadminShell().render(ctx, segments)
     else:
         AnalystShell().render(ctx, segments)
+
+    with st.sidebar:
+        st.divider()
+        if st.button("Sair", use_container_width=True, key="portal_logout"):
+            st.session_state.clear()
+            st.rerun()

@@ -58,6 +58,22 @@ def parse_productivity(raw_bytes: bytes, allowed_logins: set[str]) -> tuple[Pars
         latest_anomes = max(latest_anomes, anomes)
         aggregates[(anomes, login, period)] += total
 
+        # Preserva o volume total exato no breakdown para a visão administrativa.
+        # O analyst_summary armazena média/dia arredondada e quantidade de dias,
+        # portanto value * volume pode perder alguns pontos por arredondamento.
+        if total > 0:
+            add_ratio(
+                breakdowns,
+                anomes=anomes,
+                scope="team",
+                login=login,
+                period=period,
+                dimension="productivity_total",
+                dimension_value="Volume Total",
+                successes=total,
+                volume=total,
+            )
+
         for column, label in PRODUCTIVITY_COMPONENTS.items():
             amount = as_float(row.get(column), 0)
             if amount <= 0:

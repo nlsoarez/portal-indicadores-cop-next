@@ -33,7 +33,7 @@ def render_sidebar_brand(
             "<div class='cop-brand-product'>Portal de Desempenho</div>"
             "<div class='cop-brand-context'>COP REDE</div>"
             "</div>"
-            f"<div class='cop-user-mini' style="--cop-mini-art:url('{globe}')">"
+            f"<div class='cop-user-mini' style='--cop-mini-art:url(\"{globe}\")'>"
             "<div>"
             f"<strong>{escape(user_name)}</strong>"
             f"<span>{escape(role_label)}</span>"
@@ -87,7 +87,7 @@ def render_dashboard_hero(
     art = webp_data_uri("hero")
     st.markdown(
         (
-            f"<section class='cop-hero' style="--cop-hero-art:url('{art}')">"
+            f"<section class='cop-hero' style='--cop-hero-art:url(\"{art}\")'>"
             "<div class='cop-hero-copy'>"
             f"<span>{escape(kicker)}</span>"
             f"<h2>{escape(title)}</h2>"
@@ -106,7 +106,7 @@ def render_login_intro() -> None:
     art = webp_data_uri("hero")
     st.markdown(
         (
-            f"<section class='cop-login-hero' style="--cop-hero-art:url('{art}')">"
+            f"<section class='cop-login-hero' style='--cop-hero-art:url(\"{art}\")'>"
             "<div class='cop-login-copy'>"
             "<span>COP REDE · Operação conectada</span>"
             "<h1>Performance que gera resultado.</h1>"

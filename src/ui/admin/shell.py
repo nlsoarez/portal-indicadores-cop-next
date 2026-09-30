@@ -92,7 +92,7 @@ class AdminShell:
                 title="Indicadores",
                 subtitle="Visões consolidadas, rankings, causas e recortes operacionais.",
                 eyebrow="Performance operacional",
-                badge=segment.name,
+                badge=segment_label,
             )
         elif page == "Analista Certificado":
             render_page_header(
@@ -105,7 +105,7 @@ class AdminShell:
                 title="Analistas",
                 subtitle="Aprofunde o desempenho individual sem perder a referência da equipe.",
                 eyebrow="Gestão de pessoas",
-                badge=segment.name,
+                badge=segment_label,
             )
         elif page == "Líderes":
             render_page_header(
@@ -124,7 +124,7 @@ class AdminShell:
                 title="Auditoria",
                 subtitle="Consulte último acesso e sinais básicos de uso por segmento.",
                 eyebrow="Governança",
-                badge=segment.name,
+                badge=segment_label,
             )
 
         if page == "Dashboard":

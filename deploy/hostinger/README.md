@@ -76,7 +76,9 @@ portal-indicadores.179-198-124-8.sslip.io
 O arquivo `.env.vps` deve continuar fora do Git. Exemplo mínimo:
 
 ```env
-DATABASE_URL=postgresql://...
+DATABASE_URL=postgresql://cop_portal_app.PROJECT_REF:...
+DATABASE_ADMIN_URL=postgresql://postgres.PROJECT_REF:...
+COP_DB_AUTO_MIGRATE=0
 DB_POOL_MAX_SIZE=8
 PORTAL_PORT=8501
 # Obrigatório somente para o primeiro ADMIN de um banco PostgreSQL novo:
@@ -84,6 +86,20 @@ COP_ADMIN_BOOTSTRAP_PASSWORD=...
 ```
 
 Não faça commit da URI real do banco nem de senhas.
+
+### Papel PostgreSQL de runtime
+
+O processo web não deve operar como `postgres`. Antes de ativar o modo separado:
+
+1. revise `deploy/supabase/runtime-role.sql.example`;
+2. crie `cop_portal_app` no Supabase com senha forte gerada fora do Git;
+3. configure `DATABASE_URL` com esse papel;
+4. mantenha `DATABASE_ADMIN_URL` restrita ao deploy;
+5. defina `COP_DB_AUTO_MIGRATE=0`.
+
+Quando esse modo está ativo, `deploy.sh` executa `python -m src.infrastructure.migrate`
+com a credencial administrativa antes de iniciar o portal. O processo web apenas valida que o
+schema já existe e opera com DML de runtime.
 
 
 ## Piloto Microsoft 365 — ETIT Residencial e Empresarial

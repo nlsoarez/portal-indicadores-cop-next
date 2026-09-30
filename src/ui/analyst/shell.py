@@ -4008,26 +4008,80 @@ def _inject_analyst_styles() -> None:
         .stApp:has(.cop-analyst-shell) .stTabs [data-baseweb="tab-list"] {
             gap:.42rem;
             overflow-x:auto;
-            padding:.3rem;
-            margin-bottom:.85rem;
-            border:1px solid rgba(148,163,184,.13);
+            padding:.32rem;
+            margin-bottom:1rem;
+            border:1px solid rgba(148,163,184,.12);
             border-radius:14px;
-            background:rgba(8,20,34,.78);
+            background:
+                linear-gradient(180deg, rgba(11,25,42,.90), rgba(7,18,31,.94));
+            box-shadow:
+                inset 0 1px 0 rgba(255,255,255,.02),
+                0 12px 28px rgba(0,0,0,.09);
         }
         .stApp:has(.cop-analyst-shell) .stTabs [data-baseweb="tab"] {
-            min-height:48px;
-            border-radius:11px;
-            padding:.68rem 1rem;
-            color:#91a2b7;
-            font-weight:750;
+            min-height:46px;
+            border:1px solid transparent !important;
+            border-radius:10px;
+            padding:.64rem .92rem;
+            color:#8fa0b6;
+            font-weight:760;
             white-space:nowrap;
+            transition:
+                color .18s ease,
+                background .18s ease,
+                border-color .18s ease,
+                box-shadow .18s ease,
+                transform .18s ease;
+        }
+        .stApp:has(.cop-analyst-shell) .stTabs [data-baseweb="tab"]:hover {
+            color:#e8f2fb;
+            background:rgba(255,255,255,.035);
+            transform:translateY(-1px);
         }
         .stApp:has(.cop-analyst-shell) .stTabs [aria-selected="true"] {
             color:#fff !important;
-            border:1px solid rgba(237,28,36,.28);
-            border-bottom:1px solid rgba(237,28,36,.28) !important;
-            background:linear-gradient(135deg, rgba(237,28,36,.18), rgba(59,130,246,.08));
-            box-shadow:inset 3px 0 0 #ed1c24;
+            border-color:rgba(125,211,252,.18) !important;
+            background:
+                linear-gradient(135deg, rgba(22,52,79,.98), rgba(13,30,49,.98)) !important;
+            box-shadow:
+                0 8px 22px rgba(0,0,0,.18),
+                inset 0 0 0 1px rgba(255,255,255,.025);
+            transform:translateY(-1px);
+        }
+        .stApp:has(.cop-analyst-shell) .stTabs [aria-selected="true"]::after {
+            background:linear-gradient(90deg, #ed1c24 0%, #ff5865 48%, #38bdf8 100%);
+            box-shadow:0 0 16px rgba(56,189,248,.25);
+        }
+
+        /* Nested indicator tabs: visually subordinate to the primary navigation. */
+        .stApp:has(.cop-analyst-shell) .stTabs .stTabs [data-baseweb="tab-list"] {
+            padding:.18rem 0 .42rem;
+            margin-top:.05rem;
+            margin-bottom:.85rem;
+            border:0;
+            border-bottom:1px solid rgba(148,163,184,.12);
+            border-radius:0;
+            background:transparent;
+            box-shadow:none;
+        }
+        .stApp:has(.cop-analyst-shell) .stTabs .stTabs [data-baseweb="tab"] {
+            min-height:40px;
+            padding:.5rem .76rem;
+            border-radius:9px;
+            font-size:.82rem;
+            font-weight:720;
+        }
+        .stApp:has(.cop-analyst-shell) .stTabs .stTabs [aria-selected="true"] {
+            color:#eaf7ff !important;
+            border-color:rgba(56,189,248,.20) !important;
+            background:rgba(56,189,248,.085) !important;
+            box-shadow:
+                0 6px 16px rgba(0,0,0,.12),
+                inset 0 0 0 1px rgba(56,189,248,.04);
+        }
+        .stApp:has(.cop-analyst-shell) .stTabs .stTabs [aria-selected="true"]::after {
+            background:linear-gradient(90deg, #38bdf8, #60a5fa);
+            box-shadow:0 0 12px rgba(56,189,248,.32);
         }
 
         .cop-user-cert-status {

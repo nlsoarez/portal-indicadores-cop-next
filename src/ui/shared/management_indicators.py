@@ -343,6 +343,20 @@ def _render_indicator(
         )
         return
 
+    if ctx.is_admin and indicator_key == "emp_etit_event":
+        from src.ui.admin.indicators.etit_enterprise import render_admin_enterprise_etit
+
+        render_admin_enterprise_etit(
+            rows=rows,
+            people=people,
+            metrics=metrics,
+            analyst_breakdowns=analyst_breakdowns,
+            details=details,
+            period=period,
+            data_through=fresh.get("data_through") or period or "—",
+        )
+        return
+
     st.markdown(f"### {name}")
     st.caption(
         f"Competência: {period or '—'} · "

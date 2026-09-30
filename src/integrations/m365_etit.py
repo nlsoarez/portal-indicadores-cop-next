@@ -447,7 +447,7 @@ class EtitM365Pilot:
             {"version": 1, "sources": {}},
         )
         state["configured"] = self.token_provider.configured
-        state["authenticated"] = DEFAULT_TOKEN_CACHE.exists()
+        state["authenticated"] = self.token_provider.cache_path.exists()
         state["source_configuration"] = {
             source.source_key: {
                 "label": source.label,

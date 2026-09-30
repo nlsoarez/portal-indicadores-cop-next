@@ -4,9 +4,6 @@ from html import escape
 
 import streamlit as st
 
-from src.ui.shared.visual_assets import webp_data_uri
-
-
 ROLE_LABELS = {
     "admin": "Administrador",
     "subadmin": "Liderança",
@@ -20,9 +17,11 @@ def render_sidebar_brand(
     user_name: str,
     segment_name: str | None = None,
 ) -> None:
-    globe = webp_data_uri("globe")
     role_label = ROLE_LABELS.get(role, role.title())
     segment = f"<span>{escape(segment_name)}</span>" if segment_name else ""
+    initials = "".join(
+        part[:1] for part in str(user_name or "").split()[:2]
+    ).upper() or "U"
     st.sidebar.markdown(
         (
             "<div class='cop-brand-shell'>"
@@ -33,8 +32,9 @@ def render_sidebar_brand(
             "<div class='cop-brand-product'>Portal de Desempenho</div>"
             "<div class='cop-brand-context'>COP REDE</div>"
             "</div>"
-            f"<div class='cop-user-mini' style='--cop-mini-art:url(\"{globe}\")'>"
-            "<div>"
+            "<div class='cop-user-mini'>"
+            f"<div class='cop-user-avatar'>{escape(initials)}</div>"
+            "<div class='cop-user-copy'>"
             f"<strong>{escape(user_name)}</strong>"
             f"<span>{escape(role_label)}</span>"
             f"{segment}"
@@ -84,10 +84,16 @@ def render_dashboard_hero(
     subtitle: str,
     kicker: str = "Dados · Pessoas · Conexão",
 ) -> None:
-    art = webp_data_uri("hero")
     st.markdown(
         (
-            f"<section class='cop-hero' style='--cop-hero-art:url(\"{art}\")'>"
+            "<section class='cop-hero'>"
+            "<div class='cop-hero-art' aria-hidden='true'>"
+            "<i class='cop-orbit cop-orbit-a'></i>"
+            "<i class='cop-orbit cop-orbit-b'></i>"
+            "<i class='cop-node cop-node-a'></i>"
+            "<i class='cop-node cop-node-b'></i>"
+            "<i class='cop-node cop-node-c'></i>"
+            "</div>"
             "<div class='cop-hero-copy'>"
             f"<span>{escape(kicker)}</span>"
             f"<h2>{escape(title)}</h2>"
@@ -103,10 +109,16 @@ def render_dashboard_hero(
 
 
 def render_login_intro() -> None:
-    art = webp_data_uri("hero")
     st.markdown(
         (
-            f"<section class='cop-login-hero' style='--cop-hero-art:url(\"{art}\")'>"
+            "<section class='cop-login-hero'>"
+            "<div class='cop-hero-art cop-login-art' aria-hidden='true'>"
+            "<i class='cop-orbit cop-orbit-a'></i>"
+            "<i class='cop-orbit cop-orbit-b'></i>"
+            "<i class='cop-node cop-node-a'></i>"
+            "<i class='cop-node cop-node-b'></i>"
+            "<i class='cop-node cop-node-c'></i>"
+            "</div>"
             "<div class='cop-login-copy'>"
             "<span>COP REDE · Operação conectada</span>"
             "<h1>Performance que gera resultado.</h1>"

@@ -210,7 +210,7 @@ class UserRepository:
             rows = conn.execute(
                 """
                 SELECT DISTINCT
-                       u.id, u.login, u.display_name, u.full_name,
+                       u.id, u.login, u.display_name, u.full_name, u.must_change_password,
                        r.code AS role_code, r.name AS role_name,
                        s.id AS segment_id, s.name AS segment_name
                 FROM users u
@@ -233,6 +233,7 @@ class UserRepository:
                     "login": str(row["login"]),
                     "display_name": str(row["display_name"]),
                     "full_name": str(row["full_name"]),
+                    "must_change_password": bool(row["must_change_password"]),
                     "role_code": str(row["role_code"]),
                     "role_name": str(row["role_name"]),
                     "segments": [],

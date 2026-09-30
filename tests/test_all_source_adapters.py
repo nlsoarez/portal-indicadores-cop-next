@@ -55,6 +55,42 @@ class AllSourceAdaptersTest(unittest.TestCase):
         self.assertEqual(["emp_etit_event"],[r.indicator_key for _,r in results])
         self.assertEqual(3,results[0][1].total_volume)
 
+    def test_chat_parser_preserves_in_group_breakdown_for_analyst(self):
+        from src.application.upload_service import UploadProcessingService
+        from src.infrastructure.repositories import IndicatorRepository
+
+        df = pd.DataFrame(
+            {
+                "FECHAMENTO_COPREDE_LOGIN_ANALISTA": ["N0189105", "N0189105"],
+                "ABERTURA_ANOMES": [202609, 202609],
+                "INDICADOR_TMA_DENTRO": [1, 0],
+                "CHAT_INICIO": ["2026-09-29 22:10:00", "2026-09-29 22:20:00"],
+                "IN_GRUPO": ["Minas Gerais", "Minas Gerais"],
+                "ABERTURA_HORA": [22, 22],
+            }
+        )
+
+        UploadProcessingService().process_global_source(
+            self.ctx,
+            "chat_toa",
+            "chat.xlsx",
+            self.xlsx(df, "Analítico CHAT TOA", 3),
+        )
+
+        igor = self.users.get_by_login("N0189105")
+        payload = IndicatorRepository().dashboard_payload(self.enterprise.id, igor.id)
+        groups = [
+            row
+            for row in payload["breakdowns"]
+            if row["indicator_key"] == "chat_10m"
+            and row["dimension"] == "group"
+        ]
+
+        self.assertEqual(1, len(groups))
+        self.assertEqual("Minas Gerais", groups[0]["dimension_value"])
+        self.assertEqual(2, groups[0]["volume"])
+        self.assertEqual(1, groups[0]["successes"])
+
     def test_productivity_parser_routes_three_segments(self):
         from src.application.upload_service import UploadProcessingService
         df=pd.DataFrame({"USUARIO_LOGIN":["F104752","N0189105","N5604148"],"DATA":["2026-09-29"]*3,"ANOMES":[202609]*3,"VOL_TOTAL":[30,40,50]})

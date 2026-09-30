@@ -2,10 +2,14 @@ from __future__ import annotations
 
 from datetime import datetime
 
+import secrets
+import string
+
 import pandas as pd
 import streamlit as st
 
 from src.application.access_service import AccessService
+from src.application.auth_service import AuthService
 from src.application.dashboard_service import DashboardService
 from src.application.segment_context import switch_segment_state
 from src.application.upload_service import UploadProcessingService
@@ -48,11 +52,23 @@ def _format_date(value) -> str:
         return str(value)
     return parsed.strftime("%d/%m/%Y")
 
+def _temporary_password(length: int = 12) -> str:
+    alphabet = string.ascii_letters + string.digits
+    while True:
+        password = "".join(secrets.choice(alphabet) for _ in range(length))
+        if (
+            any(char.islower() for char in password)
+            and any(char.isupper() for char in password)
+            and any(char.isdigit() for char in password)
+        ):
+            return password
+
 
 class AdminShell:
     def __init__(self):
-        self.access = AccessService()
         self.users = UserRepository()
+        self.access = AccessService(self.users)
+        self.auth = AuthService(users=self.users)
         self.indicators = IndicatorRepository()
         self.dashboard = DashboardService(access=self.access, indicators=self.indicators)
         self.uploads = UploadRepository()
@@ -332,6 +348,71 @@ class AdminShell:
         c2.metric("Já acessaram", accessed_count)
         c3.metric("Nunca acessaram", never_accessed)
         c4.metric("Indicadores sem dados", indicators_without_data)
+        st.markdown("### Gerenciamento de acesso")
+        with st.container(border=True):
+            accounts = self.users.list_manageable_accounts()
+            allowed_segments = {scope.name for scope in segments}
+            scoped_accounts = [
+                account
+                for account in accounts
+                if account.get("role_code") == "subadmin"
+                or allowed_segments.intersection(account.get("segments") or [])
+            ]
+
+            if not scoped_accounts:
+                st.info("Nenhum usuário ativo disponível para gerenciamento neste contexto.")
+            else:
+                target = st.selectbox(
+                    "Usuário",
+                    scoped_accounts,
+                    format_func=lambda item: (
+                        f"{item['display_name']} · {item['login']} · "
+                        f"{'Liderança' if item['role_code'] == 'subadmin' else 'Analista'}"
+                    ),
+                    key="admin_password_reset_user",
+                )
+                st.caption(
+                    "O reset gera uma senha temporária segura. No próximo login, "
+                    "o usuário será obrigado a cadastrar uma nova senha."
+                )
+
+                if st.button(
+                    "Resetar senha",
+                    type="primary",
+                    use_container_width=False,
+                    key="admin_password_reset_button",
+                ):
+                    temporary_password = _temporary_password()
+                    try:
+                        self.auth.reset_password_as_admin(
+                            ctx,
+                            int(target["id"]),
+                            temporary_password,
+                        )
+                    except (ValueError, PermissionError) as exc:
+                        st.error(str(exc))
+                    else:
+                        st.session_state["_cop_password_reset_result"] = {
+                            "user_id": int(target["id"]),
+                            "display_name": target["display_name"],
+                            "login": target["login"],
+                            "password": temporary_password,
+                        }
+
+                reset_result = st.session_state.get("_cop_password_reset_result")
+                if (
+                    isinstance(reset_result, dict)
+                    and int(reset_result.get("user_id", -1)) == int(target["id"])
+                ):
+                    st.success(
+                        f"Senha de {reset_result['display_name']} ({reset_result['login']}) resetada."
+                    )
+                    st.markdown("**Senha temporária:**")
+                    st.code(str(reset_result["password"]), language=None)
+                    st.warning(
+                        "Copie a senha agora e envie ao usuário por um canal seguro. "
+                        "Ela deixará de ser exibida quando outro usuário for selecionado ou a sessão for encerrada."
+                    )
 
         st.markdown("### Adoção da equipe")
         if access_rows:

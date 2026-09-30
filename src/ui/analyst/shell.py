@@ -546,6 +546,241 @@ class AnalystShell:
         st.dataframe(pd.DataFrame(rows), use_container_width=True, hide_index=True)
 
 
+def _closing_demand_summary(
+    details: pd.DataFrame,
+    team_details: pd.DataFrame,
+) -> list[dict]:
+    mine = _dimension_rows(details, "demand")
+    if mine.empty:
+        return []
+
+    mine["dimension_value"] = mine["dimension_value"].astype(str).str.upper().str.strip()
+    mine = mine[mine["dimension_value"].isin(("RAL", "REC"))].copy()
+    if mine.empty:
+        return []
+
+    team = _dimension_rows(team_details, "demand")
+    if not team.empty:
+        team["dimension_value"] = (
+            team["dimension_value"].astype(str).str.upper().str.strip()
+        )
+
+    rows: list[dict] = []
+    for demand in ("RAL", "REC"):
+        part = mine[mine["dimension_value"] == demand]
+        if part.empty:
+            continue
+
+        volume = int(pd.to_numeric(part["volume"], errors="coerce").fillna(0).sum())
+        successes = int(
+            pd.to_numeric(part["successes"], errors="coerce").fillna(0).sum()
+        )
+        losses = int(pd.to_numeric(part["losses"], errors="coerce").fillna(0).sum())
+        my_result = successes / volume * 100 if volume else None
+
+        team_part = (
+            team[team["dimension_value"] == demand]
+            if not team.empty
+            else pd.DataFrame()
+        )
+        team_avg = _weighted_team_avg(team_part)
+        rows.append(
+            {
+                "demand": demand,
+                "volume": volume,
+                "successes": successes,
+                "losses": losses,
+                "result": my_result,
+                "team_avg": team_avg,
+                "comparison": _comparison_label(
+                    my_result,
+                    team_avg,
+                    "higher_is_better",
+                    "percent",
+                ),
+            }
+        )
+    return rows
+
+
+def _render_closing_demand_card(item: dict) -> None:
+    demand = str(item.get("demand") or "—")
+    result = _number(item.get("result"))
+    team_avg = _number(item.get("team_avg"))
+    losses = int(item.get("losses") or 0)
+    tone = "good" if result is not None and result >= 80 else "attention"
+    st.markdown(
+        (
+            f"<article class='cop-closing-demand cop-closing-demand-{tone}'>"
+            "<div class='cop-closing-demand-head'>"
+            f"<strong>{escape(demand)}</strong>"
+            f"<span>{int(item.get('volume') or 0)} eventos</span>"
+            "</div>"
+            f"<div class='cop-closing-demand-value'>{escape(_pct(result))}</div>"
+            "<div class='cop-closing-demand-grid'>"
+            f"<div><small>Média da equipe</small><b>{escape(_pct(team_avg))}</b></div>"
+            f"<div><small>Não aderentes</small><b>{losses}</b></div>"
+            "</div>"
+            f"<div class='cop-closing-demand-footer'>{escape(str(item.get('comparison') or '—'))}</div>"
+            "</article>"
+        ),
+        unsafe_allow_html=True,
+    )
+
+
+def _closing_cause_summary(details: pd.DataFrame) -> list[dict]:
+    labels = {
+        "cause_toa": "Causa TOA",
+        "cause_sir": "Causa SIR",
+        "area_involved": "Área envolvida",
+    }
+    rows: list[dict] = []
+
+    for dimension, label in labels.items():
+        part = _dimension_rows(details, dimension)
+        if part.empty:
+            continue
+        part = part.copy()
+        part["losses"] = pd.to_numeric(part["losses"], errors="coerce").fillna(0)
+        part = part[part["losses"] > 0]
+        if part.empty:
+            continue
+
+        grouped = (
+            part.groupby("dimension_value", dropna=False)["losses"]
+            .sum()
+            .reset_index()
+        )
+        for _, item in grouped.iterrows():
+            reason = str(item.get("dimension_value") or "").strip()
+            if not reason:
+                continue
+            rows.append(
+                {
+                    "Tipo": label,
+                    "Motivo": reason,
+                    "Não aderentes": int(item.get("losses") or 0),
+                }
+            )
+
+    return sorted(
+        rows,
+        key=lambda item: (-int(item["Não aderentes"]), item["Tipo"], item["Motivo"]),
+    )
+
+
+def _closing_review_rows(details: pd.DataFrame, payload: dict) -> list[dict]:
+    refs = _dimension_rows(details, "incident")
+    if refs.empty:
+        return []
+
+    refs = refs.copy()
+    refs["losses"] = pd.to_numeric(refs["losses"], errors="coerce").fillna(0)
+    refs = refs[refs["losses"] > 0].copy()
+    if refs.empty:
+        return []
+
+    daily_index = _closing_daily_index(payload)
+    rows: list[dict] = []
+
+    for _, item in refs.sort_values(["day", "losses"], ascending=[False, False]).iterrows():
+        day = str(item.get("day") or "")
+        raw = str(item.get("dimension_value") or "").strip()
+        demand = ""
+        identifier = raw
+
+        if "|||" in raw:
+            demand, identifier = raw.split("|||", 1)
+            demand = demand.strip().upper()
+        else:
+            demand = _closing_infer_demand_for_day(details, day)
+
+        if demand not in {"RAL", "REC"}:
+            demand = demand or "—"
+
+        daily = daily_index.get(day, {})
+        rows.append(
+            {
+                "Data": _format_date(day),
+                "Demanda": demand,
+                "INC / Identificador": identifier or "Sem identificador",
+                "Resultado do dia": _format_ptbr_metric(
+                    _number(daily.get("value")),
+                    "percent",
+                ),
+                "Média da equipe no dia": (
+                    "—"
+                    if _number(daily.get("team_avg")) is None
+                    else _format_ptbr_metric(
+                        _number(daily.get("team_avg")),
+                        "percent",
+                    )
+                ),
+                "Não aderentes": int(item.get("losses") or 0),
+            }
+        )
+
+    return rows
+
+
+def _closing_daily_index(payload: dict) -> dict[str, dict]:
+    individual = pd.DataFrame(payload.get("individual") or [])
+    if individual.empty or "indicator_key" not in individual.columns:
+        return {}
+
+    mine = individual[individual["indicator_key"] == "closing_assertiveness"].copy()
+    if mine.empty:
+        return {}
+
+    team = pd.DataFrame(payload.get("team_daily") or [])
+    if not team.empty and "indicator_key" in team.columns:
+        team = team[team["indicator_key"] == "closing_assertiveness"][
+            ["period", "team_avg"]
+        ].copy()
+    else:
+        team = pd.DataFrame(columns=["period", "team_avg"])
+
+    mine = mine[["period", "value", "volume"]].copy()
+    merged = mine.merge(team, on="period", how="left")
+
+    output: dict[str, dict] = {}
+    for _, row in merged.iterrows():
+        period = str(row.get("period") or "")
+        if period:
+            output[period] = {
+                "value": _number(row.get("value")),
+                "team_avg": _number(row.get("team_avg")),
+                "volume": int(row.get("volume") or 0),
+            }
+    return output
+
+
+def _closing_infer_demand_for_day(details: pd.DataFrame, day: str) -> str:
+    demand_rows = _dimension_rows(details, "demand")
+    if demand_rows.empty:
+        return ""
+
+    same_day = demand_rows[demand_rows["day"].astype(str) == str(day)].copy()
+    if same_day.empty:
+        return ""
+
+    same_day["losses"] = pd.to_numeric(
+        same_day["losses"], errors="coerce"
+    ).fillna(0)
+    same_day = same_day[same_day["losses"] > 0]
+    if same_day.empty:
+        return ""
+
+    positive_demands = {
+        str(value).strip().upper()
+        for value in same_day["dimension_value"].tolist()
+        if str(value).strip().upper() in {"RAL", "REC"}
+    }
+    if len(positive_demands) == 1:
+        return next(iter(positive_demands))
+    return ""
+
+
 def _team_index(payload: dict) -> dict[tuple[str, str], dict]:
     return {
         (str(row.get("period")), str(row.get("indicator_key"))): row

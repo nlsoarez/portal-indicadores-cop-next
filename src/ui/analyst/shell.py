@@ -652,10 +652,9 @@ class AnalystShell:
 
     def _render_dpa_recent_chart(self, payload: dict) -> None:
         rows = _dpa_recent_chart_rows(payload)
-        st.markdown("#### Últimos dias")
+        st.markdown("#### Desempenho diário")
         st.caption(
-            "DPA diário do analista comparado à média diária da equipe. "
-            "As barras são exibidas em ordem cronológica."
+            "Todos os dias disponíveis do período, exibindo apenas o seu DPA."
         )
 
         if not rows:
@@ -666,33 +665,24 @@ class AnalystShell:
         items = []
         for index, row in enumerate(rows):
             my_value = _number(row.get("value"))
-            team_value = _number(row.get("team_avg"))
-            my_width = 0.0 if my_value is None else min(max(my_value / scale * 100, 0), 100)
-            team_width = (
+            my_width = (
                 0.0
-                if team_value is None
-                else min(max(team_value / scale * 100, 0), 100)
+                if my_value is None
+                else min(max(my_value / scale * 100, 0), 100)
             )
-            delay = index * 0.06
+            delay = index * 0.045
 
             items.append(
                 (
                     "<div class='cop-dpa-chart-row'>"
                     f"<div class='cop-dpa-chart-date'>{escape(str(row['date_label']))}</div>"
                     "<div class='cop-dpa-chart-bars'>"
-                    "<div class='cop-dpa-chart-line'>"
+                    "<div class='cop-dpa-chart-line cop-dpa-chart-line-single'>"
                     "<span class='cop-dpa-chart-series'>Meu DPA</span>"
                     "<div class='cop-dpa-chart-track'>"
                     f"<div class='cop-dpa-chart-bar cop-dpa-chart-mine' style='width:{my_width:.2f}%;animation-delay:{delay:.2f}s'></div>"
                     "</div>"
                     f"<strong>{escape(_pct(my_value))}</strong>"
-                    "</div>"
-                    "<div class='cop-dpa-chart-line'>"
-                    "<span class='cop-dpa-chart-series'>Equipe</span>"
-                    "<div class='cop-dpa-chart-track'>"
-                    f"<div class='cop-dpa-chart-bar cop-dpa-chart-team' style='width:{team_width:.2f}%;animation-delay:{delay + .08:.2f}s'></div>"
-                    "</div>"
-                    f"<strong>{escape(_pct(team_value))}</strong>"
                     "</div>"
                     "</div>"
                     "</div>"
@@ -855,7 +845,33 @@ class AnalystShell:
                 )
 
         self._render_loss_references(details, indicator_key)
-        self._render_recent_evolution(payload, indicator_key, unit)
+        self._render_etit_recent_chart(payload, indicator_key)
+
+    def _render_etit_recent_chart(
+        self,
+        payload: dict,
+        indicator_key: str,
+    ) -> None:
+        rows = _indicator_recent_rows(
+            payload,
+            indicator_key,
+            limit=7,
+            include_team=True,
+        )
+        st.markdown("#### Últimos dias")
+        st.caption(
+            "Evolução diária da aderência com animação e comparação com a média da equipe."
+        )
+        if not rows:
+            st.caption("Sem histórico diário suficiente para exibir o gráfico.")
+            return
+
+        _render_dual_percent_bar_chart(
+            rows,
+            chart_class="cop-etit-daily-chart",
+            mine_label="Meu ETIT",
+            team_label="Equipe",
+        )
 
     def _render_closing_assertiveness(
         self,
@@ -866,19 +882,6 @@ class AnalystShell:
         if details.empty:
             st.info("Reprocesse a fonte Fechamento TOA x SIR para liberar a análise detalhada.")
             return
-
-        st.markdown("#### Leitura por demanda")
-        st.caption(
-            "RAL e REC são consolidados no período para evitar repetições por dia ou por ocorrência."
-        )
-        demand_rows = _closing_demand_summary(details, team_details)
-        if demand_rows:
-            cols = st.columns(min(2, len(demand_rows)))
-            for column, item in zip(cols, demand_rows):
-                with column:
-                    _render_closing_demand_card(item)
-        else:
-            st.caption("Não há recorte RAL/REC disponível para este período.")
 
         left, right = st.columns(2, gap="large")
         with left:

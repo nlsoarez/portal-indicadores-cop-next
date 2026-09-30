@@ -748,37 +748,81 @@ def inject_global_style() -> None:
         }
 
         /* Login */
-        .cop-login-hero {
-            min-height:255px;
-            border:1px solid var(--cop-line);
-            border-radius:22px;
-            padding:2.15rem 2.2rem;
-            margin:2rem 0 1.15rem;
-            background:
-                radial-gradient(circle at 78% 18%, rgba(59,130,246,.22), transparent 24%),
-                radial-gradient(circle at 82% 82%, rgba(237,28,36,.20), transparent 30%),
-                linear-gradient(120deg, rgba(5,11,20,.99), rgba(7,18,31,.96) 56%, rgba(12,30,48,.98));
-            box-shadow:var(--cop-shadow);
+        .stApp:has(.cop-login-page-marker) .main .block-container {
+            max-width:1280px;
+            padding-top:clamp(3.2rem, 8vh, 6.5rem);
+            padding-left:2rem;
+            padding-right:2rem;
+        }
+
+        .stApp:has(.cop-login-page-marker) header[data-testid="stHeader"] {
+            background:transparent;
+        }
+
+        .cop-login-page-marker {
+            height:0;
             overflow:hidden;
+        }
+
+        .cop-login-panel {
             position:relative;
-            animation:copFadeUp .52s ease both;
+            min-height:560px;
+            overflow:hidden;
+            border:1px solid rgba(148,163,184,.16);
+            border-radius:28px;
+            padding:2.5rem 2.6rem;
+            background:
+                radial-gradient(circle at 80% 18%, rgba(56,189,248,.14), transparent 20%),
+                radial-gradient(circle at 86% 82%, rgba(237,28,36,.18), transparent 28%),
+                linear-gradient(145deg, rgba(8,18,31,.99), rgba(8,20,34,.96) 60%, rgba(12,28,47,.98));
+            box-shadow:0 30px 80px rgba(0,0,0,.34);
+            isolation:isolate;
         }
 
-        .cop-login-art {
-            width:min(52%, 720px);
-        }
-
-        .cop-login-hero::after {
+        .cop-login-panel::after {
             content:"";
             position:absolute;
-            width:220px;
-            height:220px;
-            right:8%;
-            bottom:-68%;
+            width:440px;
+            height:440px;
+            right:-150px;
+            bottom:-190px;
             border-radius:50%;
-            background:rgba(237,28,36,.22);
-            filter:blur(48px);
-            animation:copGlow 5s ease-in-out infinite alternate;
+            background:radial-gradient(circle, rgba(237,28,36,.22), transparent 66%);
+            filter:blur(10px);
+            z-index:-1;
+        }
+
+        .cop-login-brandline {
+            position:relative;
+            z-index:2;
+            display:flex;
+            align-items:center;
+            gap:.7rem;
+            margin-bottom:4.8rem;
+        }
+
+        .cop-login-logo {
+            color:#fff;
+            font-size:1.85rem;
+            font-weight:900;
+            letter-spacing:-.045em;
+            line-height:1;
+        }
+
+        .cop-login-logo-dot {
+            width:10px;
+            height:10px;
+            border-radius:50%;
+            background:var(--cop-red);
+            box-shadow:0 0 0 6px rgba(237,28,36,.09);
+        }
+
+        .cop-login-product {
+            padding-left:.7rem;
+            border-left:1px solid rgba(148,163,184,.20);
+            color:#aebccd;
+            font-size:.86rem;
+            font-weight:650;
         }
 
         .cop-login-copy {
@@ -787,27 +831,221 @@ def inject_global_style() -> None:
             max-width:620px;
         }
 
-        .cop-login-copy span {
-            color:#8fd9ff;
-            font-size:.68rem;
-            font-weight:800;
-            letter-spacing:.12em;
-            text-transform:uppercase;
+        .cop-login-kicker {
+            margin-bottom:.85rem;
+            color:#82d9ff;
+            font-size:.78rem;
+            font-weight:850;
+            letter-spacing:.10em;
         }
 
         .cop-login-copy h1 {
+            margin:0;
+            max-width:620px;
             color:#fff;
-            font-size:clamp(2rem, 4vw, 3.6rem);
-            max-width:580px;
-            line-height:.98;
+            font-size:clamp(2.65rem, 4.5vw, 4.9rem);
+            line-height:.96;
             letter-spacing:-.055em;
-            margin:.55rem 0 .65rem;
+            font-weight:900;
+            text-wrap:balance;
+        }
+
+        .cop-login-copy h1 span {
+            color:#c9d7e7;
+            font-weight:760;
         }
 
         .cop-login-copy p {
-            color:#aab9ca;
-            max-width:540px;
+            max-width:560px;
+            margin:1.25rem 0 0;
+            color:#aebccd;
+            font-size:1.04rem;
+            line-height:1.65;
+        }
+
+        .cop-login-features {
+            display:flex;
+            flex-wrap:wrap;
+            gap:.55rem;
+            margin-top:1.7rem;
+        }
+
+        .cop-login-features span {
+            display:inline-flex;
+            align-items:center;
+            gap:.4rem;
+            padding:.45rem .7rem;
+            border:1px solid rgba(148,163,184,.15);
+            border-radius:999px;
+            background:rgba(15,32,52,.72);
+            color:#c9d8e7;
+            font-size:.70rem;
+            font-weight:700;
+        }
+
+        .cop-login-features span::before {
+            content:"";
+            width:6px;
+            height:6px;
+            border-radius:50%;
+            background:var(--cop-green);
+            box-shadow:0 0 0 4px rgba(49,213,138,.08);
+        }
+
+        .cop-login-art {
+            position:absolute;
+            inset:0 0 0 auto;
+            width:48%;
+            opacity:.9;
+            pointer-events:none;
+            overflow:hidden;
+        }
+
+        .cop-login-art::before,
+        .cop-login-art::after {
+            content:"";
+            position:absolute;
+            border-radius:50%;
+            border:1px solid rgba(125,211,252,.20);
+        }
+
+        .cop-login-art::before {
+            width:430px;
+            height:430px;
+            right:-130px;
+            top:-100px;
+        }
+
+        .cop-login-art::after {
+            width:290px;
+            height:290px;
+            right:35px;
+            top:42px;
+            border-color:rgba(248,113,113,.20);
+        }
+
+        .cop-login-access-head {
+            margin:2.1rem 0 1.2rem;
+        }
+
+        .cop-login-access-kicker {
+            color:#82d9ff;
+            font-size:.72rem;
+            font-weight:850;
+            letter-spacing:.11em;
+            margin-bottom:.5rem;
+        }
+
+        .cop-login-access-head h2 {
+            margin:0;
+            color:#fff;
+            font-size:2rem;
+            line-height:1.05;
+            letter-spacing:-.035em;
+        }
+
+        .cop-login-access-head p {
+            margin:.55rem 0 0;
+            color:#8fa1b6;
             font-size:.92rem;
+        }
+
+        .stApp:has(.cop-login-page-marker) div[data-testid="stForm"] {
+            border:1px solid rgba(148,163,184,.18);
+            border-radius:20px;
+            background:linear-gradient(180deg, rgba(11,25,42,.96), rgba(8,19,32,.98));
+            box-shadow:0 24px 60px rgba(0,0,0,.22);
+            padding:1.35rem 1.35rem 1.25rem;
+        }
+
+        .stApp:has(.cop-login-page-marker) div[data-testid="stTextInput"] {
+            margin-bottom:.4rem;
+        }
+
+        .stApp:has(.cop-login-page-marker) div[data-testid="stTextInput"] label {
+            color:#d6e2ee !important;
+            font-size:.80rem !important;
+            font-weight:700 !important;
+        }
+
+        .stApp:has(.cop-login-page-marker) div[data-testid="stTextInput"] input {
+            min-height:48px;
+            padding:.72rem .85rem;
+            color:#f7fbff !important;
+            background:#0b1929 !important;
+            border:1px solid rgba(148,163,184,.20) !important;
+            border-radius:12px !important;
+            font-size:.92rem !important;
+        }
+
+        .stApp:has(.cop-login-page-marker) div[data-testid="stTextInput"] input:focus {
+            border-color:rgba(56,189,248,.48) !important;
+            box-shadow:0 0 0 3px rgba(56,189,248,.08) !important;
+        }
+
+        .stApp:has(.cop-login-page-marker) button[kind="primary"] {
+            min-height:48px;
+            margin-top:.45rem;
+            border:none !important;
+            border-radius:12px !important;
+            background:linear-gradient(135deg, #ff3342, #c10f1d) !important;
+            box-shadow:0 14px 34px rgba(237,28,36,.24) !important;
+            font-size:.90rem !important;
+            font-weight:800 !important;
+            letter-spacing:.01em;
+        }
+
+        .stApp:has(.cop-login-page-marker) button[kind="primary"]:hover {
+            transform:translateY(-1px);
+            box-shadow:0 18px 38px rgba(237,28,36,.30) !important;
+        }
+
+        .cop-login-help {
+            margin-top:.85rem;
+            color:#63758a;
+            text-align:center;
+            font-size:.70rem;
+            line-height:1.5;
+        }
+
+        .stApp:has(.cop-login-page-marker) [data-testid="column"]:last-child {
+            display:flex;
+            flex-direction:column;
+            justify-content:center;
+        }
+
+        @media (max-width: 950px) {
+            .stApp:has(.cop-login-page-marker) .main .block-container {
+                padding-top:1.5rem;
+                padding-left:1rem;
+                padding-right:1rem;
+            }
+
+            .cop-login-panel {
+                min-height:420px;
+                padding:1.8rem;
+            }
+
+            .cop-login-brandline {
+                margin-bottom:3rem;
+            }
+
+            .cop-login-copy h1 {
+                font-size:clamp(2.2rem, 9vw, 3.5rem);
+            }
+
+            .cop-login-copy p {
+                font-size:.95rem;
+            }
+
+            .cop-login-art {
+                width:58%;
+                opacity:.62;
+            }
+
+            .cop-login-access-head {
+                margin-top:.2rem;
+            }
         }
 
         /* Typography */

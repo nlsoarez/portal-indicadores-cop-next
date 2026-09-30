@@ -4,6 +4,7 @@ __pycache__/
 data/*.db
 data/uploads/*
 !data/uploads/.gitkeep
+data/m365/*
 *.pyc
 .env
 .env.vps

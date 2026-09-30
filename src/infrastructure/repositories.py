@@ -389,7 +389,7 @@ class IndicatorRepository:
                     FROM indicator_results ir
                     JOIN indicator_definitions d ON d.id=ir.indicator_definition_id
                     JOIN segments s ON s.id=ir.segment_id
-                    JOIN users u ON u.id=ir.user_id
+                    JOIN users u ON u.id=ir.user_id AND u.active=1
                     JOIN user_roles ur ON ur.user_id=ir.user_id
                     JOIN roles r ON r.id=ur.role_id AND r.code='analyst'
                     WHERE ir.segment_id IN ({placeholders})
@@ -458,7 +458,7 @@ class IndicatorRepository:
                     FROM indicator_breakdowns b
                     JOIN indicator_definitions d ON d.id=b.indicator_definition_id
                     JOIN segments s ON s.id=b.segment_id
-                    LEFT JOIN users u ON UPPER(u.login)=UPPER(b.login)
+                    JOIN users u ON UPPER(u.login)=UPPER(b.login) AND u.active=1
                     WHERE b.segment_id IN ({placeholders})
                       AND b.scope='team' AND b.dimension='overall'
                 ),

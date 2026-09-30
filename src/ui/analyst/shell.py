@@ -2051,6 +2051,11 @@ def _dpa_recent_chart_rows(payload: dict) -> list[dict]:
     if mine.empty:
         return []
 
+    if "data_month" in mine.columns:
+        months = mine["data_month"].dropna().astype(str)
+        if not months.empty:
+            mine = mine[mine["data_month"].astype(str) == months.max()].copy()
+
     mine = mine[["period", "value"]].copy()
     mine["period"] = pd.to_datetime(mine["period"], errors="coerce")
     mine = mine.dropna(subset=["period"]).sort_values("period", ascending=True)
@@ -2092,14 +2097,22 @@ def _indicator_recent_rows(
     if mine.empty:
         return []
 
+    latest_month = None
+    if "data_month" in mine.columns:
+        months = mine["data_month"].dropna().astype(str)
+        if not months.empty:
+            latest_month = months.max()
+            mine = mine[mine["data_month"].astype(str) == latest_month].copy()
+
     mine = mine[["period", "value"]].copy()
 
     if include_team:
         team = pd.DataFrame(payload.get("team_daily") or [])
         if not team.empty and "indicator_key" in team.columns:
-            team = team[team["indicator_key"] == indicator_key][
-                ["period", "team_avg"]
-            ].copy()
+            team = team[team["indicator_key"] == indicator_key].copy()
+            if latest_month is not None and "data_month" in team.columns:
+                team = team[team["data_month"].astype(str) == latest_month].copy()
+            team = team[["period", "team_avg"]].copy()
         else:
             team = pd.DataFrame(columns=["period", "team_avg"])
         merged = mine.merge(team, on="period", how="left")

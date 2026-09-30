@@ -247,6 +247,10 @@ class AnalystShell:
         details = _latest_indicator_rows(payload.get("breakdowns") or [], indicator_key)
         team_details = _latest_indicator_rows(payload.get("team_breakdowns") or [], indicator_key)
 
+        if indicator_key == "closing_assertiveness":
+            self._render_closing_assertiveness(payload, details, team_details)
+            return
+
         if indicator_key == "emp_etit_event":
             self._render_ral_rec(details, team_details)
 
@@ -254,6 +258,56 @@ class AnalystShell:
         self._render_loss_references(details, indicator_key)
         self._render_full_detail(details, team_details, indicator_key, direction)
         self._render_recent_evolution(payload, indicator_key, unit)
+
+    def _render_closing_assertiveness(
+        self,
+        payload: dict,
+        details: pd.DataFrame,
+        team_details: pd.DataFrame,
+    ) -> None:
+        if details.empty:
+            st.info("Reprocesse a fonte Fechamento TOA x SIR para liberar a análise detalhada.")
+            return
+
+        st.markdown("#### Leitura por demanda")
+        st.caption(
+            "RAL e REC são consolidados no período para evitar repetições por dia ou por ocorrência."
+        )
+        demand_rows = _closing_demand_summary(details, team_details)
+        if demand_rows:
+            cols = st.columns(min(2, len(demand_rows)))
+            for column, item in zip(cols, demand_rows):
+                with column:
+                    _render_closing_demand_card(item)
+        else:
+            st.caption("Não há recorte RAL/REC disponível para este período.")
+
+        cause_rows = _closing_cause_summary(details)
+        if cause_rows:
+            st.markdown("#### Principais causas dos não aderentes")
+            st.caption(
+                "As causas são agrupadas no período. Cada motivo aparece uma única vez com o total de não aderentes."
+            )
+            st.dataframe(
+                pd.DataFrame(cause_rows),
+                use_container_width=True,
+                hide_index=True,
+            )
+
+        st.markdown("#### INC / ocorrências não aderentes para revisar")
+        st.caption(
+            "Lista completa das ocorrências não aderentes. A coluna Demanda identifica se o caso é RAL ou REC; "
+            "o resultado do dia aparece na mesma linha para dar contexto."
+        )
+        review_rows = _closing_review_rows(details, payload)
+        if review_rows:
+            st.dataframe(
+                pd.DataFrame(review_rows),
+                use_container_width=True,
+                hide_index=True,
+            )
+        else:
+            st.success("Nenhuma ocorrência não aderente foi encontrada no período.")
 
     def _render_ral_rec(self, details: pd.DataFrame, team_details: pd.DataFrame) -> None:
         mine = _dimension_rows(details, "demand")

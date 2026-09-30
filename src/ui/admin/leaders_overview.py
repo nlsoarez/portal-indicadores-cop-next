@@ -92,6 +92,10 @@ def render_leaders_overview(
 
     st.divider()
     st.markdown("### 📊 Comparação Detalhada")
+    st.caption(
+        "Volume, média diária e composição de atividades lado a lado para comparar "
+        "cada liderança com a realidade da própria equipe."
+    )
     detail = leader_detail_table(leaders_df)
     st.dataframe(
         style_leader_detail(detail),
@@ -101,6 +105,10 @@ def render_leaders_overview(
 
     st.divider()
     st.markdown("### 💡 Insights dos Líderes")
+    st.caption(
+        "Sinais comparativos para orientar acompanhamento; use os destaques como ponto de "
+        "partida para investigação, não como avaliação isolada."
+    )
     insights = build_leader_insights(leaders_df, all_people)
     _render_insight_cards(insights)
 

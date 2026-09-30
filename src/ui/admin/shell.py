@@ -18,6 +18,7 @@ from src.features.ingestion.excel import ImportValidationError
 from src.features.ingestion.source_catalog import UPLOAD_SOURCES
 from src.infrastructure.database import database_backend, database_is_persistent, persistence_diagnostics
 from src.infrastructure.repositories import IndicatorRepository, UploadRepository, UserRepository
+from src.integrations.m365_etit import EtitM365Pilot
 from src.ui.admin.certified_analysts import render_certified_analysts
 from src.ui.admin.leaders_overview import render_leaders_overview
 from src.ui.admin.dashboard_insights import render_dashboard_insights
@@ -538,6 +539,135 @@ class AdminShell:
             return
         else:
             st.success(f"Banco persistente ativo: {database_backend().upper()}.")
+
+        st.markdown("#### Piloto automático — ETIT Microsoft 365")
+        st.caption(
+            "Residencial e Empresarial podem ser verificados diretamente no Microsoft 365. "
+            "O sincronismo só baixa e reprocessa quando o arquivo remoto muda."
+        )
+        pilot = EtitM365Pilot()
+        pilot_status = pilot.status()
+        source_status = pilot_status.get("sources") or {}
+        source_config = pilot_status.get("source_configuration") or {}
+
+        p1, p2, p3 = st.columns(3)
+        p1.metric(
+            "Configuração Graph",
+            "OK" if pilot_status.get("configured") else "Pendente",
+        )
+        p2.metric(
+            "Autenticação Microsoft 365",
+            "Conectada" if pilot_status.get("authenticated") else "Pendente",
+        )
+        configured_sources = sum(
+            1
+            for row in source_config.values()
+            if isinstance(row, dict) and row.get("configured")
+        )
+        p3.metric("Fontes piloto configuradas", f"{configured_sources}/2")
+
+        pilot_rows = []
+        for key, label in (
+            ("residential_indicators", "ETIT Residencial"),
+            ("enterprise_indicators", "ETIT Empresarial"),
+        ):
+            config_row = source_config.get(key) or {}
+            state_row = source_status.get(key) or {}
+            remote = state_row.get("remote") or {}
+            pilot_rows.append(
+                {
+                    "Fonte": label,
+                    "Configuração": "OK" if config_row.get("configured") else "Pendente",
+                    "Status": state_row.get("status") or "Ainda não verificado",
+                    "Arquivo remoto": remote.get("name") or "—",
+                    "Competência": remote.get("competence") or "—",
+                    "Modificado em": _format_timestamp(remote.get("last_modified")),
+                    "Último sync": _format_timestamp(state_row.get("last_synced_at")),
+                    "Erro": state_row.get("last_error") or "—",
+                }
+            )
+        st.dataframe(
+            pd.DataFrame(pilot_rows),
+            use_container_width=True,
+            hide_index=True,
+        )
+
+        if not pilot_status.get("configured"):
+            st.info(
+                "Configure M365_TENANT_ID e M365_CLIENT_ID em .env.vps. "
+                "Os links das pastas ETIT também precisam estar nas variáveis "
+                "M365_ETIT_RESIDENTIAL_URL e M365_ETIT_ENTERPRISE_URL."
+            )
+        elif not pilot_status.get("authenticated"):
+            st.warning(
+                "A configuração existe, mas falta autenticar a conta Microsoft 365. "
+                "No servidor execute: bash deploy/hostinger/m365-etit.sh login"
+            )
+        else:
+            b1, b2 = st.columns(2)
+            with b1:
+                if st.button(
+                    "Verificar Microsoft 365 agora",
+                    use_container_width=True,
+                    key="m365_etit_probe",
+                ):
+                    with st.spinner("Consultando pastas ETIT no Microsoft 365..."):
+                        try:
+                            result = pilot.probe()
+                        except Exception as exc:
+                            st.error(str(exc))
+                        else:
+                            st.session_state["_cop_m365_probe_result"] = result
+                            st.rerun()
+            with b2:
+                if st.button(
+                    "Sincronizar ETIT agora",
+                    type="primary",
+                    use_container_width=True,
+                    key="m365_etit_sync",
+                ):
+                    with st.spinner("Verificando e processando ETIT alterado..."):
+                        try:
+                            result = pilot.sync(
+                                processing=self.processing,
+                                ctx=ctx,
+                            )
+                        except Exception as exc:
+                            st.error(str(exc))
+                        else:
+                            st.session_state["_cop_m365_sync_result"] = result
+                            st.rerun()
+
+        probe_flash = st.session_state.pop("_cop_m365_probe_result", None)
+        if isinstance(probe_flash, dict):
+            checked = probe_flash.get("checked_at")
+            st.success(
+                "Verificação Microsoft 365 concluída"
+                + (f" em {_format_timestamp(checked)}." if checked else ".")
+            )
+
+        sync_flash = st.session_state.pop("_cop_m365_sync_result", None)
+        if isinstance(sync_flash, dict):
+            statuses = [
+                str(row.get("status") or "")
+                for row in (sync_flash.get("sources") or {}).values()
+                if isinstance(row, dict)
+            ]
+            updated = sum(1 for value in statuses if value == "updated")
+            unchanged = sum(1 for value in statuses if value == "unchanged")
+            errors = sum(1 for value in statuses if value == "error")
+            if errors:
+                st.warning(
+                    f"Sincronismo concluído com {errors} erro(s), "
+                    f"{updated} atualização(ões) e {unchanged} fonte(s) sem mudança."
+                )
+            else:
+                st.success(
+                    f"Sincronismo concluído: {updated} atualização(ões) e "
+                    f"{unchanged} fonte(s) sem mudança."
+                )
+
+        st.divider()
 
         flash = st.session_state.get("_cop_upload_success")
         if isinstance(flash, dict):

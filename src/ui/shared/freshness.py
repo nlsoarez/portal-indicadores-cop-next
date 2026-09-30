@@ -10,6 +10,7 @@ def render_indicator_freshness(
     *,
     compact: bool = False,
     show_title: bool = True,
+    columns: int | None = None,
 ) -> None:
     """Mostra a cobertura real dos dados, não apenas o horário em que o arquivo foi enviado."""
     if show_title:
@@ -26,9 +27,11 @@ def render_indicator_freshness(
         st.markdown(" &nbsp;&nbsp; ".join(parts))
         return
 
-    columns = st.columns(min(4, max(1, len(rows))))
+    column_count = columns or min(4, max(1, len(rows)))
+    column_count = max(1, min(int(column_count), max(1, len(rows))))
+    grid = st.columns(column_count)
     for index, row in enumerate(rows):
-        with columns[index % len(columns)]:
+        with grid[index % len(grid)]:
             data_label = _coverage_label(row.get("data_through"))
             st.markdown(
                 f"""

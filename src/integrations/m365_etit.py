@@ -49,8 +49,20 @@ class EtitPilotSource:
         return os.environ.get(f"{self.env_prefix}_FOLDER_ID", "").strip()
 
     @property
+    def owner_upn(self) -> str:
+        return os.environ.get(f"{self.env_prefix}_OWNER_UPN", "").strip()
+
+    @property
+    def folder_path(self) -> str:
+        return os.environ.get(f"{self.env_prefix}_FOLDER_PATH", "").strip().strip("/")
+
+    @property
     def configured(self) -> bool:
-        return bool(self.share_url or (self.drive_id and self.folder_id))
+        return bool(
+            self.share_url
+            or (self.drive_id and self.folder_id)
+            or (self.owner_upn and self.folder_path)
+        )
 
 
 PILOT_SOURCES = (
@@ -146,7 +158,7 @@ class M365TokenProvider:
         self.tenant_id = (tenant_id or os.environ.get("M365_TENANT_ID", "")).strip()
         self.client_id = (client_id or os.environ.get("M365_CLIENT_ID", "")).strip()
         self.cache_path = cache_path or DEFAULT_TOKEN_CACHE
-        scopes_raw = os.environ.get("M365_SCOPES", "Files.Read")
+        scopes_raw = os.environ.get("M365_SCOPES", "Files.Read.All")
         self.scopes = tuple(
             scope.strip()
             for scope in re.split(r"[,;\s]+", scopes_raw)
@@ -340,22 +352,52 @@ def _resolved_drive_and_folder(item: dict[str, Any]) -> tuple[str, str]:
     return drive_id, item_id
 
 
+def resolve_folder_by_owner_path(
+    client: GraphClient,
+    owner_upn: str,
+    folder_path: str,
+) -> tuple[str, str]:
+    owner = quote(owner_upn.strip(), safe="")
+    path = quote(folder_path.strip().strip("/"), safe="/")
+    if not owner or not path:
+        raise M365ConfigurationError(
+            "OWNER_UPN e FOLDER_PATH precisam estar preenchidos."
+        )
+
+    select = quote(
+        "id,name,parentReference,folder,eTag,lastModifiedDateTime",
+        safe=",",
+    )
+    item = client.get_json(
+        f"/users/{owner}/drive/root:/{path}?$select={select}"
+    )
+    return _resolved_drive_and_folder(item)
+
+
 def resolve_folder(client: GraphClient, source: EtitPilotSource) -> tuple[str, str]:
     if source.drive_id and source.folder_id:
         return source.drive_id, source.folder_id
 
-    if not source.share_url:
-        raise M365ConfigurationError(
-            f"{source.label}: configure {source.env_prefix}_URL ou DRIVE_ID/FOLDER_ID."
+    if source.owner_upn and source.folder_path:
+        return resolve_folder_by_owner_path(
+            client,
+            source.owner_upn,
+            source.folder_path,
         )
 
-    share_id = graph_share_id(source.share_url)
-    select = quote(
-        "id,name,parentReference,remoteItem,folder,file,eTag,lastModifiedDateTime",
-        safe=",",
+    if source.share_url:
+        share_id = graph_share_id(source.share_url)
+        select = quote(
+            "id,name,parentReference,remoteItem,folder,file,eTag,lastModifiedDateTime",
+            safe=",",
+        )
+        item = client.get_json(f"/shares/{share_id}/driveItem?$select={select}")
+        return _resolved_drive_and_folder(item)
+
+    raise M365ConfigurationError(
+        f"{source.label}: configure DRIVE_ID/FOLDER_ID, OWNER_UPN/FOLDER_PATH "
+        f"ou {source.env_prefix}_URL."
     )
-    item = client.get_json(f"/shares/{share_id}/driveItem?$select={select}")
-    return _resolved_drive_and_folder(item)
 
 
 def list_folder_children(
@@ -457,6 +499,7 @@ class EtitM365Pilot:
                 "configured": source.configured,
                 "has_share_url": bool(source.share_url),
                 "has_direct_ids": bool(source.drive_id and source.folder_id),
+                "has_owner_path": bool(source.owner_upn and source.folder_path),
             }
             for source in PILOT_SOURCES
         }
@@ -500,7 +543,8 @@ class EtitM365Pilot:
             if not source.configured:
                 source_state["status"] = "not_configured"
                 source_state["last_error"] = (
-                    f"Configure {source.env_prefix}_URL ou DRIVE_ID/FOLDER_ID."
+                    f"Configure DRIVE_ID/FOLDER_ID, OWNER_UPN/FOLDER_PATH "
+                    f"ou {source.env_prefix}_URL."
                 )
                 state["sources"][source.source_key] = source_state
                 output["sources"][source.source_key] = source_state

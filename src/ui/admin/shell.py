@@ -69,7 +69,7 @@ class AdminShell:
             [None, *segments],
             index=0,
             format_func=lambda item: "Geral" if item is None else item.name,
-            key="admin_segment_selector",
+            key="admin_scope_selector_v2",
         )
         segment_label = "Geral" if segment is None else segment.name
         switch_segment_state(st.session_state, 0 if segment is None else segment.id)

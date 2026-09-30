@@ -27,6 +27,27 @@ from src.ui.shared.freshness import render_indicator_freshness
 from src.ui.shared.management_indicators import render_management_indicators
 from src.ui.shared.person_performance import render_person_performance
 
+def _format_timestamp(value) -> str:
+    if not value:
+        return "Nunca"
+    parsed = pd.to_datetime(value, errors="coerce", utc=True)
+    if pd.isna(parsed):
+        return str(value)
+    try:
+        parsed = parsed.tz_convert("America/Sao_Paulo")
+    except TypeError:
+        pass
+    return parsed.strftime("%d/%m/%Y %H:%M")
+
+
+def _format_date(value) -> str:
+    if not value:
+        return "—"
+    parsed = pd.to_datetime(value, errors="coerce")
+    if pd.isna(parsed):
+        return str(value)
+    return parsed.strftime("%d/%m/%Y")
+
 
 class AdminShell:
     def __init__(self):
@@ -268,6 +289,122 @@ class AdminShell:
             key=lambda row: str(row.get("name") or row.get("indicator_key") or ""),
         )
         return list(analysts_by_id.values()), freshness, last_access, definitions
+
+    def _render_governance(
+        self,
+        ctx: AccessContext,
+        segments: list[Segment],
+    ) -> None:
+        access_rows: list[dict] = []
+        freshness_rows: list[dict] = []
+
+        for scope in segments:
+            for row in self.users.last_access_for_segment(scope.id):
+                access_rows.append(
+                    {
+                        "Analista": row.get("display_name") or row.get("login") or "—",
+                        "Login": row.get("login") or "—",
+                        "Segmento": scope.name,
+                        "Último acesso": _format_timestamp(row.get("last_access")),
+                        "_has_access": bool(row.get("last_access")),
+                    }
+                )
+
+            for row in self.indicators.freshness(scope.id):
+                freshness_rows.append(
+                    {
+                        "Indicador": row.get("name") or row.get("indicator_key") or "—",
+                        "Segmento": scope.name,
+                        "Dados até": _format_date(row.get("data_through")),
+                        "Fonte": row.get("source_key") or "—",
+                        "Arquivo": row.get("filename") or "—",
+                        "_has_data": bool(row.get("data_through")),
+                    }
+                )
+
+        analysts_count = len(access_rows)
+        accessed_count = sum(1 for row in access_rows if row["_has_access"])
+        never_accessed = analysts_count - accessed_count
+        indicators_without_data = sum(1 for row in freshness_rows if not row["_has_data"])
+
+        c1, c2, c3, c4 = st.columns(4)
+        c1.metric("Analistas ativos", analysts_count)
+        c2.metric("Já acessaram", accessed_count)
+        c3.metric("Nunca acessaram", never_accessed)
+        c4.metric("Indicadores sem dados", indicators_without_data)
+
+        st.markdown("### Adoção da equipe")
+        if access_rows:
+            access_frame = pd.DataFrame(access_rows)
+            access_frame["Status"] = access_frame["_has_access"].map(
+                {True: "Já acessou", False: "Nunca acessou"}
+            )
+            access_frame = access_frame[
+                ["Analista", "Login", "Segmento", "Status", "Último acesso"]
+            ].sort_values(["Status", "Segmento", "Analista"])
+            st.dataframe(access_frame, use_container_width=True, hide_index=True)
+        else:
+            st.info("Nenhum analista ativo no contexto selecionado.")
+
+        leaders_access = self.users.last_access_for_subadmins()
+        if leaders_access:
+            with st.expander("Acesso das lideranças", expanded=False):
+                leader_frame = pd.DataFrame(
+                    [
+                        {
+                            "Líder": row.get("display_name") or row.get("login") or "—",
+                            "Login": row.get("login") or "—",
+                            "Último acesso": _format_timestamp(row.get("last_access")),
+                            "Status": "Já acessou" if row.get("last_access") else "Nunca acessou",
+                        }
+                        for row in leaders_access
+                    ]
+                )
+                st.dataframe(leader_frame, use_container_width=True, hide_index=True)
+
+        st.markdown("### Cobertura dos indicadores")
+        if freshness_rows:
+            freshness_frame = pd.DataFrame(freshness_rows)
+            freshness_frame["Status"] = freshness_frame["_has_data"].map(
+                {True: "Com dados", False: "Sem dados"}
+            )
+            freshness_frame = freshness_frame[
+                ["Indicador", "Segmento", "Status", "Dados até", "Fonte", "Arquivo"]
+            ].sort_values(["Status", "Segmento", "Indicador"])
+            st.dataframe(freshness_frame, use_container_width=True, hide_index=True)
+
+        st.markdown("### Últimas atualizações")
+        recent_uploads: list[dict] = []
+        source_labels = {source.key: source.label for source in UPLOAD_SOURCES}
+        for scope in segments:
+            for row in self.uploads.list_recent(scope.id, limit=8):
+                recent_uploads.append(
+                    {
+                        "Fonte": source_labels.get(
+                            str(row.get("source_key") or ""),
+                            row.get("source_key") or "—",
+                        ),
+                        "Segmento": scope.name,
+                        "Arquivo": row.get("filename") or "—",
+                        "Enviado por": row.get("uploaded_by") or "—",
+                        "Processado em": _format_timestamp(row.get("created_at")),
+                        "_sort": str(row.get("created_at") or ""),
+                    }
+                )
+
+        if recent_uploads:
+            upload_frame = pd.DataFrame(recent_uploads).sort_values(
+                "_sort", ascending=False
+            ).head(12)
+            st.dataframe(
+                upload_frame[
+                    ["Fonte", "Segmento", "Arquivo", "Enviado por", "Processado em"]
+                ],
+                use_container_width=True,
+                hide_index=True,
+            )
+        else:
+            st.caption("Nenhum upload registrado no contexto selecionado.")
 
     def _render_uploads(self, ctx: AccessContext) -> None:
         st.markdown("#### Atualização das 7 fontes oficiais")

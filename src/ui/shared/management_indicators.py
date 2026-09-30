@@ -383,6 +383,17 @@ def _render_indicator(
         )
         return
 
+    if ctx.is_admin and indicator_key == "dpa_official":
+        from src.ui.admin.indicators.dpa_official import render_admin_dpa
+
+        render_admin_dpa(
+            rows=rows,
+            people=people,
+            period=period,
+            data_through=fresh.get("data_through") or period or "—",
+        )
+        return
+
     st.markdown(f"### {name}")
     st.caption(
         f"Competência: {period or '—'} · "

@@ -18,6 +18,7 @@ def parse_chat_toa(raw_bytes: bytes, allowed_logins: set[str]) -> ParsedIndicato
     optional = {
         "ABERTURA_HORA", "FECHAMENTO_COPREDE_BASE_ANALISTA",
         "FECHAMENTO_FILA", "FECHAMENTO_TIPO_FILA", "MINUTOS_TMA",
+        "IN_GRUPO",
     }
     aggregates: dict[tuple[int, str, str], list[float]] = defaultdict(lambda: [0.0, 0.0])
     breakdowns = new_bucket()
@@ -49,6 +50,7 @@ def parse_chat_toa(raw_bytes: bytes, allowed_logins: set[str]) -> ParsedIndicato
             aggregates[(anomes, login, period)][1] += 1
             for dimension, dimension_value in (
                 ("overall", "Total"),
+                ("group", row.get("IN_GRUPO")),
                 ("hour", hour),
                 ("base", row.get("FECHAMENTO_COPREDE_BASE_ANALISTA")),
                 ("queue", row.get("FECHAMENTO_FILA")),

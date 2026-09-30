@@ -48,15 +48,43 @@ def _access_snapshot(user_id: int):
 
 
 def _login() -> None:
-    render_login_intro()
-    left, center, right = st.columns([1.1, 1.0, 1.1])
-    with center:
-        st.markdown("### Acesso ao portal")
-        st.caption("Entre com seu login corporativo para acessar seu perfil e segmento.")
+    st.markdown("<div class='cop-login-page-marker'></div>", unsafe_allow_html=True)
+    intro, access = st.columns([1.28, 0.72], gap="large")
+
+    with intro:
+        render_login_intro()
+
+    with access:
+        st.markdown(
+            """
+            <div class="cop-login-access-head">
+                <div class="cop-login-access-kicker">ACESSO SEGURO</div>
+                <h2>Entrar no portal</h2>
+                <p>Use seu login corporativo para continuar.</p>
+            </div>
+            """,
+            unsafe_allow_html=True,
+        )
         with st.form("login"):
-            login = st.text_input("Login", placeholder="Ex.: N1234567")
-            password = st.text_input("Senha", type="password", placeholder="Sua senha")
-            submitted = st.form_submit_button("Entrar", use_container_width=True)
+            login = st.text_input(
+                "Login",
+                placeholder="Ex.: N1234567",
+            )
+            password = st.text_input(
+                "Senha",
+                type="password",
+                placeholder="Digite sua senha",
+            )
+            submitted = st.form_submit_button(
+                "Entrar",
+                type="primary",
+                use_container_width=True,
+            )
+        st.markdown(
+            "<div class='cop-login-help'>Acesso restrito aos perfis autorizados do COP REDE.</div>",
+            unsafe_allow_html=True,
+        )
+
     if submitted:
         result = AuthService().authenticate(login, password)
         if not result:

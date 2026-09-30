@@ -17,6 +17,11 @@ from src.infrastructure.repositories import IndicatorRepository, UploadRepositor
 from src.ui.admin.certified_analysts import render_certified_analysts
 from src.ui.admin.leaders_overview import render_leaders_overview
 from src.ui.admin.dashboard_insights import render_dashboard_insights
+from src.ui.shared.chrome import (
+    render_dashboard_hero,
+    render_page_header,
+    render_sidebar_brand,
+)
 from src.ui.shared.chunked_upload import chunked_file_uploader, clear_chunked_upload
 from src.ui.shared.freshness import render_indicator_freshness
 from src.ui.shared.management_indicators import render_management_indicators
@@ -37,70 +42,125 @@ class AdminShell:
         )
 
     def render(self, ctx: AccessContext, segments: list[Segment]) -> None:
-        st.sidebar.markdown("<span class='cop-role-admin'>ADMIN</span>", unsafe_allow_html=True)
-        st.sidebar.markdown(f"### {ctx.user.display_name}")
-        page = st.sidebar.radio(
-            "Navegação",
-            ["Dashboard", "Indicadores", "Analista Certificado", "Analistas", "Líderes", "Uploads", "Auditoria"],
-            label_visibility="collapsed",
-        )
         segment = st.sidebar.selectbox(
-            "Segmento para as demais telas",
+            "Segmento em foco",
             segments,
             format_func=lambda item: item.name,
             key="admin_segment_selector",
         )
         switch_segment_state(st.session_state, segment.id)
 
-        st.markdown("<div class='cop-eyebrow'>Gestão operacional</div>", unsafe_allow_html=True)
+        render_sidebar_brand(
+            role="admin",
+            user_name=ctx.user.display_name,
+            segment_name=segment.name,
+        )
+
+        nav_icons = {
+            "Dashboard": "◉",
+            "Indicadores": "▦",
+            "Analista Certificado": "✓",
+            "Analistas": "◎",
+            "Líderes": "♛",
+            "Uploads": "⇧",
+            "Auditoria": "⌁",
+        }
+        page = st.sidebar.radio(
+            "Navegação",
+            ["Dashboard", "Indicadores", "Analista Certificado", "Analistas", "Líderes", "Uploads", "Auditoria"],
+            format_func=lambda item: f"{nav_icons.get(item, '•')}  {item}",
+            label_visibility="collapsed",
+        )
+
         if page == "Dashboard":
-            st.markdown("<div class='cop-title'>Dashboard</div>", unsafe_allow_html=True)
-            st.markdown(
-                "<div class='cop-subtitle'>Visão geral da operação e leitura comparativa da equipe.</div>",
-                unsafe_allow_html=True,
+            render_page_header(
+                title="Dashboard",
+                subtitle="Leitura executiva da operação, pessoas e qualidade em um único fluxo.",
+                eyebrow="Gestão operacional",
+                badge=segment.name,
+            )
+            render_dashboard_hero(
+                title="Performance que gera resultado.",
+                subtitle="Acompanhe volume, qualidade, certificação e sinais de atenção sem perder contexto operacional.",
+                kicker="Dados · Pessoas · Conexão",
             )
         elif page == "Indicadores":
-            st.markdown("<div class='cop-title'>Indicadores</div>", unsafe_allow_html=True)
-            st.markdown(
-                "<div class='cop-subtitle'>Visão consolidada geral, por setor e por analista.</div>",
-                unsafe_allow_html=True,
+            render_page_header(
+                title="Indicadores",
+                subtitle="Visões consolidadas, rankings, causas e recortes operacionais.",
+                eyebrow="Performance operacional",
+                badge=segment.name,
             )
         elif page == "Analista Certificado":
-            st.markdown("<div class='cop-title'>Analista Certificado</div>", unsafe_allow_html=True)
-            st.markdown(
-                "<div class='cop-subtitle'>Status de certificação consolidado da equipe Residencial e Empresarial.</div>",
-                unsafe_allow_html=True,
+            render_page_header(
+                title="Analista Certificado",
+                subtitle="Certificação consolidada de Residencial e Empresarial com leitura rápida das exceções.",
+                eyebrow="Qualidade e prontidão",
+            )
+        elif page == "Analistas":
+            render_page_header(
+                title="Analistas",
+                subtitle="Aprofunde o desempenho individual sem perder a referência da equipe.",
+                eyebrow="Gestão de pessoas",
+                badge=segment.name,
             )
         elif page == "Líderes":
-            st.markdown("<div class='cop-title'>👑 Visão dos Líderes</div>", unsafe_allow_html=True)
-            st.markdown(
-                "<div class='cop-subtitle'>Comparação entre os líderes e as médias das suas equipes.</div>",
-                unsafe_allow_html=True,
+            render_page_header(
+                title="Visão dos Líderes",
+                subtitle="Compare produtividade, DPA, componentes e posição relativa de cada liderança.",
+                eyebrow="Liderança operacional",
+            )
+        elif page == "Uploads":
+            render_page_header(
+                title="Atualização de dados",
+                subtitle="Centralize o processamento das fontes oficiais e acompanhe a cobertura de cada carga.",
+                eyebrow="Dados e integrações",
             )
         else:
-            st.markdown(f"<div class='cop-title'>{segment.name}</div>", unsafe_allow_html=True)
-            st.markdown(
-                "<div class='cop-subtitle'>Visão gerencial, indicadores e administração do portal.</div>",
-                unsafe_allow_html=True,
+            render_page_header(
+                title="Auditoria",
+                subtitle="Consulte último acesso e sinais básicos de uso por segmento.",
+                eyebrow="Governança",
+                badge=segment.name,
             )
 
         if page == "Dashboard":
             analysts = self.access.visible_users(ctx, segment.id)
             freshness = self.indicators.freshness(segment.id)
-            c1, c2, c3 = st.columns(3)
-            c1.metric("Analistas", len(analysts))
-            c2.metric("Indicadores configurados", len(self.indicators.definitions(segment.id)))
             last_access = self.users.last_access_for_segment(segment.id)
-            c3.metric("Analistas que já acessaram", sum(1 for row in last_access if row["last_access"]))
-            render_indicator_freshness(freshness)
-            st.subheader("Acompanhamento da equipe")
-            st.dataframe(pd.DataFrame(last_access), use_container_width=True, hide_index=True)
-            st.divider()
+            definitions = self.indicators.definitions(segment.id)
+
+            c1, c2, c3, c4 = st.columns(4)
+            c1.metric("Analistas", len(analysts))
+            c2.metric("Indicadores", len(definitions))
+            c3.metric(
+                "Já acessaram",
+                sum(1 for row in last_access if row["last_access"]),
+            )
+            c4.metric(
+                "Fontes com dados",
+                sum(1 for row in freshness if row.get("data_through")),
+            )
+
+            st.markdown("### Leitura da equipe")
             render_dashboard_insights(
                 ctx,
                 segments,
                 self.dashboard,
             )
+
+            st.markdown("### Atualização e uso")
+            col_fresh, col_access = st.columns([1.1, .9])
+            with col_fresh:
+                with st.expander("Cobertura dos indicadores", expanded=True):
+                    render_indicator_freshness(freshness)
+            with col_access:
+                with st.expander("Últimos acessos", expanded=True):
+                    st.dataframe(
+                        pd.DataFrame(last_access),
+                        use_container_width=True,
+                        hide_index=True,
+                    )
 
         elif page == "Indicadores":
             render_management_indicators(ctx, segments, self.dashboard)

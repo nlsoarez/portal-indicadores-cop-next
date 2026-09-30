@@ -237,12 +237,31 @@ class AnalystShell:
         team_avg = _number(team.get("team_avg"))
 
         st.markdown(f"### {indicator_name}")
-        c1, c2, c3, c4, c5 = st.columns(5)
-        c1.metric("Meu resultado", _format_ptbr_metric(value, unit))
-        c2.metric("Média da equipe", "—" if team_avg is None else _format_ptbr_metric(team_avg, unit))
-        c3.metric("Comparação", _comparison_label(value, team_avg, direction, unit))
-        c4.metric("Meta", _target_metric(row))
-        c5.metric("Meu volume", int(row.get("volume") or 0))
+        if indicator_key == "dpa_official":
+            c1, c2, c3, c4 = st.columns(4)
+            c1.metric("Meu resultado", _format_ptbr_metric(value, unit))
+            c2.metric(
+                "Média da equipe",
+                "—" if team_avg is None else _format_ptbr_metric(team_avg, unit),
+            )
+            c3.metric(
+                "Comparação",
+                _comparison_label(value, team_avg, direction, unit),
+            )
+            c4.metric("Meta", _target_metric(row))
+        else:
+            c1, c2, c3, c4, c5 = st.columns(5)
+            c1.metric("Meu resultado", _format_ptbr_metric(value, unit))
+            c2.metric(
+                "Média da equipe",
+                "—" if team_avg is None else _format_ptbr_metric(team_avg, unit),
+            )
+            c3.metric(
+                "Comparação",
+                _comparison_label(value, team_avg, direction, unit),
+            )
+            c4.metric("Meta", _target_metric(row))
+            c5.metric("Meu volume", int(row.get("volume") or 0))
 
         details = _latest_indicator_rows(payload.get("breakdowns") or [], indicator_key)
         team_details = _latest_indicator_rows(payload.get("team_breakdowns") or [], indicator_key)
@@ -271,10 +290,76 @@ class AnalystShell:
             )
             return
 
+        if indicator_key == "dpa_official":
+            self._render_dpa_recent_chart(payload)
+            return
+
         self._render_focus(details, team_details, indicator_key, direction)
         self._render_loss_references(details, indicator_key)
         self._render_full_detail(details, team_details, indicator_key, direction)
         self._render_recent_evolution(payload, indicator_key, unit)
+
+    def _render_dpa_recent_chart(self, payload: dict) -> None:
+        rows = _dpa_recent_chart_rows(payload)
+        st.markdown("#### Últimos dias")
+        st.caption(
+            "DPA diário do analista comparado à média diária da equipe. "
+            "As barras são exibidas em ordem cronológica."
+        )
+
+        if not rows:
+            st.caption("Sem histórico diário suficiente para exibir o gráfico.")
+            return
+
+        scale = _dpa_chart_scale(rows)
+        items = []
+        for index, row in enumerate(rows):
+            my_value = _number(row.get("value"))
+            team_value = _number(row.get("team_avg"))
+            my_width = 0.0 if my_value is None else min(max(my_value / scale * 100, 0), 100)
+            team_width = (
+                0.0
+                if team_value is None
+                else min(max(team_value / scale * 100, 0), 100)
+            )
+            delay = index * 0.06
+
+            items.append(
+                (
+                    "<div class='cop-dpa-chart-row'>"
+                    f"<div class='cop-dpa-chart-date'>{escape(str(row['date_label']))}</div>"
+                    "<div class='cop-dpa-chart-bars'>"
+                    "<div class='cop-dpa-chart-line'>"
+                    "<span class='cop-dpa-chart-series'>Meu DPA</span>"
+                    "<div class='cop-dpa-chart-track'>"
+                    f"<div class='cop-dpa-chart-bar cop-dpa-chart-mine' style='width:{my_width:.2f}%;animation-delay:{delay:.2f}s'></div>"
+                    "</div>"
+                    f"<strong>{escape(_pct(my_value))}</strong>"
+                    "</div>"
+                    "<div class='cop-dpa-chart-line'>"
+                    "<span class='cop-dpa-chart-series'>Equipe</span>"
+                    "<div class='cop-dpa-chart-track'>"
+                    f"<div class='cop-dpa-chart-bar cop-dpa-chart-team' style='width:{team_width:.2f}%;animation-delay:{delay + .08:.2f}s'></div>"
+                    "</div>"
+                    f"<strong>{escape(_pct(team_value))}</strong>"
+                    "</div>"
+                    "</div>"
+                    "</div>"
+                )
+            )
+
+        st.markdown(
+            (
+                "<section class='cop-dpa-chart'>"
+                "<div class='cop-dpa-chart-scale'>"
+                "<span>0%</span>"
+                f"<span>Escala até {scale:.0f}%</span>"
+                "</div>"
+                + "".join(items)
+                + "</section>"
+            ),
+            unsafe_allow_html=True,
+        )
 
     def _render_etit_operational(
         self,

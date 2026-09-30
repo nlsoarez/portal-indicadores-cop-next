@@ -26,6 +26,10 @@ class SubadminShell:
         self.indicators = IndicatorRepository()
 
     def render(self, ctx: AccessContext, segments: list[Segment]) -> None:
+        render_sidebar_brand(
+            role="subadmin",
+            user_name=ctx.user.display_name,
+        )
         segment = st.sidebar.selectbox(
             "Segmento em foco",
             segments,
@@ -33,12 +37,6 @@ class SubadminShell:
             key="subadmin_segment_selector",
         )
         switch_segment_state(st.session_state, segment.id)
-
-        render_sidebar_brand(
-            role="subadmin",
-            user_name=ctx.user.display_name,
-            segment_name=segment.name,
-        )
 
         nav_icons = {
             "Dashboard": "◉",

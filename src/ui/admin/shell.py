@@ -16,6 +16,7 @@ from src.infrastructure.database import database_backend, database_is_persistent
 from src.infrastructure.repositories import IndicatorRepository, UploadRepository, UserRepository
 from src.ui.admin.certified_analysts import render_certified_analysts
 from src.ui.admin.leaders_overview import render_leaders_overview
+from src.ui.admin.dashboard_insights import render_dashboard_insights
 from src.ui.shared.chunked_upload import chunked_file_uploader, clear_chunked_upload
 from src.ui.shared.freshness import render_indicator_freshness
 from src.ui.shared.management_indicators import render_management_indicators
@@ -40,7 +41,7 @@ class AdminShell:
         st.sidebar.markdown(f"### {ctx.user.display_name}")
         page = st.sidebar.radio(
             "Navegação",
-            ["Indicadores", "Analista Certificado", "Visão geral", "Analistas", "Líderes", "Uploads", "Auditoria"],
+            ["Dashboard", "Indicadores", "Analista Certificado", "Analistas", "Líderes", "Uploads", "Auditoria"],
             label_visibility="collapsed",
         )
         segment = st.sidebar.selectbox(
@@ -52,7 +53,13 @@ class AdminShell:
         switch_segment_state(st.session_state, segment.id)
 
         st.markdown("<div class='cop-eyebrow'>Gestão operacional</div>", unsafe_allow_html=True)
-        if page == "Indicadores":
+        if page == "Dashboard":
+            st.markdown("<div class='cop-title'>Dashboard</div>", unsafe_allow_html=True)
+            st.markdown(
+                "<div class='cop-subtitle'>Visão geral da operação e leitura comparativa da equipe.</div>",
+                unsafe_allow_html=True,
+            )
+        elif page == "Indicadores":
             st.markdown("<div class='cop-title'>Indicadores</div>", unsafe_allow_html=True)
             st.markdown(
                 "<div class='cop-subtitle'>Visão consolidada geral, por setor e por analista.</div>",
@@ -77,18 +84,7 @@ class AdminShell:
                 unsafe_allow_html=True,
             )
 
-        if page == "Indicadores":
-            render_management_indicators(ctx, segments, self.dashboard)
-
-        elif page == "Analista Certificado":
-            render_certified_analysts(
-                ctx,
-                segments,
-                self.dashboard,
-                self.access,
-            )
-
-        elif page == "Visão geral":
+        if page == "Dashboard":
             analysts = self.access.visible_users(ctx, segment.id)
             freshness = self.indicators.freshness(segment.id)
             c1, c2, c3 = st.columns(3)
@@ -99,6 +95,23 @@ class AdminShell:
             render_indicator_freshness(freshness)
             st.subheader("Acompanhamento da equipe")
             st.dataframe(pd.DataFrame(last_access), use_container_width=True, hide_index=True)
+            st.divider()
+            render_dashboard_insights(
+                ctx,
+                segments,
+                self.dashboard,
+            )
+
+        elif page == "Indicadores":
+            render_management_indicators(ctx, segments, self.dashboard)
+
+        elif page == "Analista Certificado":
+            render_certified_analysts(
+                ctx,
+                segments,
+                self.dashboard,
+                self.access,
+            )
 
         elif page == "Analistas":
             analysts = self.access.visible_users(ctx, segment.id)

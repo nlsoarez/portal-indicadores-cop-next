@@ -6,6 +6,7 @@ from src.ui.analyst.shell import (
     _build_summary_snapshot,
     _closing_cause_table,
     _closing_dimension_table,
+    _cancelled_tasks_user_summary,
     _closing_review_rows,
     _dpa_chart_scale,
     _dpa_recent_chart_rows,
@@ -353,6 +354,54 @@ class AnalystSummaryViewTest(unittest.TestCase):
         self.assertEqual([55.0, 80.0], [row["value"] for row in rows])
         self.assertEqual([60.0, 75.0], [row["team_avg"] for row in rows])
         self.assertEqual(80.0, _productivity_chart_scale(rows))
+
+    def test_cancelled_tasks_summary_uses_counts_and_team_average(self):
+        details = pd.DataFrame(
+            {
+                "dimension": ["overall", "overall"],
+                "losses": [1, 1],
+                "volume": [1, 1],
+            }
+        )
+        team = pd.DataFrame(
+            {
+                "dimension": ["overall"],
+                "team_losses": [180],
+                "team_analysts": [7],
+            }
+        )
+
+        summary = _cancelled_tasks_user_summary(details, team)
+
+        self.assertEqual(2.0, summary["cancelled"])
+        self.assertAlmostEqual(25.7142857, summary["team_average"], places=5)
+        self.assertEqual("good", summary["tone"])
+
+    def test_cancelled_tasks_uses_15_percent_below_team_as_good_reference(self):
+        team = pd.DataFrame(
+            {
+                "dimension": ["overall"],
+                "team_losses": [100],
+                "team_analysts": [10],
+            }
+        )
+
+        good = _cancelled_tasks_user_summary(
+            pd.DataFrame({"dimension": ["overall"], "losses": [8]}),
+            team,
+        )
+        attention = _cancelled_tasks_user_summary(
+            pd.DataFrame({"dimension": ["overall"], "losses": [9]}),
+            team,
+        )
+        bad = _cancelled_tasks_user_summary(
+            pd.DataFrame({"dimension": ["overall"], "losses": [11]}),
+            team,
+        )
+
+        self.assertEqual("good", good["tone"])
+        self.assertEqual("attention", attention["tone"])
+        self.assertEqual("bad", bad["tone"])
 
     def test_summary_snapshot_counts_targets_and_team_comparison(self):
         latest = [

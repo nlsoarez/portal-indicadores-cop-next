@@ -10,8 +10,8 @@ from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
 from urllib.error import HTTPError, URLError
-from urllib.parse import quote
-from urllib.request import Request, urlopen
+from urllib.parse import quote, urlsplit
+from urllib.request import HTTPRedirectHandler, Request, build_opener
 
 from src.application.access_service import AccessService
 from src.application.upload_service import UploadProcessingService
@@ -22,6 +22,9 @@ GRAPH_ROOT = "https://graph.microsoft.com/v1.0"
 DEFAULT_STATE_DIR = Path(os.environ.get("M365_STATE_DIR", "data/m365"))
 DEFAULT_TOKEN_CACHE = DEFAULT_STATE_DIR / "token_cache.json"
 DEFAULT_SYNC_STATE = DEFAULT_STATE_DIR / "etit_sync_state.json"
+MAX_REMOTE_FILE_SIZE = 128 * 1024 * 1024
+MAX_GRAPH_JSON_BYTES = 16 * 1024 * 1024
+ALLOWED_GRAPH_HOSTS = {"graph.microsoft.com"}
 
 PILOT_SOURCE_KEYS = (
     "residential_indicators",
@@ -287,9 +290,34 @@ class M365TokenProvider:
         }
 
 
+class _SafeRedirectHandler(HTTPRedirectHandler):
+    """Do not forward the Graph bearer token to a different redirect host."""
+
+    def redirect_request(self, req, fp, code, msg, headers, newurl):
+        redirected = super().redirect_request(req, fp, code, msg, headers, newurl)
+        if redirected is None:
+            return None
+        source_host = (urlsplit(req.full_url).hostname or "").lower()
+        target_host = (urlsplit(newurl).hostname or "").lower()
+        if source_host != target_host:
+            redirected.remove_header("Authorization")
+        return redirected
+
+
 class GraphClient:
     def __init__(self, access_token: str):
         self.access_token = access_token
+        self._opener = build_opener(_SafeRedirectHandler())
+
+    @staticmethod
+    def _resolve_graph_url(url_or_path: str) -> str:
+        if not url_or_path.startswith("https://"):
+            return GRAPH_ROOT + url_or_path
+        parsed = urlsplit(url_or_path)
+        host = (parsed.hostname or "").lower()
+        if parsed.scheme != "https" or host not in ALLOWED_GRAPH_HOSTS:
+            raise GraphRequestError("URL absoluta fora do Microsoft Graph foi bloqueada.")
+        return url_or_path
 
     def _request(
         self,
@@ -298,11 +326,11 @@ class GraphClient:
         accept_json: bool,
         timeout: int = 90,
         retries: int = 3,
+        max_bytes: int | None = None,
     ) -> bytes:
-        url = (
-            url_or_path
-            if url_or_path.startswith("https://")
-            else GRAPH_ROOT + url_or_path
+        url = self._resolve_graph_url(url_or_path)
+        read_limit = max_bytes if max_bytes is not None else (
+            MAX_GRAPH_JSON_BYTES if accept_json else MAX_REMOTE_FILE_SIZE
         )
         headers = {
             "Authorization": f"Bearer {self.access_token}",
@@ -315,8 +343,14 @@ class GraphClient:
         for attempt in range(retries + 1):
             request = Request(url, headers=headers, method="GET")
             try:
-                with urlopen(request, timeout=timeout) as response:
-                    return response.read()
+                with self._opener.open(request, timeout=timeout) as response:
+                    content_length = response.headers.get("Content-Length")
+                    if content_length and content_length.isdigit() and int(content_length) > read_limit:
+                        raise GraphRequestError("Resposta remota maior que o limite permitido.")
+                    payload = response.read(read_limit + 1)
+                    if len(payload) > read_limit:
+                        raise GraphRequestError("Resposta remota excedeu o limite permitido.")
+                    return payload
             except HTTPError as exc:
                 body = exc.read().decode("utf-8", errors="replace")
                 if exc.code == 429 or 500 <= exc.code < 600:
@@ -361,7 +395,13 @@ class GraphClient:
 
     def download(self, drive_id: str, item_id: str) -> bytes:
         path = f"/drives/{quote(drive_id, safe='')}/items/{quote(item_id, safe='')}/content"
-        return self._request(path, accept_json=False, timeout=180, retries=3)
+        return self._request(
+            path,
+            accept_json=False,
+            timeout=180,
+            retries=3,
+            max_bytes=MAX_REMOTE_FILE_SIZE,
+        )
 
 
 def _resolved_drive_and_folder(item: dict[str, Any]) -> tuple[str, str]:
@@ -677,6 +717,10 @@ class EtitM365Pilot:
                     run["sources"][source.source_key] = source_state
                     continue
 
+                if latest.size <= 0 or latest.size > MAX_REMOTE_FILE_SIZE:
+                    raise GraphRequestError(
+                        f"{source.label}: arquivo remoto fora do limite de 128 MB."
+                    )
                 raw_bytes = client.download(latest.drive_id, latest.item_id)
                 results = processing.process_global_source(
                     ctx,

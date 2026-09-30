@@ -91,6 +91,9 @@ trap 'rollback "erro inesperado na linha $LINENO"' ERR
 log "Construindo imagem"
 "${COMPOSE[@]}" build --pull portal
 
+log "Validando sintaxe Python da imagem"
+"${COMPOSE[@]}" run --rm --no-deps portal python -m compileall -q /app
+
 log "Subindo container"
 "${COMPOSE[@]}" up -d --remove-orphans portal
 

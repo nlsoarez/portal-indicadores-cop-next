@@ -2,6 +2,7 @@ import unittest
 
 from src.integrations.m365_etit import (
     EtitPilotSource,
+    M365TokenProvider,
     PILOT_SOURCES,
     graph_share_id,
     remote_changed,
@@ -11,6 +12,21 @@ from src.integrations.m365_etit import (
 
 
 class M365EtitPilotTest(unittest.TestCase):
+
+    def test_token_provider_rejects_example_placeholders(self):
+        provider = M365TokenProvider(
+            tenant_id="SEU_TENANT_ID",
+            client_id="SEU_CLIENT_ID",
+        )
+        self.assertFalse(provider.configured)
+
+    def test_token_provider_accepts_real_ids(self):
+        provider = M365TokenProvider(
+            tenant_id="55247d4b-b435-47a5-881b-ca7627434e79",
+            client_id="5c36fcc6-8e44-481a-b822-b56a22ccc767",
+        )
+        self.assertTrue(provider.configured)
+
     def test_share_id_uses_graph_u_prefix(self):
         value = graph_share_id("https://example.sharepoint.com/shared?id=abc")
         self.assertTrue(value.startswith("u!"))

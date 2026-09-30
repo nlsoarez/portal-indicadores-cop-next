@@ -189,10 +189,13 @@ def build_leader_performance(
     components = leader_components(breakdowns)
     sector = str(segment.name).upper()
 
+    leader_name = _short_name(
+        getattr(leader, "full_name", None) or getattr(leader, "display_name", None)
+    )
     item = {
         "login": str(leader.login).upper(),
-        "Líder": leader.display_name,
-        "Nome": leader.display_name,
+        "Líder": leader_name,
+        "Nome": leader_name,
         "Setor": sector,
         "Vol. Total": int(round(total or 0)),
         "Dias": int(round(days or 0)),
@@ -650,6 +653,14 @@ def _sector_abbrev(value: str) -> str:
     if normalized == "EMPRESARIAL":
         return "EMP"
     return normalized[:4] or "—"
+
+
+def _short_name(value) -> str:
+    text = " ".join(str(value or "").split())
+    if not text:
+        return "—"
+    parts = text.split()
+    return " ".join(parts[:2]).upper()
 
 
 def _fallback_total(average, days) -> float:

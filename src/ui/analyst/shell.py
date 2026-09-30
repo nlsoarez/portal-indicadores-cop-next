@@ -282,17 +282,74 @@ class AnalystShell:
         else:
             st.caption("Não há recorte RAL/REC disponível para este período.")
 
-        cause_rows = _closing_cause_summary(details)
-        if cause_rows:
-            st.markdown("#### Principais causas dos não aderentes")
-            st.caption(
-                "As causas são agrupadas no período. Cada motivo aparece uma única vez com o total de não aderentes."
+        left, right = st.columns(2, gap="large")
+        with left:
+            st.markdown("#### ❌ Top Causas Não Assertivas — TOA")
+            toa_causes = _closing_cause_table(
+                details,
+                "cause_toa",
+                "Causa TOA",
             )
-            st.dataframe(
-                pd.DataFrame(cause_rows),
-                use_container_width=True,
-                hide_index=True,
+            if toa_causes.empty:
+                st.caption("Sem causas TOA não assertivas no período.")
+            else:
+                st.dataframe(
+                    toa_causes,
+                    use_container_width=True,
+                    hide_index=True,
+                )
+
+        with right:
+            st.markdown("#### ❌ Top Causas Não Assertivas — SIR")
+            sir_causes = _closing_cause_table(
+                details,
+                "cause_sir",
+                "Causa SIR",
             )
+            if sir_causes.empty:
+                st.caption("Sem causas SIR não assertivas no período.")
+            else:
+                st.dataframe(
+                    sir_causes,
+                    use_container_width=True,
+                    hide_index=True,
+                )
+
+        left, right = st.columns(2, gap="large")
+        with left:
+            st.markdown("#### 🗺️ Por Grupo (IN_GRUPO) — Regional Leste")
+            group_table = _closing_dimension_table(
+                details,
+                team_details,
+                "group",
+                "Grupo",
+            )
+            if group_table.empty:
+                st.caption("Sem dados de grupo disponíveis para este período.")
+            else:
+                _render_closing_dimension_highlight(group_table, "Grupo")
+                st.dataframe(
+                    group_table,
+                    use_container_width=True,
+                    hide_index=True,
+                )
+
+        with right:
+            st.markdown("#### 📋 Por Tipo de Demanda")
+            demand_table = _closing_dimension_table(
+                details,
+                team_details,
+                "demand",
+                "Demanda",
+            )
+            if demand_table.empty:
+                st.caption("Sem dados de demanda disponíveis para este período.")
+            else:
+                st.dataframe(
+                    demand_table,
+                    use_container_width=True,
+                    hide_index=True,
+                )
 
         st.markdown("#### INC / ocorrências não aderentes para revisar")
         st.caption(

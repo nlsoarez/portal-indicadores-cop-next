@@ -100,18 +100,11 @@ class AnalystShell:
             latest,
         )
 
-        tab_labels = ["🏠 Resumo"]
-        tab_labels.extend(
-            _indicator_tab_label(
-                str(row.get("indicator_key")),
-                str(row.get("name") or "Indicador"),
-            )
-            for row in latest
+        summary_tab, indicators_tab, history_tab = st.tabs(
+            ["🏠 Resumo", "📊 Indicadores", "↺ Histórico"]
         )
-        tab_labels.append("↺ Histórico")
-        tabs = st.tabs(tab_labels)
 
-        with tabs[0]:
+        with summary_tab:
             self._render_summary(payload, latest)
             with st.expander("Atualização dos meus indicadores", expanded=False):
                 render_indicator_freshness(
@@ -121,14 +114,10 @@ class AnalystShell:
                     columns=3,
                 )
 
-        team_index = _team_index(payload)
-        for tab, row in zip(tabs[1:-1], latest):
-            with tab:
-                key = str(row.get("indicator_key"))
-                team = team_index.get((str(row.get("period")), key), {})
-                self._render_indicator(payload, row, team)
+        with indicators_tab:
+            self._render_indicator_tabs(payload, latest)
 
-        with tabs[-1]:
+        with history_tab:
             self._render_history(payload)
 
     def _render_summary(self, payload: dict, latest: list[dict]) -> None:
@@ -143,7 +132,7 @@ class AnalystShell:
             payload.get("freshness") or [],
         )
 
-        st.markdown("### Visão geral do período")
+        st.markdown("### Seu panorama")
         kpi_cols = st.columns(4)
         attention_count = max(snapshot["with_target"] - snapshot["met"], 0)
         kpis = [
@@ -205,7 +194,7 @@ class AnalystShell:
 
         st.markdown("### Minha situação")
         st.caption(
-            "Cada card mostra seu resultado, a referência da equipe e a meta do indicador."
+            "Veja rapidamente onde você está dentro da meta, como se compara com a equipe e onde concentrar atenção."
         )
         for start in range(0, len(latest), 3):
             cols = st.columns(3)

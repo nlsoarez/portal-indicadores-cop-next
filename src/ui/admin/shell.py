@@ -183,6 +183,10 @@ class AdminShell:
             )
 
             st.markdown("### Leitura da equipe")
+            st.caption(
+                "Compare produtividade, ocupação e componentes operacionais para localizar "
+                "forças e sinais de atenção sem perder a referência do setor."
+            )
             render_dashboard_insights(
                 ctx,
                 scope_segments,
@@ -190,6 +194,10 @@ class AdminShell:
             )
 
             st.markdown("### Atualização dos dados")
+            st.caption(
+                "Veja até quando cada fonte está atualizada antes de interpretar variações "
+                "ou cobrar resultado da equipe."
+            )
             render_indicator_freshness(
                 freshness,
                 show_title=False,

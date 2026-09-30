@@ -111,8 +111,13 @@ def render_dashboard_hero(
 def render_login_intro() -> None:
     st.markdown(
         (
-            "<section class='cop-login-hero'>"
-            "<div class='cop-hero-art cop-login-art' aria-hidden='true'>"
+            "<section class='cop-login-panel'>"
+            "<div class='cop-login-brandline'>"
+            "<span class='cop-login-logo'>Claro</span>"
+            "<span class='cop-login-logo-dot'></span>"
+            "<span class='cop-login-product'>Portal de Desempenho</span>"
+            "</div>"
+            "<div class='cop-login-art' aria-hidden='true'>"
             "<i class='cop-orbit cop-orbit-a'></i>"
             "<i class='cop-orbit cop-orbit-b'></i>"
             "<i class='cop-node cop-node-a'></i>"
@@ -120,9 +125,14 @@ def render_login_intro() -> None:
             "<i class='cop-node cop-node-c'></i>"
             "</div>"
             "<div class='cop-login-copy'>"
-            "<span>COP REDE · Operação conectada</span>"
-            "<h1>Performance que gera resultado.</h1>"
-            "<p>Indicadores, qualidade operacional e gestão de equipe em um único ambiente.</p>"
+            "<div class='cop-login-kicker'>COP REDE</div>"
+            "<h1>Operação em foco.<br><span>Decisões com contexto.</span></h1>"
+            "<p>Indicadores, produtividade e qualidade operacional em um ambiente único, rápido e seguro.</p>"
+            "<div class='cop-login-features'>"
+            "<span>Indicadores consolidados</span>"
+            "<span>Gestão de equipe</span>"
+            "<span>Atualização segura</span>"
+            "</div>"
             "</div>"
             "</section>"
         ),

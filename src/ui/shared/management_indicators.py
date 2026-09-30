@@ -168,10 +168,10 @@ def render_management_indicators(
     external_df = _payload_frame(payload, "external")
     freshness_df = _payload_frame(payload, "freshness")
 
-    st.markdown("### Visão gerencial dos indicadores")
+    st.markdown("### Centro de indicadores")
     st.caption(
-        "Cada fonte possui sua própria aba. Dentro dela, os indicadores ficam separados e "
-        "com resumo, analistas e cortes operacionais em tabelas — sem gráficos."
+        "Navegue por fonte e indicador. Os recortes operacionais, rankings e diagnósticos "
+        "continuam preservados, agora organizados em uma hierarquia visual mais compacta."
     )
 
     if segment_df.empty:

@@ -2337,6 +2337,153 @@ def _inject_analyst_styles() -> None:
             box-shadow:inset 3px 0 0 #ed1c24;
         }
 
+        .cop-productivity-kpi {
+            min-height:132px;
+            padding:1.05rem 1.1rem;
+            border:1px solid rgba(148,163,184,.15);
+            border-top:3px solid #38bdf8;
+            border-radius:16px;
+            background:linear-gradient(180deg, rgba(16,38,61,.92), rgba(8,21,36,.98));
+            box-shadow:0 14px 30px rgba(0,0,0,.13);
+        }
+        .cop-productivity-kpi-head {
+            display:flex;
+            align-items:center;
+            justify-content:space-between;
+            gap:.8rem;
+        }
+        .cop-productivity-kpi-head span {
+            color:#8fa0b6;
+            font-size:.67rem;
+            font-weight:900;
+            letter-spacing:.08em;
+        }
+        .cop-productivity-kpi-head b {
+            font-size:1rem;
+        }
+        .cop-productivity-kpi > strong {
+            display:block;
+            margin-top:.72rem;
+            color:#f7fbff;
+            font-size:1.75rem;
+            line-height:1;
+            font-weight:900;
+            letter-spacing:-.035em;
+        }
+        .cop-productivity-kpi p {
+            margin:.58rem 0 0;
+            color:#8fa0b6;
+            font-size:.72rem;
+            line-height:1.4;
+        }
+        .cop-productivity-reading {
+            margin:1rem 0 1.4rem;
+            padding:.95rem 1.05rem;
+            border:1px solid rgba(148,163,184,.14);
+            border-left:4px solid #64748b;
+            border-radius:14px;
+            background:linear-gradient(135deg, rgba(14,31,50,.90), rgba(9,22,37,.96));
+        }
+        .cop-productivity-reading-good {
+            border-left-color:#31d58a;
+        }
+        .cop-productivity-reading-attention {
+            border-left-color:#f7b84b;
+        }
+        .cop-productivity-reading-title {
+            color:#f4f8fc;
+            font-size:.76rem;
+            font-weight:850;
+        }
+        .cop-productivity-reading-text {
+            margin-top:.38rem;
+            color:#a4b3c4;
+            font-size:.77rem;
+            line-height:1.5;
+        }
+        .cop-productivity-chart {
+            margin:.35rem 0 1.25rem;
+            padding:1rem 1.05rem .8rem;
+            border:1px solid rgba(148,163,184,.15);
+            border-radius:16px;
+            background:linear-gradient(180deg, rgba(16,38,61,.90), rgba(8,21,36,.97));
+            box-shadow:0 14px 30px rgba(0,0,0,.12);
+        }
+        .cop-productivity-chart-scale {
+            display:flex;
+            justify-content:space-between;
+            gap:1rem;
+            margin-bottom:.65rem;
+            color:#6f8196;
+            font-size:.65rem;
+        }
+        .cop-productivity-chart-row {
+            display:grid;
+            grid-template-columns:72px minmax(0,1fr);
+            gap:.8rem;
+            align-items:center;
+            padding:.72rem 0;
+            border-top:1px solid rgba(148,163,184,.08);
+        }
+        .cop-productivity-chart-row:first-of-type {
+            border-top:0;
+        }
+        .cop-productivity-chart-date {
+            color:#dbe7f3;
+            font-size:.78rem;
+            font-weight:850;
+        }
+        .cop-productivity-chart-bars {
+            display:grid;
+            gap:.42rem;
+        }
+        .cop-productivity-chart-line {
+            display:grid;
+            grid-template-columns:84px minmax(0,1fr) 56px;
+            gap:.6rem;
+            align-items:center;
+        }
+        .cop-productivity-chart-series {
+            color:#8395aa;
+            font-size:.64rem;
+            font-weight:750;
+        }
+        .cop-productivity-chart-line strong {
+            color:#f4f8fc;
+            font-size:.72rem;
+            text-align:right;
+        }
+        .cop-productivity-chart-track {
+            position:relative;
+            height:10px;
+            overflow:hidden;
+            border-radius:999px;
+            background:rgba(148,163,184,.10);
+        }
+        .cop-productivity-chart-bar {
+            height:100%;
+            border-radius:inherit;
+            transform:scaleX(0);
+            transform-origin:left center;
+            animation:copProductivityBarGrow .78s cubic-bezier(.2,.75,.25,1) forwards;
+        }
+        .cop-productivity-chart-mine {
+            background:linear-gradient(90deg, #38bdf8, #60a5fa);
+        }
+        .cop-productivity-chart-team {
+            background:linear-gradient(90deg, #31d58a, #6ee7b7);
+        }
+        @keyframes copProductivityBarGrow {
+            from { transform:scaleX(0); opacity:.35; }
+            to { transform:scaleX(1); opacity:1; }
+        }
+        @media (prefers-reduced-motion: reduce) {
+            .cop-productivity-chart-bar {
+                animation:none;
+                transform:scaleX(1);
+            }
+        }
+
         .cop-dpa-chart {
             margin-top:.4rem;
             padding:1rem 1.05rem .8rem;

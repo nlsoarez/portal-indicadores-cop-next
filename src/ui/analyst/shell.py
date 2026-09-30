@@ -106,6 +106,7 @@ class AnalystShell:
             render_indicator_freshness(
                 payload.get("freshness") or [],
                 compact=True,
+                show_title=False,
             )
 
         if page == "Meu painel":

@@ -1,11 +1,11 @@
 -- SECURITY GUARDIAN
 -- Execute uma única vez com o usuário administrativo do projeto Supabase.
--- Substitua a senha de exemplo por uma senha forte gerada fora do Git.
--- Nunca faça commit da senha real.
+-- O arquivo propositalmente NÃO define senha.
+-- Crie o papel e depois defina a senha forte por um canal administrativo,
+-- fora do Git, antes de configurar DATABASE_URL.
 
 CREATE ROLE cop_portal_app
     LOGIN
-    PASSWORD 'REPLACE_WITH_STRONG_UNIQUE_PASSWORD'
     NOSUPERUSER
     NOCREATEDB
     NOCREATEROLE
@@ -19,7 +19,8 @@ GRANT USAGE ON SCHEMA cop_portal TO cop_portal_app;
 GRANT SELECT ON ALL TABLES IN SCHEMA cop_portal TO cop_portal_app;
 
 -- Escritas realmente usadas pelo processo web.
-GRANT UPDATE ON TABLE cop_portal.users TO cop_portal_app;
+GRANT UPDATE (password_hash, password_salt, must_change_password, auth_version)
+    ON TABLE cop_portal.users TO cop_portal_app;
 GRANT INSERT ON TABLE cop_portal.access_logs TO cop_portal_app;
 GRANT SELECT, INSERT, UPDATE, DELETE ON TABLE cop_portal.auth_throttle TO cop_portal_app;
 GRANT SELECT, INSERT ON TABLE cop_portal.uploads TO cop_portal_app;
@@ -36,3 +37,7 @@ GRANT USAGE, SELECT ON SEQUENCE cop_portal.indicator_breakdowns_id_seq TO cop_po
 -- Não conceder escrita de runtime em roles, user_roles, segments,
 -- user_segments, user_performance_segments ou indicator_definitions.
 -- Essas tabelas são mantidas pela migração/seed privilegiada.
+
+
+-- Execute separadamente e NÃO salve o valor real no repositório:
+-- ALTER ROLE cop_portal_app PASSWORD '<senha-forte-gerada-fora-do-git>';

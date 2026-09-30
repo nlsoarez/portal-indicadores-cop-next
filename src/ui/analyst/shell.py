@@ -143,13 +143,21 @@ class AnalystShell:
             ),
             (
                 "Dentro da meta",
-                f"{snapshot['met']}/{snapshot['with_target']}",
+                (
+                    f"{snapshot['met']}/{snapshot['with_target']}"
+                    if snapshot["with_target"]
+                    else "—"
+                ),
                 "Indicadores com meta configurada",
                 "good" if snapshot["met"] == snapshot["with_target"] and snapshot["with_target"] else "neutral",
             ),
             (
                 "Acima da equipe",
-                f"{snapshot['above_team']}/{snapshot['with_team']}",
+                (
+                    f"{snapshot['above_team']}/{snapshot['with_team']}"
+                    if snapshot["with_team"]
+                    else "—"
+                ),
                 "Comparação com média agregada",
                 "good" if snapshot["above_team"] else "neutral",
             ),
@@ -624,13 +632,20 @@ def _build_summary_snapshot(
         freshness_label = _period_label(max(periods) if periods else "")
 
     if best is not None:
-        _, best_row, best_team = best
+        best_score, best_row, best_team = best
         best_value = _number(best_row.get("value"))
         best_title = str(best_row.get("name") or best_row.get("indicator_key") or "Indicador")
+        comparison = _comparison_label(
+            best_value,
+            best_team,
+            str(best_row.get("direction") or "higher_is_better"),
+            best_row.get("unit"),
+        )
+        prefix = "Destaque do período" if best_score >= 0 else "Melhor posição relativa"
         best_text = (
-            f"{_format_ptbr_metric(best_value, best_row.get('unit'))} vs "
+            f"{prefix}: {_format_ptbr_metric(best_value, best_row.get('unit'))} vs "
             f"{_format_ptbr_metric(best_team, best_row.get('unit'))} da equipe · "
-            f"{_comparison_label(best_value, best_team, str(best_row.get('direction') or 'higher_is_better'), best_row.get('unit'))}."
+            f"{comparison}."
         )
     else:
         best_title = "Comparação ainda indisponível"
@@ -652,7 +667,9 @@ def _build_summary_snapshot(
             f"Resultado {_format_ptbr_metric(attention_value, attention_row.get('unit'))} · "
             f"{_target_text(attention_row)}"
         )
-        if comparison != "—":
+        if comparison == "Na média":
+            attention_text += " · Na média da equipe."
+        elif comparison != "—":
             attention_text += f" · {comparison} que a equipe."
     else:
         attention_title = "Nenhuma meta crítica"

@@ -1086,6 +1086,370 @@ class AnalystShell:
         st.dataframe(pd.DataFrame(rows), use_container_width=True, hide_index=True)
 
 
+def _enterprise_certification_status(
+    etit: float | None,
+    dpa: float | None,
+) -> dict:
+    etit_ok = etit is None or etit >= 90.0
+    dpa_ok = dpa is None or dpa >= 90.0
+    dpa_alert = dpa is not None and 85.0 <= dpa < 90.0
+
+    missing: list[str] = []
+    if etit is None:
+        missing.append("ETIT por Evento")
+    if dpa is None:
+        missing.append("DPA")
+
+    if etit_ok and dpa_ok:
+        status = "good"
+        title = "✅ Você está certificando"
+        message = "ETIT por Evento e DPA individual dentro da meta."
+    elif etit_ok and dpa_alert:
+        status = "attention"
+        title = "⚠️ Você está certificando"
+        message = (
+            "ETIT por Evento dentro da meta; DPA individual em faixa de atenção "
+            "(85% a 89,9%)."
+        )
+    else:
+        status = "bad"
+        title = "❌ Você não está certificando"
+        reasons: list[str] = []
+        if etit is not None and etit < 90.0:
+            reasons.append(f"ETIT por Evento abaixo de 90% ({etit:.1f}%)")
+        if dpa is not None and dpa < 85.0:
+            reasons.append(f"DPA individual abaixo de 85% ({dpa:.1f}%)")
+        message = " · ".join(reasons) or "Indicadores fora dos critérios de certificação."
+
+    if missing:
+        message += (
+            f" Sem dados de {', '.join(missing)}; seguindo a regra atual do portal, "
+            "esses itens não bloqueiam a certificação."
+        )
+
+    return {
+        "status": status,
+        "title": title,
+        "message": message,
+        "etit": etit,
+        "dpa": dpa,
+    }
+
+
+def _render_enterprise_certification_status(certification: dict) -> None:
+    status = str(certification.get("status") or "neutral")
+    st.markdown(
+        (
+            f"<section class='cop-user-cert-status cop-user-cert-{escape(status)}'>"
+            "<div class='cop-user-cert-team'>EQUIPE NELSON (EMPRESARIAL)</div>"
+            f"<div class='cop-user-cert-title'>{escape(str(certification.get('title') or '—'))}</div>"
+            f"<div class='cop-user-cert-message'>{escape(str(certification.get('message') or ''))}</div>"
+            "</section>"
+        ),
+        unsafe_allow_html=True,
+    )
+
+
+def _render_enterprise_certification_metric(
+    label: str,
+    value: float | None,
+    kind: str,
+) -> None:
+    if value is None:
+        tone = "neutral"
+    elif kind == "etit":
+        tone = "good" if value >= 90.0 else "bad"
+    else:
+        tone = "good" if value >= 90.0 else "attention" if value >= 85.0 else "bad"
+
+    st.markdown(
+        (
+            f"<article class='cop-user-cert-metric cop-user-cert-metric-{tone}'>"
+            f"<span>{escape(label)}</span>"
+            f"<strong>{escape('—' if value is None else f'{value:.1f}'.replace('.', ','))}</strong>"
+            "</article>"
+        ),
+        unsafe_allow_html=True,
+    )
+
+
+_PERFORMANCE_THEMES = [
+    {
+        "key": "productivity",
+        "strong": "produtividade alta e ritmo de entrega acima da média da equipe",
+        "mixed": "produção em bom patamar, com espaço para ganhar regularidade",
+        "attention": "o ritmo de produção indica espaço para ganhar consistência e previsibilidade nas entregas",
+        "suggestion": "organizar a rotina de produção, com objetivos diários claros, para dar mais regularidade às entregas",
+    },
+    {
+        "key": "quality",
+        "strong": "boa qualidade operacional, sustentando a aderência nos processos críticos",
+        "mixed": "qualidade operacional sólida na maior parte das frentes, com pontos a alinhar",
+        "attention": "a aderência aos processos críticos pede atenção para sustentar a qualidade das tratativas",
+        "suggestion": "revisar com a liderança os critérios de processo, usando casos reais como referência, para fortalecer a aderência",
+    },
+    {
+        "key": "journey",
+        "strong": "bom aproveitamento da jornada, com ocupação equilibrada ao longo do dia",
+        "mixed": "aproveitamento da jornada razoável, com oscilações ao longo do dia",
+        "attention": "o aproveitamento da jornada sugere necessidade de revisar gestão de tempo, pausas e priorização",
+        "suggestion": "revisar a organização da jornada, pausas e priorização para recuperar previsibilidade na entrega",
+    },
+    {
+        "key": "service",
+        "strong": "agilidade no atendimento via chat, dentro dos tempos esperados",
+        "mixed": "atendimento via chat em bom ritmo, com margem para ganhar agilidade",
+        "attention": "o tempo de atendimento no chat aponta oportunidade de ganhar agilidade sem perder qualidade",
+        "suggestion": "padronizar respostas frequentes e organizar os atendimentos simultâneos para ganhar agilidade no chat",
+    },
+    {
+        "key": "control",
+        "strong": "controle operacional consistente, com baixo retrabalho",
+        "mixed": "controle operacional adequado, com algum retrabalho a observar",
+        "attention": "o nível de retrabalho operacional pede acompanhamento para reduzir cancelamentos e reaberturas",
+        "suggestion": "mapear os motivos mais frequentes de cancelamento para reduzir o retrabalho operacional",
+    },
+]
+
+
+def _performance_theme(indicator_key: str) -> str | None:
+    if indicator_key == "productivity_avg_daily":
+        return "productivity"
+    if indicator_key == "dpa_official":
+        return "journey"
+    if indicator_key == "chat_10m":
+        return "service"
+    if indicator_key == "toa_cancellation_rate":
+        return "control"
+    if indicator_key in {
+        "emp_etit_event",
+        "validacao_20m",
+        "closing_assertiveness",
+        "res_etit_fibra_hfc",
+        "res_etit_gpon",
+        "res_assert_fibra_hfc",
+        "res_assert_gpon",
+    }:
+        return "quality"
+    return None
+
+
+def _performance_indicator_state(
+    row: dict,
+    team: dict,
+    breakdowns: list[dict],
+    team_breakdowns: list[dict],
+) -> str | None:
+    key = str(row.get("indicator_key") or "")
+    value = _number(row.get("value"))
+    if value is None:
+        return None
+
+    if key == "dpa_official":
+        return "good" if value >= 90.0 else "mixed" if value >= 85.0 else "attention"
+
+    if key == "toa_cancellation_rate":
+        details = _latest_indicator_rows(breakdowns, key)
+        team_details = _latest_indicator_rows(team_breakdowns, key)
+        summary = _cancelled_tasks_user_summary(details, team_details)
+        tone = str(summary.get("tone") or "neutral")
+        if tone == "good":
+            return "good"
+        if tone == "attention":
+            return "mixed"
+        if tone == "bad":
+            return "attention"
+        return None
+
+    target = _number(row.get("target_value"))
+    direction = str(row.get("direction") or "higher_is_better")
+    if target is not None:
+        if _meets_target(value, target, direction):
+            return "good"
+
+        if target == 0:
+            return "attention"
+        if direction == "lower_is_better":
+            distance = (value - target) / abs(target) if target else 1.0
+        else:
+            distance = (target - value) / abs(target)
+        return "mixed" if distance <= 0.10 else "attention"
+
+    team_avg = _number(team.get("team_avg"))
+    if team_avg is None:
+        return None
+
+    favorable = value >= team_avg if direction != "lower_is_better" else value <= team_avg
+    if favorable:
+        return "good"
+
+    if team_avg == 0:
+        return "attention"
+    relative_gap = abs(value - team_avg) / abs(team_avg)
+    return "mixed" if relative_gap <= 0.10 else "attention"
+
+
+def _build_analyst_performance_feedback(
+    latest: list[dict],
+    team_index: dict[tuple[str, str], dict],
+    breakdowns: list[dict],
+    team_breakdowns: list[dict],
+) -> dict:
+    aggregate: dict[str, dict[str, int]] = {}
+
+    for row in latest:
+        key = str(row.get("indicator_key") or "")
+        theme = _performance_theme(key)
+        if not theme:
+            continue
+
+        team = team_index.get((str(row.get("period")), key), {})
+        state = _performance_indicator_state(
+            row,
+            team,
+            breakdowns,
+            team_breakdowns,
+        )
+        if state is None:
+            continue
+
+        counts = aggregate.setdefault(
+            theme,
+            {"good": 0, "mixed": 0, "attention": 0},
+        )
+        counts[state] += 1
+
+    strong: list[dict] = []
+    mixed: list[dict] = []
+    attention: list[dict] = []
+
+    for theme in _PERFORMANCE_THEMES:
+        counts = aggregate.get(theme["key"])
+        if not counts:
+            continue
+        if counts["attention"] == 0 and counts["mixed"] == 0:
+            strong.append(theme)
+        elif counts["good"] == 0 and counts["mixed"] == 0:
+            attention.append(theme)
+        else:
+            mixed.append(theme)
+
+    evaluated = len(strong) + len(mixed) + len(attention)
+    to_improve = attention + mixed
+
+    if evaluated == 0:
+        summary = (
+            "Ainda não há indicadores suficientes para uma leitura consolidada do seu "
+            "desempenho neste período."
+        )
+    elif not to_improve:
+        summary = (
+            "Analista consistente, com desempenho equilibrado e sob controle nas frentes "
+            "avaliadas neste período."
+        )
+    elif not strong and not mixed:
+        summary = (
+            "Período de ajustes: as principais frentes pedem atenção e devem ser tratadas "
+            "em ordem de impacto."
+        )
+    else:
+        summary = (
+            "Analista com bons fundamentos e algumas frentes em desenvolvimento neste "
+            "período — o equilíbrio depende de ajustes pontuais na rotina."
+        )
+
+    highlights = (
+        [theme["strong"] for theme in strong]
+        + [theme["mixed"] for theme in mixed]
+    )[:3]
+    if highlights:
+        if len(highlights) == 1:
+            point_strong = f"Analista que demonstra {highlights[0]}."
+        else:
+            first = highlights[0]
+            remaining = highlights[1:]
+            rest = (
+                remaining[0]
+                if len(remaining) == 1
+                else ", ".join(remaining[:-1]) + " e " + remaining[-1]
+            )
+            point_strong = (
+                f"Analista consistente, com {first}. Além disso, demonstra {rest}."
+            )
+    else:
+        point_strong = (
+            "Ainda não há uma frente totalmente consolidada; priorizar um foco por vez "
+            "tende a acelerar a recuperação dos demais indicadores."
+        )
+
+    if to_improve:
+        point_attention = "; ".join(
+            theme["attention"] for theme in to_improve
+        ).capitalize() + "."
+        suggestions = [theme["suggestion"] for theme in to_improve[:2]]
+        suggestion = suggestions[0].capitalize()
+        if len(suggestions) > 1:
+            suggestion += f". Em paralelo, {suggestions[1]}"
+        suggestion += "."
+    else:
+        point_attention = (
+            "Nenhuma frente exige atenção relevante neste período. O cuidado é manter a "
+            "constância para preservar o patamar atual."
+        )
+        suggestion = (
+            "Manter a rotina atual e registrar as práticas que estão funcionando para "
+            "sustentar o resultado ao longo dos próximos períodos."
+        )
+
+    return {
+        "summary": summary,
+        "point_strong": point_strong,
+        "point_attention": point_attention,
+        "suggestion": suggestion,
+    }
+
+
+def _render_performance_reading(feedback: dict) -> None:
+    st.markdown(
+        (
+            "<section class='cop-user-reading-summary'>"
+            f"{escape(str(feedback.get('summary') or ''))}"
+            "</section>"
+        ),
+        unsafe_allow_html=True,
+    )
+
+    cols = st.columns(3, gap="large")
+    cards = [
+        (
+            "✅ PONTO FORTE",
+            str(feedback.get("point_strong") or ""),
+            "good",
+        ),
+        (
+            "⚠️ PONTO DE ATENÇÃO",
+            str(feedback.get("point_attention") or ""),
+            "attention",
+        ),
+        (
+            "💡 SUGESTÃO",
+            str(feedback.get("suggestion") or ""),
+            "suggestion",
+        ),
+    ]
+    for column, (label, text_value, tone) in zip(cols, cards):
+        with column:
+            st.markdown(
+                (
+                    f"<article class='cop-user-reading-card cop-user-reading-{tone}'>"
+                    f"<div>{escape(label)}</div>"
+                    f"<p>{escape(text_value)}</p>"
+                    "</article>"
+                ),
+                unsafe_allow_html=True,
+            )
+
+
 def _validation_time_user_summary(
     row: dict,
     team: dict,

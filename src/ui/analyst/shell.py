@@ -726,6 +726,139 @@ def _closing_cause_summary(details: pd.DataFrame) -> list[dict]:
     )
 
 
+def _closing_cause_table(
+    details: pd.DataFrame,
+    dimension: str,
+    label: str,
+    *,
+    top: int = 10,
+) -> pd.DataFrame:
+    part = _dimension_rows(details, dimension)
+    if part.empty:
+        return pd.DataFrame()
+
+    frame = part.copy()
+    frame["losses"] = pd.to_numeric(frame["losses"], errors="coerce").fillna(0)
+    frame = frame[frame["losses"] > 0]
+    if frame.empty:
+        return pd.DataFrame()
+
+    grouped = (
+        frame.groupby("dimension_value", dropna=False)["losses"]
+        .sum()
+        .reset_index()
+        .rename(
+            columns={
+                "dimension_value": label,
+                "losses": "Não Assertivos",
+            }
+        )
+    )
+    grouped[label] = grouped[label].fillna("").astype(str).str.strip()
+    grouped = grouped[grouped[label].ne("")]
+    if grouped.empty:
+        return pd.DataFrame()
+
+    grouped["Não Assertivos"] = grouped["Não Assertivos"].round().astype(int)
+    return (
+        grouped.sort_values(
+            ["Não Assertivos", label],
+            ascending=[False, True],
+        )
+        .head(top)
+        .reset_index(drop=True)
+    )
+
+
+def _closing_dimension_table(
+    details: pd.DataFrame,
+    team_details: pd.DataFrame,
+    dimension: str,
+    label: str,
+) -> pd.DataFrame:
+    mine = _dimension_rows(details, dimension)
+    if mine.empty:
+        return pd.DataFrame()
+
+    team = _dimension_rows(team_details, dimension)
+
+    records: list[dict] = []
+    for value, part in mine.groupby("dimension_value", dropna=False):
+        name = str(value or "").strip()
+        if not name:
+            continue
+
+        volume = int(pd.to_numeric(part["volume"], errors="coerce").fillna(0).sum())
+        successes = int(
+            pd.to_numeric(part["successes"], errors="coerce").fillna(0).sum()
+        )
+        losses = int(pd.to_numeric(part["losses"], errors="coerce").fillna(0).sum())
+        result = successes / volume * 100 if volume else None
+
+        if team.empty:
+            team_avg = None
+        else:
+            team_part = team[
+                team["dimension_value"].astype(str).str.strip() == name
+            ]
+            team_avg = _weighted_team_avg(team_part)
+
+        records.append(
+            {
+                label: name,
+                "Volume": volume,
+                "Assertivos": successes,
+                "Não aderentes": losses,
+                "Meu resultado": _pct(result),
+                "Média da equipe": _pct(team_avg),
+                "_result": -1.0 if result is None else float(result),
+            }
+        )
+
+    if not records:
+        return pd.DataFrame()
+
+    table = pd.DataFrame(records).sort_values(
+        ["Volume", "_result", label],
+        ascending=[False, False, True],
+    )
+    return table.drop(columns=["_result"]).reset_index(drop=True)
+
+
+def _render_closing_dimension_highlight(
+    table: pd.DataFrame,
+    label: str,
+) -> None:
+    if table is None or table.empty or "Meu resultado" not in table.columns:
+        return
+
+    scoring = table.copy()
+    scoring["_score"] = (
+        scoring["Meu resultado"]
+        .astype(str)
+        .str.replace("%", "", regex=False)
+        .str.replace(",", ".", regex=False)
+    )
+    scoring["_score"] = pd.to_numeric(scoring["_score"], errors="coerce")
+    scoring = scoring.dropna(subset=["_score"])
+    if scoring.empty:
+        return
+
+    best = scoring.sort_values(
+        ["_score", "Volume"],
+        ascending=[False, False],
+    ).iloc[0]
+    worst = scoring.sort_values(
+        ["_score", "Volume"],
+        ascending=[True, False],
+    ).iloc[0]
+
+    st.caption(
+        f"Melhor: {best[label]} ({best['Meu resultado']}) · "
+        f"Maior atenção: {worst[label]} ({worst['Meu resultado']})"
+    )
+
+
 def _closing_review_rows(details: pd.DataFrame, payload: dict) -> list[dict]:
     refs = _dimension_rows(details, "incident")
     if refs.empty:

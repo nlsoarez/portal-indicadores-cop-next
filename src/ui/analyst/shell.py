@@ -440,17 +440,33 @@ class AnalystShell:
         details: pd.DataFrame,
     ) -> None:
         summary = _validation_time_user_summary(row, team, details)
+        target = _number(row.get("target_value")) or 80.0
 
-        cols = st.columns(6)
-        cards = [
+        primary = [
             ("TOTAL", _format_integer(summary["total"]), "neutral"),
             ("ADERENTES", _format_integer(summary["successes"]), "good"),
             ("NÃO ADERENTES", _format_integer(summary["losses"]), "bad"),
-            ("ADERÊNCIA", _pct(summary["adherence"]), "good" if summary["adherence"] is not None and summary["adherence"] >= 85 else "attention"),
+            (
+                "ADERÊNCIA",
+                _pct(summary["adherence"]),
+                "good"
+                if summary["adherence"] is not None
+                and summary["adherence"] >= target
+                else "attention",
+            ),
+        ]
+        cols = st.columns(4)
+        for column, (label, value, tone) in zip(cols, primary):
+            with column:
+                _render_validation_kpi(label, value, tone)
+
+        secondary = [
             ("TMR MÉDIO (MIN)", _format_decimal(summary["tmr_minutes"]), "warning"),
             ("MÉDIA DA EQUIPE", _pct(summary["team_avg"]), "team"),
+            ("META", f"≥ {_pct(target)}", "target"),
         ]
-        for column, (label, value, tone) in zip(cols, cards):
+        cols = st.columns(3)
+        for column, (label, value, tone) in zip(cols, secondary):
             with column:
                 _render_validation_kpi(label, value, tone)
 
@@ -467,12 +483,18 @@ class AnalystShell:
 
     def _render_cancelled_tasks_view(
         self,
+        row: dict,
+        team: dict,
         details: pd.DataFrame,
         team_details: pd.DataFrame,
     ) -> None:
-        summary = _cancelled_tasks_user_summary(details, team_details)
+        summary = _cancelled_tasks_user_summary(
+            details,
+            team_details,
+            analyst_pct=_number(row.get("value")),
+            target_pct=_number(row.get("target_value")) or 15.0,
+        )
 
-        cols = st.columns(3)
         cards = [
             (
                 "TOTAL — TAREFAS CANCELADAS",
@@ -485,14 +507,78 @@ class AnalystShell:
                 summary["tone"],
             ),
             (
+                "% CANCELADAS DO ANALISTA",
+                _pct(summary["analyst_pct"]),
+                summary["tone"],
+            ),
+            (
+                "META",
+                f"≤ {_pct(summary['target_pct'])}",
+                "target",
+            ),
+            (
                 "MÉDIA CANCELADAS EQUIPE",
                 _format_decimal(summary["team_average"]),
                 "team",
             ),
         ]
+        cols = st.columns(5)
         for column, (label, value, tone) in zip(cols, cards):
             with column:
                 _render_cancelled_tasks_kpi(label, value, tone)
+
+    def _render_closing_header(
+        self,
+        row: dict,
+        team: dict,
+        details: pd.DataFrame,
+    ) -> None:
+        value = _number(row.get("value"))
+        team_avg = _number(team.get("team_avg"))
+        target = _number(row.get("target_value"))
+        volume = int(_number(row.get("volume")) or 0)
+        summary = _etit_operational_summary(details)
+        losses = summary["losses"]
+
+        cards = [
+            ("Meu resultado", _pct(value)),
+            ("Média da equipe", _pct(team_avg)),
+            (
+                "Comparação",
+                _comparison_label(
+                    value,
+                    team_avg,
+                    "higher_is_better",
+                    "percent",
+                ),
+            ),
+            ("Meta", "—" if target is None else f"≥ {_pct(target)}"),
+            ("Meu volume", str(volume)),
+            ("Não aderentes", str(losses)),
+        ]
+        cols = st.columns(6)
+        for column, (label, value_text) in zip(cols, cards):
+            with column:
+                st.metric(label, value_text)
+
+    def _render_chat_group_view(
+        self,
+        details: pd.DataFrame,
+        team_details: pd.DataFrame,
+    ) -> None:
+        st.markdown("#### 🗺️ Por Grupo (IN_GRUPO)")
+        group_table = _chat_group_table(details, team_details)
+        if group_table.empty:
+            st.caption(
+                "Sem dados por grupo neste processamento. Reenvie a planilha de Chat "
+                "para carregar o campo IN_GRUPO."
+            )
+            return
+        st.dataframe(
+            group_table,
+            use_container_width=True,
+            hide_index=True,
+        )
 
     def _render_productivity_view(
         self,

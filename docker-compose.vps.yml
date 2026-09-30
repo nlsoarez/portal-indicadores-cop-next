@@ -12,7 +12,7 @@ services:
     ports:
       - "127.0.0.1:${PORTAL_PORT:-8501}:8501"
     volumes:
-      - ./data/m365:/app/data/m365
+      - m365_state:/app/data/m365
     tmpfs:
       - /tmp:size=512m,mode=1777
     healthcheck:
@@ -30,3 +30,6 @@ services:
       options:
         max-size: "10m"
         max-file: "3"
+
+volumes:
+  m365_state:

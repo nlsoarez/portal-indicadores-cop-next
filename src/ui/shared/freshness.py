@@ -5,9 +5,15 @@ from datetime import datetime
 import streamlit as st
 
 
-def render_indicator_freshness(rows: list[dict], *, compact: bool = False) -> None:
+def render_indicator_freshness(
+    rows: list[dict],
+    *,
+    compact: bool = False,
+    show_title: bool = True,
+) -> None:
     """Mostra a cobertura real dos dados, não apenas o horário em que o arquivo foi enviado."""
-    st.markdown("#### Atualização dos indicadores")
+    if show_title:
+        st.markdown("#### Atualização dos indicadores")
 
     if not rows:
         st.caption("Nenhum indicador configurado para este segmento.")

@@ -52,5 +52,14 @@ else
   printf 'Piloto ainda sem M365_TENANT_ID/M365_CLIENT_ID em .env.vps\n'
 fi
 
+printf '\n=== Agendamento ETIT ===\n'
+printf 'Horário do host: %s\n' "$(date '+%Y-%m-%d %H:%M:%S %Z')"
+printf 'Horário São Paulo: %s\n' "$(TZ=America/Sao_Paulo date '+%Y-%m-%d %H:%M:%S %Z')"
+if [[ -r /etc/cron.d/portal-indicadores-m365-etit ]]; then
+  grep -vE '^[[:space:]]*(#|$)' /etc/cron.d/portal-indicadores-m365-etit || true
+else
+  printf 'Cron do piloto ainda não instalado ou sem permissão de leitura.\n'
+fi
+
 printf '\n=== Últimos logs ===\n'
 "${COMPOSE[@]}" logs --tail=80 portal

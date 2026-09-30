@@ -3,6 +3,8 @@ import unittest
 import pandas as pd
 
 from src.ui.analyst.shell import (
+    _assertiveness_dimension_table,
+    _assertiveness_service_scoped_details,
     _build_summary_snapshot,
     _chat_group_table,
     _closing_cause_table,
@@ -135,6 +137,80 @@ class AnalystSummaryViewTest(unittest.TestCase):
         )
         self.assertEqual("0,0%", rows[0]["Resultado do dia"])
         self.assertEqual("66,7%", rows[0]["Média da equipe no dia"])
+
+    def test_assertiveness_dimension_table_matches_operational_columns(self):
+        details = pd.DataFrame(
+            {
+                "dimension": ["impact", "impact", "impact"],
+                "dimension_value": ["Massivo", "Massivo", "Não Massivo"],
+                "volume": [2, 1, 2],
+                "successes": [1, 1, 2],
+                "losses": [1, 0, 0],
+            }
+        )
+
+        table = _assertiveness_dimension_table(
+            details,
+            "impact",
+            "Impacto",
+        )
+
+        self.assertEqual(
+            [
+                "Impacto",
+                "Volume",
+                "Assertivos",
+                "Não Assertivos",
+                "Assertividade %",
+                "Não Assertividade %",
+            ],
+            table.columns.tolist(),
+        )
+        massivo = table[table["Impacto"] == "Massivo"].iloc[0]
+        self.assertEqual(3, massivo["Volume"])
+        self.assertEqual(2, massivo["Assertivos"])
+        self.assertEqual(1, massivo["Não Assertivos"])
+        self.assertEqual("66,7%", massivo["Assertividade %"])
+        self.assertEqual("33,3%", massivo["Não Assertividade %"])
+
+    def test_assertiveness_gpon_service_scope_rehydrates_compound_dimensions(self):
+        details = pd.DataFrame(
+            {
+                "dimension": [
+                    "service",
+                    "service",
+                    "service__overall",
+                    "service__overall",
+                    "service__group",
+                    "service__group",
+                ],
+                "dimension_value": [
+                    "BROWNFIELD",
+                    "GREENFIELD",
+                    "BROWNFIELD|||Total",
+                    "GREENFIELD|||Total",
+                    "BROWNFIELD|||Centro-Oeste",
+                    "GREENFIELD|||Norte",
+                ],
+                "volume": [24, 13, 24, 13, 24, 13],
+                "successes": [22, 13, 22, 13, 22, 13],
+                "losses": [2, 0, 2, 0, 2, 0],
+            }
+        )
+
+        scoped = _assertiveness_service_scoped_details(
+            details,
+            "BROWNFIELD",
+        )
+
+        overall = scoped[scoped["dimension"] == "overall"].iloc[0]
+        group = scoped[scoped["dimension"] == "group"].iloc[0]
+        self.assertEqual("Total", overall["dimension_value"])
+        self.assertEqual(24, overall["volume"])
+        self.assertEqual("Centro-Oeste", group["dimension_value"])
+        self.assertFalse(
+            scoped["dimension_value"].astype(str).str.contains("GREENFIELD").any()
+        )
 
     def test_etit_operational_summary_keeps_events_adherents_and_durations(self):
         details = pd.DataFrame(

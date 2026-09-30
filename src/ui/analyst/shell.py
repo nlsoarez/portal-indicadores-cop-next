@@ -340,23 +340,26 @@ class AnalystShell:
         team_avg = _number(team.get("team_avg"))
 
         st.markdown(f"### {indicator_name}")
+
+        details = _latest_indicator_rows(
+            payload.get("breakdowns") or [],
+            indicator_key,
+        )
+        team_details = _latest_indicator_rows(
+            payload.get("team_breakdowns") or [],
+            indicator_key,
+        )
+
         if indicator_key == "toa_cancellation_rate":
-            details = _latest_indicator_rows(
-                payload.get("breakdowns") or [],
-                indicator_key,
+            self._render_cancelled_tasks_view(
+                row,
+                team,
+                details,
+                team_details,
             )
-            team_details = _latest_indicator_rows(
-                payload.get("team_breakdowns") or [],
-                indicator_key,
-            )
-            self._render_cancelled_tasks_view(details, team_details)
             return
 
         if indicator_key == "validacao_20m":
-            details = _latest_indicator_rows(
-                payload.get("breakdowns") or [],
-                indicator_key,
-            )
             self._render_validation_time_view(
                 row,
                 team,
@@ -365,14 +368,6 @@ class AnalystShell:
             return
 
         if indicator_key == "productivity_avg_daily":
-            details = _latest_indicator_rows(
-                payload.get("breakdowns") or [],
-                indicator_key,
-            )
-            team_details = _latest_indicator_rows(
-                payload.get("team_breakdowns") or [],
-                indicator_key,
-            )
             self._render_productivity_view(
                 payload,
                 row,
@@ -380,6 +375,11 @@ class AnalystShell:
                 details,
                 team_details,
             )
+            return
+
+        if indicator_key == "closing_assertiveness":
+            self._render_closing_header(row, team, details)
+            self._render_closing_assertiveness(payload, details, team_details)
             return
 
         if indicator_key == "dpa_official":
@@ -394,31 +394,24 @@ class AnalystShell:
                 _comparison_label(value, team_avg, direction, unit),
             )
             c4.metric("Meta", _target_metric(row))
-        else:
-            c1, c2, c3, c4, c5 = st.columns(5)
-            c1.metric("Meu resultado", _format_ptbr_metric(value, unit))
-            c2.metric(
-                "Média da equipe",
-                "—" if team_avg is None else _format_ptbr_metric(team_avg, unit),
-            )
-            c3.metric(
-                "Comparação",
-                _comparison_label(value, team_avg, direction, unit),
-            )
-            c4.metric("Meta", _target_metric(row))
-            c5.metric("Meu volume", int(row.get("volume") or 0))
-
-        details = _latest_indicator_rows(payload.get("breakdowns") or [], indicator_key)
-        team_details = _latest_indicator_rows(payload.get("team_breakdowns") or [], indicator_key)
-
-        # Chat TOA: visão intencionalmente enxuta. Os cinco cards acima são
-        # suficientes para a leitura operacional do analista; removemos
-        # tabelas, diagnósticos, perdas e evolução para evitar ruído.
-        if indicator_key == "chat_10m":
+            self._render_dpa_recent_chart(payload)
             return
 
-        if indicator_key == "closing_assertiveness":
-            self._render_closing_assertiveness(payload, details, team_details)
+        c1, c2, c3, c4, c5 = st.columns(5)
+        c1.metric("Meu resultado", _format_ptbr_metric(value, unit))
+        c2.metric(
+            "Média da equipe",
+            "—" if team_avg is None else _format_ptbr_metric(team_avg, unit),
+        )
+        c3.metric(
+            "Comparação",
+            _comparison_label(value, team_avg, direction, unit),
+        )
+        c4.metric("Meta", _target_metric(row))
+        c5.metric("Meu volume", int(row.get("volume") or 0))
+
+        if indicator_key == "chat_10m":
+            self._render_chat_group_view(details, team_details)
             return
 
         if indicator_key in {
@@ -433,10 +426,6 @@ class AnalystShell:
                 indicator_key,
                 unit,
             )
-            return
-
-        if indicator_key == "dpa_official":
-            self._render_dpa_recent_chart(payload)
             return
 
         self._render_focus(details, team_details, indicator_key, direction)

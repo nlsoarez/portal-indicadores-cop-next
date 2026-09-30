@@ -455,53 +455,62 @@ class AdminShell:
         c1.metric("Fontes oficiais", len(UPLOAD_SOURCES))
         c2.metric("Integrações ativas", f"{len(UPLOAD_SOURCES)}/{len(UPLOAD_SOURCES)}")
 
-        for source in UPLOAD_SOURCES:
-            latest = latest_by_source.get(source.key)
-            with st.expander(f"{source.label} · Integrada", expanded=False):
-                st.caption(source.description)
-                st.markdown(f"**Arquivo esperado:** {source.filename_hint}.xlsx")
-                if latest:
-                    st.success(
-                        f"PROCESSADO · {latest['filename']} · {latest['created_at']} · "
-                        f"por {latest['uploaded_by']}"
+        for start in range(0, len(UPLOAD_SOURCES), 2):
+            cols = st.columns(2, gap="large")
+            for column, source in zip(cols, UPLOAD_SOURCES[start:start + 2]):
+                with column:
+                    self._render_upload_source_card(
+                        ctx,
+                        source,
+                        latest_by_source.get(source.key),
                     )
+
+    def _render_upload_source_card(self, ctx: AccessContext, source, latest: dict | None) -> None:
+        with st.container(border=True):
+            st.markdown(f"#### {source.label}")
+            st.caption(source.description)
+            st.markdown(f"**Arquivo esperado:** {source.filename_hint}.xlsx")
+
+            if latest:
+                st.caption(
+                    f"Último processamento: {_format_timestamp(latest.get('created_at'))} · "
+                    f"{latest.get('uploaded_by') or '—'} · {latest.get('filename') or '—'}"
+                )
+            else:
+                st.caption("Ainda não há processamento registrado para esta fonte.")
+
+            upload_key = f"global-upload:{source.key}"
+            uploaded = chunked_file_uploader(key=upload_key)
+
+            if uploaded is not None:
+                size_mb = uploaded.size / (1024 * 1024)
+                st.success(f"{uploaded.filename} · {size_mb:.1f} MB · pronto para processar.")
+
+            if st.button(
+                f"Processar {source.label}",
+                type="primary",
+                use_container_width=True,
+                disabled=uploaded is None,
+                key=f"global-process:{source.key}",
+            ):
+                try:
+                    results = self.processing.process_global_source(
+                        ctx,
+                        source.key,
+                        uploaded.filename,
+                        uploaded.getvalue(),
+                    )
+                except (ImportValidationError, ValueError, PermissionError) as exc:
+                    st.error(str(exc))
                 else:
-                    st.caption("Nenhum processamento registrado ainda.")
-
-                upload_key = f"global-upload:{source.key}"
-                uploaded = chunked_file_uploader(key=upload_key)
-
-                if uploaded is not None:
-                    size_mb = uploaded.size / (1024 * 1024)
-                    st.caption(
-                        f"Arquivo recebido: {uploaded.filename} · {size_mb:.1f} MB · pronto para processar."
-                    )
-
-                if st.button(
-                    f"Processar {source.label}",
-                    type="primary",
-                    use_container_width=True,
-                    disabled=uploaded is None,
-                    key=f"global-process:{source.key}",
-                ):
-                    try:
-                        results = self.processing.process_global_source(
-                            ctx,
-                            source.key,
-                            uploaded.filename,
-                            uploaded.getvalue(),
-                        )
-                    except (ImportValidationError, ValueError, PermissionError) as exc:
-                        st.error(str(exc))
-                    else:
-                        summary = []
-                        for slug, result in results:
-                            date_label = datetime.fromisoformat(result.data_through).strftime("%d/%m/%Y")
-                            summary.append(f"{slug}: {result.indicator_name} · dados até {date_label}")
-                        st.session_state["_cop_upload_success"] = {
-                            "source": source.label,
-                            "filename": uploaded.filename,
-                            "summary": " | ".join(summary),
-                        }
-                        clear_chunked_upload(upload_key)
-                        st.rerun()
+                    summary = []
+                    for slug, result in results:
+                        date_label = datetime.fromisoformat(result.data_through).strftime("%d/%m/%Y")
+                        summary.append(f"{slug}: {result.indicator_name} · dados até {date_label}")
+                    st.session_state["_cop_upload_success"] = {
+                        "source": source.label,
+                        "filename": uploaded.filename,
+                        "summary": " | ".join(summary),
+                    }
+                    clear_chunked_upload(upload_key)
+                    st.rerun()

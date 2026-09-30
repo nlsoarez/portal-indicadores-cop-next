@@ -2051,40 +2051,91 @@ def _dpa_recent_chart_rows(payload: dict) -> list[dict]:
     if mine.empty:
         return []
 
-    team = pd.DataFrame(payload.get("team_daily") or [])
-    if not team.empty and "indicator_key" in team.columns:
-        team = team[team["indicator_key"] == "dpa_official"][
-            ["period", "team_avg"]
-        ].copy()
-    else:
-        team = pd.DataFrame(columns=["period", "team_avg"])
-
     mine = mine[["period", "value"]].copy()
-    merged = mine.merge(team, on="period", how="left")
-    merged["period"] = pd.to_datetime(merged["period"], errors="coerce")
-    merged = (
-        merged.dropna(subset=["period"])
-        .sort_values("period", ascending=False)
-        .head(7)
-        .sort_values("period", ascending=True)
-    )
-    if merged.empty:
+    mine["period"] = pd.to_datetime(mine["period"], errors="coerce")
+    mine = mine.dropna(subset=["period"]).sort_values("period", ascending=True)
+    if mine.empty:
         return []
 
-    rows: list[dict] = []
-    for _, row in merged.iterrows():
-        rows.append(
-            {
-                "date_label": row["period"].strftime("%d/%m"),
-                "period": row["period"].date().isoformat(),
-                "value": _number(row.get("value")),
-                "team_avg": _number(row.get("team_avg")),
-            }
-        )
-    return rows
+    return [
+        {
+            "date_label": row["period"].strftime("%d/%m"),
+            "period": row["period"].date().isoformat(),
+            "value": _number(row.get("value")),
+        }
+        for _, row in mine.iterrows()
+    ]
 
 
 def _dpa_chart_scale(rows: list[dict]) -> float:
+    values = [100.0]
+    for row in rows:
+        value = _number(row.get("value"))
+        if value is not None and value >= 0:
+            values.append(value)
+    maximum = max(values)
+    return float(((int(maximum) + 9) // 10) * 10)
+
+
+def _indicator_recent_rows(
+    payload: dict,
+    indicator_key: str,
+    *,
+    limit: int | None = 7,
+    include_team: bool = True,
+) -> list[dict]:
+    individual = pd.DataFrame(payload.get("individual") or [])
+    if individual.empty or "indicator_key" not in individual.columns:
+        return []
+
+    mine = individual[individual["indicator_key"] == indicator_key].copy()
+    if mine.empty:
+        return []
+
+    mine = mine[["period", "value"]].copy()
+
+    if include_team:
+        team = pd.DataFrame(payload.get("team_daily") or [])
+        if not team.empty and "indicator_key" in team.columns:
+            team = team[team["indicator_key"] == indicator_key][
+                ["period", "team_avg"]
+            ].copy()
+        else:
+            team = pd.DataFrame(columns=["period", "team_avg"])
+        merged = mine.merge(team, on="period", how="left")
+    else:
+        merged = mine.copy()
+        merged["team_avg"] = None
+
+    merged["period"] = pd.to_datetime(merged["period"], errors="coerce")
+    merged = merged.dropna(subset=["period"]).sort_values(
+        "period",
+        ascending=False,
+    )
+    if limit is not None:
+        merged = merged.head(limit)
+    merged = merged.sort_values("period", ascending=True)
+    if merged.empty:
+        return []
+
+    return [
+        {
+            "date_label": row["period"].strftime("%d/%m"),
+            "period": row["period"].date().isoformat(),
+            "value": _number(row.get("value")),
+            "team_avg": _number(row.get("team_avg")),
+        }
+        for _, row in merged.iterrows()
+    ]
+
+
+def _render_dual_percent_bar_chart(
+    rows: list[dict],
+    *,
+    chart_class: str,
+    mine_label: str,
+    team_label: str,
+) -> None:
     values = [100.0]
     for row in rows:
         for key in ("value", "team_avg"):
@@ -2092,7 +2143,101 @@ def _dpa_chart_scale(rows: list[dict]) -> float:
             if value is not None and value >= 0:
                 values.append(value)
     maximum = max(values)
-    return float(((int(maximum) + 9) // 10) * 10)
+    scale = float(((int(maximum) + 9) // 10) * 10)
+
+    items: list[str] = []
+    for index, row in enumerate(rows):
+        mine = _number(row.get("value"))
+        team = _number(row.get("team_avg"))
+        mine_width = 0.0 if mine is None else min(max(mine / scale * 100, 0), 100)
+        team_width = 0.0 if team is None else min(max(team / scale * 100, 0), 100)
+        delay = index * 0.055
+
+        items.append(
+            (
+                "<div class='cop-etit-chart-row'>"
+                f"<div class='cop-etit-chart-date'>{escape(str(row['date_label']))}</div>"
+                "<div class='cop-etit-chart-bars'>"
+                "<div class='cop-etit-chart-line'>"
+                f"<span class='cop-etit-chart-series'>{escape(mine_label)}</span>"
+                "<div class='cop-etit-chart-track'>"
+                f"<div class='cop-etit-chart-bar cop-etit-chart-mine' style='width:{mine_width:.2f}%;animation-delay:{delay:.2f}s'></div>"
+                "</div>"
+                f"<strong>{escape(_pct(mine))}</strong>"
+                "</div>"
+                "<div class='cop-etit-chart-line'>"
+                f"<span class='cop-etit-chart-series'>{escape(team_label)}</span>"
+                "<div class='cop-etit-chart-track'>"
+                f"<div class='cop-etit-chart-bar cop-etit-chart-team' style='width:{team_width:.2f}%;animation-delay:{delay + .08:.2f}s'></div>"
+                "</div>"
+                f"<strong>{escape(_pct(team))}</strong>"
+                "</div>"
+                "</div>"
+                "</div>"
+            )
+        )
+
+    st.markdown(
+        (
+            f"<section class='{escape(chart_class)} cop-etit-chart'>"
+            "<div class='cop-etit-chart-scale'>"
+            "<span>0%</span>"
+            f"<span>Escala até {scale:.0f}%</span>"
+            "</div>"
+            + "".join(items)
+            + "</section>"
+        ),
+        unsafe_allow_html=True,
+    )
+
+
+def _chat_group_table(
+    details: pd.DataFrame,
+    team_details: pd.DataFrame,
+) -> pd.DataFrame:
+    group = _dimension_rows(details, "group")
+    if group.empty:
+        return pd.DataFrame()
+
+    records: list[dict] = []
+    for raw_value, part in group.groupby("dimension_value", dropna=False):
+        name = str(raw_value or "").strip()
+        if not name:
+            continue
+
+        volume = float(
+            pd.to_numeric(part.get("volume"), errors="coerce").fillna(0).sum()
+        )
+        successes = float(
+            pd.to_numeric(part.get("successes"), errors="coerce").fillna(0).sum()
+        )
+        losses = float(
+            pd.to_numeric(part.get("losses"), errors="coerce").fillna(0).sum()
+        )
+        adherence = None if volume <= 0 else successes / volume * 100
+        team_avg = _team_value(team_details, "group", name)
+
+        records.append(
+            {
+                "Grupo": name,
+                "Volume": int(round(volume)),
+                "Aderentes": int(round(successes)),
+                "Não aderentes": int(round(losses)),
+                "Aderência %": _pct(adherence),
+                "Média equipe %": _pct(team_avg),
+                "_volume": volume,
+            }
+        )
+
+    if not records:
+        return pd.DataFrame()
+
+    return (
+        pd.DataFrame(records)
+        .sort_values(["_volume", "Grupo"], ascending=[False, True])
+        .drop(columns=["_volume"])
+        .reset_index(drop=True)
+    )
 
 
 def _etit_operational_summary(details: pd.DataFrame) -> dict:

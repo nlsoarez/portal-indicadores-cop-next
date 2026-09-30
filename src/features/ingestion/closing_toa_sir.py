@@ -41,14 +41,31 @@ def parse_closing_toa_sir(raw_bytes: bytes, allowed_logins: set[str]) -> tuple[P
             period = date(year, month, day).isoformat()
         except ValueError:
             continue
-        incident_id = next((record.get(key) for key in ("ID_ATIVIDADE", "ID_MOSTRA", "INCIDENTE", "ID_INCIDENTE", "NUMERO_INCIDENTE") if record.get(key)), None)
+        incident_id = next(
+            (
+                record.get(key)
+                for key in (
+                    "ID_ATIVIDADE",
+                    "ID_MOSTRA",
+                    "INCIDENTE",
+                    "ID_INCIDENTE",
+                    "NUMERO_INCIDENTE",
+                )
+                if record.get(key)
+            ),
+            None,
+        )
+        demand = str(record.get("DEMANDA") or "").strip().upper()
+        incident_label = (
+            f"{demand or '—'}|||{_clean_identifier(incident_id) or 'Sem identificador'}"
+        )
         if login in allowed:
             latest_anomes = max(latest_anomes, anomes)
             aggregates[(anomes, login, day)][0] += assertive
             aggregates[(anomes, login, day)][1] += volume
             for dimension, dimension_value in (
-                ("overall", "Total"), ("incident", incident_id), ("region", region), ("group", record.get("IN_GRUPO")), ("turn", turn),
-                ("demand", record.get("DEMANDA")), ("cause_toa", record.get("CAUSA_TOA")),
+                ("overall", "Total"), ("incident", incident_label), ("region", region), ("group", record.get("IN_GRUPO")), ("turn", turn),
+                ("demand", demand), ("cause_toa", record.get("CAUSA_TOA")),
                 ("cause_sir", record.get("CAUSA_SIR")), ("cause_treated", record.get("CAUSA_TOA_TRATADO")),
                 ("area", record.get("AREA")), ("area_involved", record.get("AREA_ENVOLVIDA")), ("status", record.get("STATUS")),
             ):
@@ -85,3 +102,12 @@ def parse_closing_toa_sir(raw_bytes: bytes, allowed_logins: set[str]) -> tuple[P
             (data_month,), materialize(breakdowns, latest_anomes),
         ),
     )
+
+
+def _clean_identifier(value: object | None) -> str:
+    text = str(value or "").strip()
+    if not text:
+        return ""
+    if text.endswith(".0") and text[:-2].isdigit():
+        return text[:-2]
+    return text

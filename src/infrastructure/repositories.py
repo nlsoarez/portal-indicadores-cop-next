@@ -453,10 +453,12 @@ class IndicatorRepository:
                 WITH base AS (
                     SELECT b.segment_id, b.data_month, b.login, b.volume, b.successes, b.losses,
                            b.tma_seconds_sum, b.tma_count, b.tmr_seconds_sum, b.tmr_count,
-                           d.indicator_key, s.slug AS segment_slug, s.name AS segment_name
+                           d.indicator_key, s.slug AS segment_slug, s.name AS segment_name,
+                           COALESCE(u.display_name, u.full_name) AS display_name
                     FROM indicator_breakdowns b
                     JOIN indicator_definitions d ON d.id=b.indicator_definition_id
                     JOIN segments s ON s.id=b.segment_id
+                    LEFT JOIN users u ON UPPER(u.login)=UPPER(b.login)
                     WHERE b.segment_id IN ({placeholders})
                       AND b.scope='team' AND b.dimension='overall'
                 ),
@@ -465,7 +467,7 @@ class IndicatorRepository:
                     FROM base GROUP BY indicator_key
                 )
                 SELECT b.data_month AS period, b.segment_id, b.segment_slug, b.segment_name,
-                       b.indicator_key, b.login,
+                       b.indicator_key, b.login, MAX(b.display_name) AS display_name,
                        SUM(b.volume) AS volume,
                        SUM(b.successes) AS successes,
                        SUM(b.losses) AS losses,

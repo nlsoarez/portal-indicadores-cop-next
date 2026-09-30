@@ -1,0 +1,32 @@
+-- SECURITY GUARDIAN
+-- Execute uma única vez com o usuário administrativo do projeto Supabase.
+-- Substitua a senha de exemplo por uma senha forte gerada fora do Git.
+-- Nunca faça commit da senha real.
+
+CREATE ROLE cop_portal_app
+    LOGIN
+    PASSWORD 'REPLACE_WITH_STRONG_UNIQUE_PASSWORD'
+    NOSUPERUSER
+    NOCREATEDB
+    NOCREATEROLE
+    NOREPLICATION
+    NOBYPASSRLS;
+
+GRANT CONNECT ON DATABASE postgres TO cop_portal_app;
+GRANT USAGE ON SCHEMA cop_portal TO cop_portal_app;
+
+GRANT SELECT, INSERT, UPDATE, DELETE
+    ON ALL TABLES IN SCHEMA cop_portal
+    TO cop_portal_app;
+
+GRANT USAGE, SELECT
+    ON ALL SEQUENCES IN SCHEMA cop_portal
+    TO cop_portal_app;
+
+-- As futuras tabelas/sequências criadas pelo papel administrativo também
+-- recebem os privilégios mínimos de runtime.
+ALTER DEFAULT PRIVILEGES FOR ROLE postgres IN SCHEMA cop_portal
+    GRANT SELECT, INSERT, UPDATE, DELETE ON TABLES TO cop_portal_app;
+
+ALTER DEFAULT PRIVILEGES FOR ROLE postgres IN SCHEMA cop_portal
+    GRANT USAGE, SELECT ON SEQUENCES TO cop_portal_app;

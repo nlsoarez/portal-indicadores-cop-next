@@ -409,6 +409,18 @@ def _render_indicator(
         )
         return
 
+    if ctx.is_admin and indicator_key == "productivity_avg_daily":
+        from src.ui.admin.indicators.productivity import render_admin_productivity
+
+        render_admin_productivity(
+            people=people,
+            analyst_breakdowns=analyst_breakdowns,
+            dpa_people=_indicator_frame(analyst_df, "dpa_official"),
+            period=period,
+            data_through=fresh.get("data_through") or period or "—",
+        )
+        return
+
     st.markdown(f"### {name}")
     st.caption(
         f"Competência: {period or '—'} · "

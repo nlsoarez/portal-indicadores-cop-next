@@ -95,16 +95,23 @@ class AnalystShell:
         _inject_analyst_styles()
         st.markdown("<div class='cop-analyst-shell'></div>", unsafe_allow_html=True)
         _render_identity_bar(
-            ctx.user.display_name,
+            ctx.user.full_name or ctx.user.display_name,
             segment.name,
             latest,
         )
 
-        summary_tab, indicators_tab, history_tab = st.tabs(
-            ["🏠 Resumo", "📊 Indicadores", "↺ Histórico"]
+        tab_labels = ["🏠 Resumo"]
+        tab_labels.extend(
+            _indicator_tab_label(
+                str(row.get("indicator_key")),
+                str(row.get("name") or "Indicador"),
+            )
+            for row in latest
         )
+        tab_labels.append("↺ Histórico")
+        tabs = st.tabs(tab_labels)
 
-        with summary_tab:
+        with tabs[0]:
             self._render_summary(payload, latest)
             with st.expander("Atualização dos meus indicadores", expanded=False):
                 render_indicator_freshness(
@@ -114,10 +121,14 @@ class AnalystShell:
                     columns=3,
                 )
 
-        with indicators_tab:
-            self._render_indicator_tabs(payload, latest)
+        team_index = _team_index(payload)
+        for tab, row in zip(tabs[1:-1], latest):
+            with tab:
+                key = str(row.get("indicator_key"))
+                team = team_index.get((str(row.get("period")), key), {})
+                self._render_indicator(payload, row, team)
 
-        with history_tab:
+        with tabs[-1]:
             self._render_history(payload)
 
     def _render_summary(self, payload: dict, latest: list[dict]) -> None:
@@ -134,11 +145,12 @@ class AnalystShell:
 
         st.markdown("### Visão geral do período")
         kpi_cols = st.columns(4)
+        attention_count = max(snapshot["with_target"] - snapshot["met"], 0)
         kpis = [
             (
                 "Indicadores acompanhados",
                 str(snapshot["tracked"]),
-                "Visão consolidada do período",
+                f"Dados atualizados até {snapshot['freshness_label']}",
                 "neutral",
             ),
             (
@@ -152,25 +164,27 @@ class AnalystShell:
                 "good" if snapshot["met"] == snapshot["with_target"] and snapshot["with_target"] else "neutral",
             ),
             (
+                "Precisam de atenção",
+                str(attention_count) if snapshot["with_target"] else "—",
+                "Indicadores abaixo da meta",
+                "attention" if attention_count else "good",
+            ),
+            (
                 "Acima da equipe",
                 (
                     f"{snapshot['above_team']}/{snapshot['with_team']}"
                     if snapshot["with_team"]
                     else "—"
                 ),
-                "Comparação com média agregada",
+                "Comparação com a média da equipe",
                 "good" if snapshot["above_team"] else "neutral",
-            ),
-            (
-                "Dados mais recentes",
-                snapshot["freshness_label"],
-                "Cobertura mais atual disponível",
-                "neutral",
             ),
         ]
         for column, (label, value, context, tone) in zip(kpi_cols, kpis):
             with column:
                 _render_summary_kpi(label, value, context, tone)
+
+        _render_executive_summary(snapshot)
 
         st.markdown("### Leitura rápida")
         insight_cols = st.columns(2)
@@ -530,14 +544,18 @@ def _render_identity_bar(
 ) -> None:
     periods = [str(row.get("period") or "") for row in latest if row.get("period")]
     period = max(periods) if periods else ""
-    first_name = str(display_name or "").split()[0] if str(display_name or "").strip() else "Analista"
+    person_name = _short_display_name(display_name)
+    initials = "".join(part[:1] for part in person_name.split()[:2]).upper() or "A"
 
     st.markdown(
         (
             "<section class='cop-analyst-identity'>"
+            "<div class='cop-analyst-avatar-wrap'>"
+            f"<div class='cop-analyst-avatar'>{escape(initials)}</div>"
+            "</div>"
             "<div class='cop-analyst-identity-main'>"
             "<div class='cop-analyst-eyebrow'>MEU PAINEL DE DESEMPENHO</div>"
-            f"<h1>Olá, {escape(first_name)}.</h1>"
+            f"<h1>Olá, {escape(person_name)}.</h1>"
             "<p>Acompanhe seus resultados, entenda sua evolução e veja como você está "
             "em relação à referência da sua equipe.</p>"
             "<div class='cop-analyst-chips'>"
@@ -697,13 +715,58 @@ def _meets_target(value: float, target: float, direction: str) -> bool:
     return value >= target
 
 
+def _short_display_name(value: str) -> str:
+    text = " ".join(str(value or "").split()).strip()
+    if not text:
+        return "Analista"
+    parts = text.split()
+    if len(parts) <= 2:
+        return text.upper()
+    return f"{parts[0]} {parts[-1]}".upper()
+
+
+def _render_executive_summary(snapshot: dict) -> None:
+    tracked = int(snapshot.get("tracked") or 0)
+    with_target = int(snapshot.get("with_target") or 0)
+    met = int(snapshot.get("met") or 0)
+    attention = max(with_target - met, 0)
+    above = int(snapshot.get("above_team") or 0)
+    with_team = int(snapshot.get("with_team") or 0)
+
+    if with_target:
+        target_text = f"{met} de {with_target} indicadores estão dentro da meta"
+    else:
+        target_text = "Ainda não há metas configuradas para os indicadores disponíveis"
+
+    if with_team:
+        team_text = f"{above} de {with_team} estão acima da média da equipe"
+    else:
+        team_text = "a comparação com a equipe ainda está sendo formada"
+
+    tone = "good" if attention == 0 and with_target else "attention" if attention else "neutral"
+    st.markdown(
+        (
+            f"<div class='cop-personal-executive cop-personal-executive-{tone}'>"
+            "<div class='cop-personal-executive-label'>RESUMO EXECUTIVO</div>"
+            f"<div class='cop-personal-executive-title'>{escape(target_text)}.</div>"
+            f"<div class='cop-personal-executive-text'>No período, {escape(team_text)}. "
+            f"Você possui {tracked} indicadores acompanhados.</div>"
+            "</div>"
+        ),
+        unsafe_allow_html=True,
+    )
+
+
 def _render_summary_kpi(
     label: str,
     value: str,
     context: str,
     tone: str,
 ) -> None:
-    tone_class = " cop-personal-kpi-good" if tone == "good" else ""
+    tone_class = {
+        "good": " cop-personal-kpi-good",
+        "attention": " cop-personal-kpi-attention",
+    }.get(tone, "")
     st.markdown(
         (
             f"<div class='cop-personal-kpi{tone_class}'>"

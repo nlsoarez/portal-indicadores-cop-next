@@ -7,6 +7,8 @@ from src.ui.analyst.shell import (
     _closing_cause_table,
     _closing_dimension_table,
     _closing_review_rows,
+    _dpa_chart_scale,
+    _dpa_recent_chart_rows,
     _etit_dimension_table,
     _etit_operational_summary,
     _etit_team_demand_cards,
@@ -204,6 +206,51 @@ class AnalystSummaryViewTest(unittest.TestCase):
         self.assertIn("RAL N. Ader. (média equipe)", labels)
         self.assertIn("% REC Ader. (média equipe)", labels)
         self.assertIn("REC N. Ader. (média equipe)", labels)
+
+    def test_dpa_recent_chart_rows_merge_personal_and_team_daily_values(self):
+        payload = {
+            "individual": [
+                {
+                    "indicator_key": "dpa_official",
+                    "period": "2026-09-28",
+                    "value": 88.0,
+                    "volume": 28800,
+                },
+                {
+                    "indicator_key": "dpa_official",
+                    "period": "2026-09-29",
+                    "value": 92.5,
+                    "volume": 28800,
+                },
+            ],
+            "team_daily": [
+                {
+                    "indicator_key": "dpa_official",
+                    "period": "2026-09-28",
+                    "team_avg": 90.0,
+                },
+                {
+                    "indicator_key": "dpa_official",
+                    "period": "2026-09-29",
+                    "team_avg": 94.0,
+                },
+            ],
+        }
+
+        rows = _dpa_recent_chart_rows(payload)
+
+        self.assertEqual(["28/09", "29/09"], [row["date_label"] for row in rows])
+        self.assertEqual([88.0, 92.5], [row["value"] for row in rows])
+        self.assertEqual([90.0, 94.0], [row["team_avg"] for row in rows])
+        self.assertEqual(100.0, _dpa_chart_scale(rows))
+
+    def test_dpa_chart_scale_expands_for_values_above_100(self):
+        rows = [
+            {"value": 123.1, "team_avg": 96.4},
+            {"value": 101.0, "team_avg": 92.0},
+        ]
+
+        self.assertEqual(130.0, _dpa_chart_scale(rows))
 
     def test_summary_snapshot_counts_targets_and_team_comparison(self):
         latest = [

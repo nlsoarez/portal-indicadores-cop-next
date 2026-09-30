@@ -247,6 +247,12 @@ class AnalystShell:
         details = _latest_indicator_rows(payload.get("breakdowns") or [], indicator_key)
         team_details = _latest_indicator_rows(payload.get("team_breakdowns") or [], indicator_key)
 
+        # Chat TOA: visão intencionalmente enxuta. Os cinco cards acima são
+        # suficientes para a leitura operacional do analista; removemos
+        # tabelas, diagnósticos, perdas e evolução para evitar ruído.
+        if indicator_key == "chat_10m":
+            return
+
         if indicator_key == "closing_assertiveness":
             self._render_closing_assertiveness(payload, details, team_details)
             return

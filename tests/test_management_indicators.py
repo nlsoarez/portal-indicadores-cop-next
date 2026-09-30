@@ -309,6 +309,76 @@ class ManagementIndicatorsTest(unittest.TestCase):
         self.assertNotIn("login", payload["team_breakdowns"][0])
         self.assertTrue(all(row["dimension"] != "incident" for row in payload["team_breakdowns"]))
 
+    def test_analyst_payload_never_exposes_peer_breakdowns(self):
+        from src.infrastructure.repositories import IndicatorRepository, SegmentRepository, UserRepository
+
+        indicators = IndicatorRepository()
+        segment = SegmentRepository().get_by_slug("empresarial")
+        users = UserRepository()
+        me = users.get_by_login("N0189105")
+        peer = users.get_by_login("N5737414")
+        definition = indicators.get_definition(segment.id, "emp_etit_event")
+
+        indicators.replace_results_for_months(
+            segment_id=segment.id,
+            indicator_definition_id=int(definition["id"]),
+            login_to_user_id={me.login: me.id, peer.login: peer.id},
+            rows=(
+                {
+                    "login": me.login,
+                    "period": "2026-09-29",
+                    "data_month": "2026-09",
+                    "value": 80.0,
+                    "volume": 10,
+                },
+                {
+                    "login": peer.login,
+                    "period": "2026-09-29",
+                    "data_month": "2026-09",
+                    "value": 60.0,
+                    "volume": 10,
+                },
+            ),
+            months=("2026-09",),
+        )
+        indicators.replace_breakdowns_for_months(
+            segment_id=segment.id,
+            indicator_definition_id=int(definition["id"]),
+            months=("2026-09",),
+            rows=(
+                {
+                    "scope": "team",
+                    "login": me.login,
+                    "period": "2026-09-29",
+                    "data_month": "2026-09",
+                    "dimension": "incident",
+                    "dimension_value": "RAL|||INC-ME",
+                    "value": 0.0,
+                    "volume": 1,
+                    "successes": 0,
+                    "losses": 1,
+                },
+                {
+                    "scope": "team",
+                    "login": peer.login,
+                    "period": "2026-09-29",
+                    "data_month": "2026-09",
+                    "dimension": "incident",
+                    "dimension_value": "REC|||INC-PEER",
+                    "value": 0.0,
+                    "volume": 1,
+                    "successes": 0,
+                    "losses": 1,
+                },
+            ),
+        )
+
+        payload = indicators.dashboard_payload(segment.id, me.id)
+        values = {row["dimension_value"] for row in payload["breakdowns"]}
+        self.assertIn("RAL|||INC-ME", values)
+        self.assertNotIn("REC|||INC-PEER", values)
+        self.assertTrue(all("login" not in row for row in payload["team_breakdowns"]))
+
     def test_enterprise_parser_keeps_ral_rec_reference_from_nota(self):
         from src.features.ingestion.enterprise_indicators import parse_enterprise_indicators
 

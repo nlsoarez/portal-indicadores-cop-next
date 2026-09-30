@@ -3,7 +3,9 @@ import unittest
 import pandas as pd
 
 from src.ui.admin.indicators.etit_residential import (
+    _indicator_labels,
     _overall_numbers,
+    _presentation_table,
     analyst_table_for_etit,
     dimension_table,
 )
@@ -83,6 +85,41 @@ class AdminEtitViewTest(unittest.TestCase):
         self.assertEqual(6.25, numbers["non_adherence"])
         self.assertEqual(36, numbers["tma_seconds"])
         self.assertEqual(1325, numbers["tmr_seconds"])
+
+
+    def test_assertiveness_gpon_uses_same_service_split_with_correct_labels(self):
+        labels = _indicator_labels("res_assert_gpon")
+
+        self.assertTrue(labels["is_gpon"])
+        self.assertTrue(labels["is_assertiveness"])
+        self.assertEqual("Assertividade GPON", labels["title"])
+        self.assertEqual("Assertivos", labels["success"])
+        self.assertEqual("Não Assertivos", labels["loss"])
+
+        table = pd.DataFrame(
+            {
+                "Serviço": ["BROWNFIELD", "GREENFIELD"],
+                "Volume": [10, 5],
+                "Aderentes": [9, 3],
+                "Não Aderentes": [1, 2],
+                "Aderência %": [90.0, 60.0],
+                "Não Aderência %": [10.0, 40.0],
+            }
+        )
+        presented = _presentation_table(table, labels)
+
+        self.assertIn("Assertivos", presented.columns)
+        self.assertIn("Não Assertivos", presented.columns)
+        self.assertIn("Assertividade %", presented.columns)
+        self.assertIn("Não Assertividade %", presented.columns)
+        self.assertEqual(["BROWNFIELD", "GREENFIELD"], presented["Serviço"].tolist())
+
+    def test_assertiveness_hfc_remains_without_service_split(self):
+        labels = _indicator_labels("res_assert_fibra_hfc")
+
+        self.assertFalse(labels["is_gpon"])
+        self.assertTrue(labels["is_assertiveness"])
+        self.assertEqual("Assertividade HFC", labels["title"])
 
 
 if __name__ == "__main__":

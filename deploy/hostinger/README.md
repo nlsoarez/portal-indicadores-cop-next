@@ -89,7 +89,26 @@ Não faça commit da URI real do banco nem de senhas.
 
 ### Papel PostgreSQL de runtime
 
-O processo web não deve operar como `postgres`. Antes de ativar o modo separado:
+O processo web não deve operar como `postgres`.
+
+#### Rollout seguro em duas etapas
+
+O banco atual precisa receber primeiro as novas estruturas de autenticação antes de o papel restrito ser usado.
+
+**Etapa 1 — atualizar schema mantendo a credencial atual**
+1. faça deploy do código com o `DATABASE_URL` administrativo atual e `COP_DB_AUTO_MIGRATE=1`;
+2. valide que foram criados `users.auth_version` e `auth_throttle`;
+3. confirme login, reset de senha e healthcheck.
+
+**Etapa 2 — reduzir privilégios**
+1. revise e execute `deploy/supabase/runtime-role.sql.example`;
+2. defina a senha do `cop_portal_app` fora do Git;
+3. configure `DATABASE_URL` com esse papel;
+4. configure `DATABASE_ADMIN_URL` apenas para migração;
+5. defina `COP_DB_AUTO_MIGRATE=0`;
+6. faça novo deploy usando SHA aprovado e valide novamente.
+
+Antes de ativar o modo separado:
 
 1. revise `deploy/supabase/runtime-role.sql.example`;
 2. crie `cop_portal_app` no Supabase com senha forte gerada fora do Git;

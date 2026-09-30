@@ -394,6 +394,21 @@ def _render_indicator(
         )
         return
 
+    if ctx.is_admin and indicator_key == "closing_assertiveness":
+        from src.ui.admin.indicators.closing_toa_sir import (
+            render_admin_closing_assertiveness,
+        )
+
+        render_admin_closing_assertiveness(
+            rows=rows,
+            people=people,
+            metrics=metrics,
+            details=details,
+            period=period,
+            data_through=fresh.get("data_through") or period or "—",
+        )
+        return
+
     st.markdown(f"### {name}")
     st.caption(
         f"Competência: {period or '—'} · "

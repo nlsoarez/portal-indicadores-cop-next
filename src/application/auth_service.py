@@ -21,6 +21,11 @@ LOGIN_FAILURE_THRESHOLD = 5
 LOGIN_BACKOFF_BASE_SECONDS = 5
 LOGIN_BACKOFF_MAX_SECONDS = 60
 
+# Unknown/inactive accounts still pay one PBKDF2 verification so login timing
+# does not trivially disclose whether an account exists.
+_DUMMY_SALT = "security-guardian-dummy-salt"
+_DUMMY_HASH, _ = hash_password("not-a-valid-user-password", _DUMMY_SALT)
+
 
 def _as_utc(value) -> datetime | None:
     if value is None:
@@ -62,6 +67,7 @@ class AuthService:
 
         row = self.users.get_credentials(normalized)
         if not row or not bool(row["active"]):
+            verify_password(password, _DUMMY_HASH, _DUMMY_SALT)
             return None
         if not verify_password(password, row["password_hash"], row["password_salt"]):
             self._record_failure(normalized, now)

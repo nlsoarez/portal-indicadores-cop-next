@@ -100,9 +100,20 @@ class AnalystShell:
             latest,
         )
 
-        summary_tab, indicators_tab, history_tab = st.tabs(
-            ["🏠 Resumo", "📊 Indicadores", "↺ Histórico"]
-        )
+        if segment.slug == "empresarial":
+            summary_tab, certified_tab, indicators_tab, history_tab = st.tabs(
+                [
+                    "🏠 Resumo",
+                    "✅ Analista Certificado",
+                    "📊 Indicadores",
+                    "↺ Histórico",
+                ]
+            )
+        else:
+            summary_tab, indicators_tab, history_tab = st.tabs(
+                ["🏠 Resumo", "📊 Indicadores", "↺ Histórico"]
+            )
+            certified_tab = None
 
         with summary_tab:
             self._render_summary(payload, latest)
@@ -114,11 +125,63 @@ class AnalystShell:
                     columns=3,
                 )
 
+        if certified_tab is not None:
+            with certified_tab:
+                self._render_enterprise_certification(payload, latest)
+
         with indicators_tab:
             self._render_indicator_tabs(payload, latest)
 
         with history_tab:
             self._render_history(payload)
+
+    def _render_enterprise_certification(
+        self,
+        payload: dict,
+        latest: list[dict],
+    ) -> None:
+        latest_index = {
+            str(row.get("indicator_key")): row
+            for row in latest
+        }
+        etit = _number(
+            (latest_index.get("emp_etit_event") or {}).get("value")
+        )
+        dpa = _number(
+            (latest_index.get("dpa_official") or {}).get("value")
+        )
+        certification = _enterprise_certification_status(etit, dpa)
+
+        st.markdown("### ✅ Analista Certificado")
+        st.caption(
+            "Status individual da certificação empresarial com base em "
+            "ETIT por Evento e DPA."
+        )
+
+        _render_enterprise_certification_status(certification)
+
+        cols = st.columns(2)
+        with cols[0]:
+            _render_enterprise_certification_metric(
+                "ETIT POR EVENTO %",
+                etit,
+                "etit",
+            )
+        with cols[1]:
+            _render_enterprise_certification_metric(
+                "DPA INDIVIDUAL %",
+                dpa,
+                "dpa",
+            )
+
+        st.markdown("### 🧭 Leitura do seu desempenho")
+        feedback = _build_analyst_performance_feedback(
+            latest,
+            _team_index(payload),
+            payload.get("breakdowns") or [],
+            payload.get("team_breakdowns") or [],
+        )
+        _render_performance_reading(feedback)
 
     def _render_summary(self, payload: dict, latest: list[dict]) -> None:
         if not latest:

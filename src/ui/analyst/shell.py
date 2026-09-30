@@ -56,13 +56,13 @@ DETAIL_DIMENSIONS = {
 INDICATOR_TAB_LABELS = {
     "res_assert_fibra_hfc": "📡 Assert. HFC",
     "res_assert_gpon": "📶 Assert. GPON",
-    "chat_10m": "💬 Chat",
+    "chat_10m": "💬 Chat Livre",
     "dpa_official": "⏱️ DPA",
     "res_etit_fibra_hfc": "⚡ ETIT HFC",
     "res_etit_gpon": "🔎 ETIT GPON",
     "emp_etit_event": "⚡ ETIT Evento",
     "productivity_avg_daily": "📦 Produtividade",
-    "validacao_20m": "✅ Validação",
+    "validacao_20m": "✅ Tempo de Validação",
     "toa_cancellation_rate": "❌ Canceladas",
     "closing_assertiveness": "🌙 Fechamento",
 }
@@ -101,19 +101,63 @@ class AnalystShell:
         )
 
         if segment.slug == "empresarial":
-            summary_tab, certified_tab, indicators_tab, history_tab = st.tabs(
-                [
-                    "🏠 Resumo",
-                    "✅ Analista Certificado",
-                    "📊 Indicadores",
-                    "↺ Histórico",
-                ]
-            )
-        else:
-            summary_tab, indicators_tab, history_tab = st.tabs(
-                ["🏠 Resumo", "📊 Indicadores", "↺ Histórico"]
-            )
-            certified_tab = None
+            enterprise_order = [
+                ("productivity_avg_daily", "📦 Produtividade"),
+                ("emp_etit_event", "⚡ ETIT Evento"),
+                ("dpa_official", "⏱️ DPA"),
+                ("validacao_20m", "✅ Tempo de Validação"),
+                ("chat_10m", "💬 Chat Livre"),
+                ("closing_assertiveness", "🌙 Fechamento"),
+                ("toa_cancellation_rate", "❌ Canceladas"),
+            ]
+            latest_index = {
+                str(row.get("indicator_key")): row
+                for row in latest
+            }
+
+            labels = ["🏠 Resumo"]
+            labels.extend(label for _, label in enterprise_order)
+            labels.extend(["Analista certificado", "↺ Histórico"])
+            tabs = st.tabs(labels)
+
+            summary_tab = tabs[0]
+            enterprise_tabs = tabs[1:1 + len(enterprise_order)]
+            certified_tab = tabs[-2]
+            history_tab = tabs[-1]
+
+            with summary_tab:
+                self._render_summary(payload, latest)
+                with st.expander("Atualização dos meus indicadores", expanded=False):
+                    render_indicator_freshness(
+                        payload.get("freshness") or [],
+                        compact=True,
+                        show_title=False,
+                        columns=3,
+                    )
+
+            team_index = _team_index(payload)
+            for tab, (indicator_key, _) in zip(enterprise_tabs, enterprise_order):
+                with tab:
+                    row = latest_index.get(indicator_key)
+                    if row is None:
+                        st.info("Ainda não há dados processados para este indicador.")
+                        continue
+                    team = team_index.get(
+                        (str(row.get("period")), indicator_key),
+                        {},
+                    )
+                    self._render_indicator(payload, row, team)
+
+            with certified_tab:
+                self._render_enterprise_certification(payload, latest)
+
+            with history_tab:
+                self._render_history(payload)
+            return
+
+        summary_tab, indicators_tab, history_tab = st.tabs(
+            ["🏠 Resumo", "📊 Indicadores", "↺ Histórico"]
+        )
 
         with summary_tab:
             self._render_summary(payload, latest)
@@ -124,10 +168,6 @@ class AnalystShell:
                     show_title=False,
                     columns=3,
                 )
-
-        if certified_tab is not None:
-            with certified_tab:
-                self._render_enterprise_certification(payload, latest)
 
         with indicators_tab:
             self._render_indicator_tabs(payload, latest)

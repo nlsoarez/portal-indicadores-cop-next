@@ -94,9 +94,19 @@ def inject_global_style() -> None:
 
         [data-testid="stSidebar"] [data-testid="stRadio"] label {
             border-radius:12px;
-            padding:.58rem .7rem;
+            padding:.62rem .72rem;
             border:1px solid transparent;
             transition:all .2s ease;
+            min-height:42px;
+        }
+
+        [data-testid="stSidebar"] [data-testid="stRadio"] label > div:first-child {
+            display:none !important;
+        }
+
+        [data-testid="stSidebar"] [data-testid="stRadio"] label > div:last-child {
+            width:100%;
+            margin-left:0 !important;
         }
 
         [data-testid="stSidebar"] [data-testid="stRadio"] label:hover {
@@ -158,27 +168,50 @@ def inject_global_style() -> None:
         }
 
         .cop-user-mini {
-            min-height:68px;
+            min-height:66px;
             border:1px solid var(--cop-line);
             border-radius:14px;
             padding:.72rem .78rem;
-            margin-bottom:.9rem;
-            background:
-                linear-gradient(90deg, rgba(8,19,32,.97) 0%, rgba(8,19,32,.84) 68%, rgba(8,19,32,.20) 100%),
-                var(--cop-mini-art) right center/auto 100% no-repeat;
+            margin-bottom:.85rem;
+            background:linear-gradient(135deg, rgba(18,42,67,.86), rgba(8,20,34,.96));
+            display:flex;
+            align-items:center;
+            gap:.68rem;
+        }
+
+        .cop-user-avatar {
+            width:34px;
+            height:34px;
+            flex:0 0 34px;
+            border-radius:10px;
+            display:grid;
+            place-items:center;
+            color:#fff;
+            font-size:.72rem;
+            font-weight:850;
+            background:linear-gradient(145deg, rgba(237,28,36,.90), rgba(110,18,29,.95));
+            box-shadow:0 8px 22px rgba(237,28,36,.18);
+        }
+
+        .cop-user-copy {
+            min-width:0;
         }
 
         .cop-user-mini strong {
             display:block;
             color:#fff;
             font-size:.78rem;
+            white-space:nowrap;
+            overflow:hidden;
+            text-overflow:ellipsis;
         }
 
         .cop-user-mini span {
-            display:block;
+            display:inline-block;
             color:#8fa0b5 !important;
-            font-size:.65rem;
+            font-size:.64rem;
             margin-top:.12rem;
+            margin-right:.35rem;
         }
 
         /* Page chrome */
@@ -237,18 +270,89 @@ def inject_global_style() -> None:
         .cop-hero {
             position:relative;
             overflow:hidden;
-            min-height:150px;
+            min-height:168px;
             border:1px solid rgba(148,163,184,.16);
             border-radius:20px;
-            margin:.1rem 0 1.1rem;
-            padding:1.45rem 1.55rem;
+            margin:.1rem 0 1.25rem;
+            padding:1.55rem 1.65rem;
             background:
-                linear-gradient(90deg, rgba(6,13,24,.98) 0%, rgba(6,13,24,.92) 38%, rgba(6,13,24,.30) 72%, rgba(6,13,24,.56) 100%),
-                var(--cop-hero-art) right center/auto 100% no-repeat;
+                radial-gradient(circle at 82% 20%, rgba(59,130,246,.20), transparent 27%),
+                radial-gradient(circle at 72% 90%, rgba(237,28,36,.17), transparent 31%),
+                linear-gradient(120deg, rgba(8,18,31,.99), rgba(8,19,33,.93) 58%, rgba(13,30,48,.96));
             box-shadow:var(--cop-shadow);
             isolation:isolate;
             animation:copFadeUp .48s ease both;
         }
+
+        .cop-hero-art {
+            position:absolute;
+            inset:0 0 0 auto;
+            width:min(48%, 680px);
+            opacity:.95;
+            pointer-events:none;
+            overflow:hidden;
+        }
+
+        .cop-hero-art::before,
+        .cop-hero-art::after {
+            content:"";
+            position:absolute;
+            border-radius:50%;
+            border:1px solid rgba(125,211,252,.22);
+            box-shadow:0 0 40px rgba(56,189,248,.08);
+        }
+
+        .cop-hero-art::before {
+            width:360px;
+            height:360px;
+            right:-70px;
+            top:-120px;
+        }
+
+        .cop-hero-art::after {
+            width:260px;
+            height:260px;
+            right:75px;
+            top:-62px;
+            border-color:rgba(248,113,113,.20);
+        }
+
+        .cop-orbit {
+            position:absolute;
+            display:block;
+            border-radius:50%;
+            border:1px dashed rgba(148,163,184,.20);
+            transform:rotate(-18deg);
+        }
+
+        .cop-orbit-a {
+            width:420px;
+            height:150px;
+            right:-58px;
+            top:18px;
+        }
+
+        .cop-orbit-b {
+            width:300px;
+            height:110px;
+            right:66px;
+            top:70px;
+            border-color:rgba(237,28,36,.25);
+        }
+
+        .cop-node {
+            position:absolute;
+            width:8px;
+            height:8px;
+            border-radius:50%;
+            background:#7dd3fc;
+            box-shadow:0 0 0 6px rgba(125,211,252,.08), 0 0 20px rgba(125,211,252,.75);
+            animation:copPulse 2.8s ease-out infinite;
+        }
+
+        .cop-node-a { right:19%; top:28%; }
+        .cop-node-b { right:34%; top:64%; background:#ff5361; box-shadow:0 0 0 6px rgba(255,83,97,.08), 0 0 20px rgba(255,83,97,.70); animation-delay:.5s; }
+        .cop-node-c { right:7%; top:72%; animation-delay:1s; }
 
         .cop-hero::after {
             content:"";
@@ -504,6 +608,9 @@ def inject_global_style() -> None:
 
         /* Shared/custom cards */
         .cop-freshness-card,
+        .cop-etit-card,
+        .cop-res-card,
+        .cop-window-card,
         .cop-emp-card,
         .cop-emp-average,
         .cop-val-card,
@@ -543,6 +650,12 @@ def inject_global_style() -> None:
 
         .cop-freshness-name,
         .cop-freshness-meta,
+        .cop-etit-card-label,
+        .cop-res-card-title,
+        .cop-res-card-negative,
+        .cop-res-card-duration,
+        .cop-window-label,
+        .cop-window-sub,
         .cop-emp-card-label,
         .cop-val-card-label,
         .cop-dpa-card-label,
@@ -555,6 +668,7 @@ def inject_global_style() -> None:
         }
 
         .cop-freshness-date,
+        .cop-window-main,
         .cop-emp-card-value,
         .cop-val-card-value,
         .cop-dpa-card-value,
@@ -562,6 +676,34 @@ def inject_global_style() -> None:
         .cop-chat-card-value,
         .cop-cert-card-value {
             color:#f7fbff;
+        }
+
+        .cop-freshness-card {
+            min-height:118px;
+            border:1px solid var(--cop-line);
+            border-radius:14px;
+            padding:14px 15px;
+            margin-bottom:10px;
+        }
+
+        .cop-freshness-name {
+            font-size:.75rem;
+            line-height:1.25;
+            min-height:2.25em;
+        }
+
+        .cop-freshness-date {
+            display:block;
+            margin-top:.38rem;
+            font-size:.82rem;
+            font-weight:750;
+        }
+
+        .cop-freshness-meta {
+            display:block;
+            margin-top:.32rem;
+            font-size:.68rem;
+            line-height:1.35;
         }
 
         .cop-prod-sector-pill {
@@ -580,18 +722,23 @@ def inject_global_style() -> None:
 
         /* Login */
         .cop-login-hero {
-            min-height:235px;
+            min-height:255px;
             border:1px solid var(--cop-line);
             border-radius:22px;
-            padding:2rem 2.1rem;
-            margin:2.4rem 0 1.1rem;
+            padding:2.15rem 2.2rem;
+            margin:2rem 0 1.15rem;
             background:
-                linear-gradient(90deg, rgba(5,11,20,.98) 0%, rgba(5,11,20,.90) 42%, rgba(5,11,20,.24) 76%, rgba(5,11,20,.54) 100%),
-                var(--cop-hero-art) right center/auto 100% no-repeat;
+                radial-gradient(circle at 78% 18%, rgba(59,130,246,.22), transparent 24%),
+                radial-gradient(circle at 82% 82%, rgba(237,28,36,.20), transparent 30%),
+                linear-gradient(120deg, rgba(5,11,20,.99), rgba(7,18,31,.96) 56%, rgba(12,30,48,.98));
             box-shadow:var(--cop-shadow);
             overflow:hidden;
             position:relative;
             animation:copFadeUp .52s ease both;
+        }
+
+        .cop-login-art {
+            width:min(52%, 720px);
         }
 
         .cop-login-hero::after {

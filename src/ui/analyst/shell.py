@@ -1023,6 +1023,110 @@ class AnalystShell:
         st.dataframe(pd.DataFrame(rows), use_container_width=True, hide_index=True)
 
 
+def _validation_time_user_summary(
+    row: dict,
+    team: dict,
+    details: pd.DataFrame,
+) -> dict:
+    overall = _dimension_rows(details, "overall")
+    if overall.empty:
+        total = float(_number(row.get("volume")) or 0)
+        adherence = _number(row.get("value"))
+        successes = (
+            0.0
+            if adherence is None or total <= 0
+            else total * adherence / 100.0
+        )
+        losses = max(total - successes, 0.0)
+        tmr_minutes = None
+    else:
+        total = float(
+            pd.to_numeric(overall.get("volume"), errors="coerce").fillna(0).sum()
+        )
+        successes = float(
+            pd.to_numeric(overall.get("successes"), errors="coerce").fillna(0).sum()
+        )
+        losses = float(
+            pd.to_numeric(overall.get("losses"), errors="coerce").fillna(0).sum()
+        )
+        adherence = None if total <= 0 else successes / total * 100
+        tmr_seconds = _weighted_breakdown_duration(overall, "tmr_seconds")
+        tmr_minutes = None if tmr_seconds is None else tmr_seconds / 60.0
+
+    return {
+        "total": total,
+        "successes": successes,
+        "losses": losses,
+        "adherence": adherence,
+        "tmr_minutes": tmr_minutes,
+        "team_avg": _number(team.get("team_avg")),
+    }
+
+
+def _validation_group_table(details: pd.DataFrame) -> pd.DataFrame:
+    group = _dimension_rows(details, "group")
+    if group.empty:
+        return pd.DataFrame()
+
+    records: list[dict] = []
+    for raw_value, part in group.groupby("dimension_value", dropna=False):
+        name = str(raw_value or "").strip()
+        if not name:
+            continue
+
+        total = float(
+            pd.to_numeric(part.get("volume"), errors="coerce").fillna(0).sum()
+        )
+        successes = float(
+            pd.to_numeric(part.get("successes"), errors="coerce").fillna(0).sum()
+        )
+        adherence = None if total <= 0 else successes / total * 100
+        tmr_seconds = _weighted_breakdown_duration(part, "tmr_seconds")
+        tmr_minutes = None if tmr_seconds is None else tmr_seconds / 60.0
+
+        records.append(
+            {
+                "Grupo": name,
+                "Total": int(round(total)),
+                "Aderentes": int(round(successes)),
+                "Aderência %": _pct(adherence),
+                "TMR (min)": _format_decimal(tmr_minutes),
+                "_volume": total,
+            }
+        )
+
+    if not records:
+        return pd.DataFrame()
+
+    return (
+        pd.DataFrame(records)
+        .sort_values(["_volume", "Grupo"], ascending=[False, True])
+        .drop(columns=["_volume"])
+        .reset_index(drop=True)
+    )
+
+
+def _render_validation_kpi(
+    label: str,
+    value: str,
+    tone: str,
+) -> None:
+    safe_tone = (
+        tone
+        if tone in {"neutral", "good", "bad", "attention", "warning", "team"}
+        else "neutral"
+    )
+    st.markdown(
+        (
+            f"<article class='cop-validation-kpi cop-validation-{safe_tone}'>"
+            f"<span>{escape(label)}</span>"
+            f"<strong>{escape(value)}</strong>"
+            "</article>"
+        ),
+        unsafe_allow_html=True,
+    )
+
+
 def _cancelled_tasks_user_summary(
     details: pd.DataFrame,
     team_details: pd.DataFrame,

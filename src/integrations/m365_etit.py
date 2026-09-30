@@ -230,10 +230,13 @@ class M365TokenProvider:
                 "Falha na autenticação Microsoft 365: "
                 + str(result.get("error_description") or result.get("error") or result)
             )
+        claims = result.get("id_token_claims")
+        if not isinstance(claims, dict):
+            claims = {}
         return {
             "account": (
-                result.get("id_token_claims", {}).get("preferred_username")
-                or result.get("id_token_claims", {}).get("upn")
+                claims.get("preferred_username")
+                or claims.get("upn")
                 or "conta autenticada"
             ),
             "scopes": self.scopes,
@@ -473,36 +476,59 @@ class EtitM365Pilot:
     def probe(self) -> dict[str, Any]:
         token = self.token_provider.acquire_silent()
         client = GraphClient(token)
+        checked_at = utc_now_iso()
+        state = _safe_json_load(
+            self.state_path,
+            {"version": 1, "sources": {}},
+        )
+        state.setdefault("sources", {})
         output: dict[str, Any] = {
-            "checked_at": utc_now_iso(),
+            "checked_at": checked_at,
             "sources": {},
         }
         for source in PILOT_SOURCES:
-            if not source.configured:
-                output["sources"][source.source_key] = {
+            current = state["sources"].get(source.source_key)
+            source_state = dict(current) if isinstance(current, dict) else {}
+            source_state.update(
+                {
                     "label": source.label,
-                    "status": "not_configured",
+                    "last_checked_at": checked_at,
+                    "last_error": None,
                 }
+            )
+
+            if not source.configured:
+                source_state["status"] = "not_configured"
+                source_state["last_error"] = (
+                    f"Configure {source.env_prefix}_URL ou DRIVE_ID/FOLDER_ID."
+                )
+                state["sources"][source.source_key] = source_state
+                output["sources"][source.source_key] = source_state
                 continue
+
             try:
                 drive_id, folder_id = resolve_folder(client, source)
                 children = list_folder_children(client, drive_id, folder_id)
                 latest = select_latest_file(source, children)
-                output["sources"][source.source_key] = {
-                    "label": source.label,
-                    "status": "ok",
-                    "folder": {
-                        "drive_id": drive_id,
-                        "folder_id": folder_id,
-                    },
-                    "remote": latest.fingerprint(),
-                }
+                source_state.update(
+                    {
+                        "status": "ok",
+                        "folder": {
+                            "drive_id": drive_id,
+                            "folder_id": folder_id,
+                        },
+                        "remote": latest.fingerprint(),
+                    }
+                )
             except Exception as exc:
-                output["sources"][source.source_key] = {
-                    "label": source.label,
-                    "status": "error",
-                    "error": str(exc),
-                }
+                source_state["status"] = "error"
+                source_state["last_error"] = str(exc)
+
+            state["sources"][source.source_key] = source_state
+            output["sources"][source.source_key] = source_state
+
+        state["last_checked_at"] = checked_at
+        _atomic_json_write(self.state_path, state)
         return output
 
     def sync(
@@ -557,7 +583,10 @@ class EtitM365Pilot:
                 drive_id, folder_id = resolve_folder(client, source)
                 children = list_folder_children(client, drive_id, folder_id)
                 latest = select_latest_file(source, children)
-                changed = force or remote_changed(source_state.get("remote"), latest)
+                changed = force or remote_changed(
+                    source_state.get("processed_remote"),
+                    latest,
+                )
 
                 source_state["folder"] = {
                     "drive_id": drive_id,
@@ -580,6 +609,7 @@ class EtitM365Pilot:
                 )
                 source_state["status"] = "updated"
                 source_state["last_synced_at"] = utc_now_iso()
+                source_state["processed_remote"] = latest.fingerprint()
                 source_state["processed"] = [
                     {
                         "segment": slug,

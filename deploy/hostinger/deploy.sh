@@ -3,6 +3,7 @@ set -Eeuo pipefail
 
 APP_DIR="${APP_DIR:-/opt/portal-indicadores-cop-next}"
 BRANCH="${1:-${DEPLOY_BRANCH:-feat/admin-etit-operational-view}}"
+EXPECTED_COMMIT="${2:-${DEPLOY_COMMIT:-}}"
 PUBLIC_URL="${PUBLIC_URL:-https://portal-indicadores.179-198-124-8.sslip.io}"
 PORTAL_PORT="${PORTAL_PORT:-8501}"
 EDGE_NETWORK="${EDGE_NETWORK:-evolution-hostinger_edge}"
@@ -23,6 +24,8 @@ fail() {
 
 [[ -d "${APP_DIR}/.git" ]] || fail "Repositório não encontrado em ${APP_DIR}"
 cd "${APP_DIR}"
+
+[[ "${EXPECTED_COMMIT}" =~ ^[0-9a-fA-F]{40}$ ]] || fail "Informe o SHA completo aprovado como segundo argumento ou DEPLOY_COMMIT."
 
 command -v git >/dev/null 2>&1 || fail "git não encontrado"
 command -v docker >/dev/null 2>&1 || fail "docker não encontrado"
@@ -56,7 +59,12 @@ log "Buscando branch origin/${BRANCH}"
 git fetch --prune origin "${BRANCH}"
 
 TARGET_COMMIT="$(git rev-parse "origin/${BRANCH}")"
-log "Commit alvo: ${TARGET_COMMIT}"
+log "Commit alvo da branch: ${TARGET_COMMIT}"
+log "Commit aprovado: ${EXPECTED_COMMIT}"
+
+if [[ "${TARGET_COMMIT,,}" != "${EXPECTED_COMMIT,,}" ]]; then
+  fail "A branch mudou ou o SHA informado não corresponde ao HEAD remoto. Revise antes de publicar."
+fi
 
 log "Validando Docker Compose"
 "${COMPOSE[@]}" config --quiet

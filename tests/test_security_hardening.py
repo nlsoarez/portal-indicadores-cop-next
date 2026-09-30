@@ -58,6 +58,13 @@ class SecurityHardeningTest(unittest.TestCase):
         self.assertGreaterEqual(int(state["failure_count"]), LOGIN_FAILURE_THRESHOLD)
         self.assertTrue(state["blocked_until"])
 
+    def test_unknown_login_does_not_create_throttle_rows(self):
+        from src.application.auth_service import AuthService
+
+        auth = AuthService()
+        self.assertIsNone(auth.authenticate("DOES-NOT-EXIST", "wrong-password"))
+        self.assertIsNone(auth.throttle.get("DOES-NOT-EXIST"))
+
     def test_successful_login_clears_throttle_state(self):
         from src.application.access_service import AccessService
         from src.application.auth_service import AuthService

@@ -383,6 +383,12 @@ def inject_global_style() -> None:
             animation:copGlow 5.5s ease-in-out infinite alternate;
         }
 
+        .cop-hero-copy {
+            position:relative;
+            z-index:2;
+            max-width:68%;
+        }
+
         .cop-hero-copy span {
             color:#85cfff;
             font-size:.68rem;
@@ -685,8 +691,11 @@ def inject_global_style() -> None:
             color:#8fa0b6 !important;
         }
 
+        .cop-window-main {
+            color:#f7fbff !important;
+        }
+
         .cop-freshness-date,
-        .cop-window-main,
         .cop-emp-card-value,
         .cop-val-card-value,
         .cop-dpa-card-value,

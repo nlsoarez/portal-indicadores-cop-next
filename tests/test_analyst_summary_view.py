@@ -4,6 +4,7 @@ import pandas as pd
 
 from src.ui.analyst.shell import (
     _build_summary_snapshot,
+    _chat_group_table,
     _closing_cause_table,
     _closing_dimension_table,
     _cancelled_tasks_user_summary,
@@ -14,6 +15,7 @@ from src.ui.analyst.shell import (
     _etit_dimension_table,
     _etit_operational_summary,
     _etit_team_demand_cards,
+    _indicator_recent_rows,
     _meets_target,
     _period_label,
     _productivity_activity_table,
@@ -216,47 +218,38 @@ class AnalystSummaryViewTest(unittest.TestCase):
         self.assertIn("% REC Ader. (média equipe)", labels)
         self.assertIn("REC N. Ader. (média equipe)", labels)
 
-    def test_dpa_recent_chart_rows_merge_personal_and_team_daily_values(self):
+    def test_dpa_recent_chart_rows_include_all_available_days_without_team(self):
         payload = {
             "individual": [
                 {
                     "indicator_key": "dpa_official",
-                    "period": "2026-09-28",
-                    "value": 88.0,
+                    "period": f"2026-09-{day:02d}",
+                    "value": 80.0 + day,
                     "volume": 28800,
-                },
-                {
-                    "indicator_key": "dpa_official",
-                    "period": "2026-09-29",
-                    "value": 92.5,
-                    "volume": 28800,
-                },
+                }
+                for day in range(1, 11)
             ],
             "team_daily": [
                 {
                     "indicator_key": "dpa_official",
-                    "period": "2026-09-28",
-                    "team_avg": 90.0,
-                },
-                {
-                    "indicator_key": "dpa_official",
-                    "period": "2026-09-29",
+                    "period": "2026-09-10",
                     "team_avg": 94.0,
-                },
+                }
             ],
         }
 
         rows = _dpa_recent_chart_rows(payload)
 
-        self.assertEqual(["28/09", "29/09"], [row["date_label"] for row in rows])
-        self.assertEqual([88.0, 92.5], [row["value"] for row in rows])
-        self.assertEqual([90.0, 94.0], [row["team_avg"] for row in rows])
+        self.assertEqual(10, len(rows))
+        self.assertEqual("01/09", rows[0]["date_label"])
+        self.assertEqual("10/09", rows[-1]["date_label"])
+        self.assertNotIn("team_avg", rows[0])
         self.assertEqual(100.0, _dpa_chart_scale(rows))
 
     def test_dpa_chart_scale_expands_for_values_above_100(self):
         rows = [
-            {"value": 123.1, "team_avg": 96.4},
-            {"value": 101.0, "team_avg": 92.0},
+            {"value": 123.1},
+            {"value": 101.0},
         ]
 
         self.assertEqual(130.0, _dpa_chart_scale(rows))
@@ -359,12 +352,12 @@ class AnalystSummaryViewTest(unittest.TestCase):
         self.assertEqual([60.0, 75.0], [row["team_avg"] for row in rows])
         self.assertEqual(80.0, _productivity_chart_scale(rows))
 
-    def test_cancelled_tasks_summary_uses_counts_and_team_average(self):
+    def test_cancelled_tasks_summary_uses_counts_percentage_and_team_average(self):
         details = pd.DataFrame(
             {
                 "dimension": ["overall", "overall"],
                 "losses": [1, 1],
-                "volume": [1, 1],
+                "volume": [5, 5],
             }
         )
         team = pd.DataFrame(
@@ -375,37 +368,102 @@ class AnalystSummaryViewTest(unittest.TestCase):
             }
         )
 
-        summary = _cancelled_tasks_user_summary(details, team)
+        summary = _cancelled_tasks_user_summary(
+            details,
+            team,
+            analyst_pct=12.5,
+            target_pct=15.0,
+        )
 
         self.assertEqual(2.0, summary["cancelled"])
+        self.assertEqual(12.5, summary["analyst_pct"])
+        self.assertEqual(15.0, summary["target_pct"])
         self.assertAlmostEqual(25.7142857, summary["team_average"], places=5)
         self.assertEqual("good", summary["tone"])
 
-    def test_cancelled_tasks_uses_15_percent_below_team_as_good_reference(self):
-        team = pd.DataFrame(
-            {
-                "dimension": ["overall"],
-                "team_losses": [100],
-                "team_analysts": [10],
-            }
-        )
+    def test_cancelled_tasks_uses_official_15_percent_max_target(self):
+        team = pd.DataFrame()
 
         good = _cancelled_tasks_user_summary(
-            pd.DataFrame({"dimension": ["overall"], "losses": [8]}),
+            pd.DataFrame(),
             team,
+            analyst_pct=15.0,
         )
         attention = _cancelled_tasks_user_summary(
-            pd.DataFrame({"dimension": ["overall"], "losses": [9]}),
+            pd.DataFrame(),
             team,
+            analyst_pct=18.0,
         )
         bad = _cancelled_tasks_user_summary(
-            pd.DataFrame({"dimension": ["overall"], "losses": [11]}),
+            pd.DataFrame(),
             team,
+            analyst_pct=25.0,
         )
 
         self.assertEqual("good", good["tone"])
         self.assertEqual("attention", attention["tone"])
         self.assertEqual("bad", bad["tone"])
+
+    def test_chat_group_table_exposes_group_volume_adherence_and_team_reference(self):
+        details = pd.DataFrame(
+            {
+                "dimension": ["group", "group"],
+                "dimension_value": ["Minas Gerais", "Centro-Oeste"],
+                "volume": [10, 5],
+                "successes": [8, 5],
+                "losses": [2, 0],
+            }
+        )
+        team = pd.DataFrame(
+            {
+                "dimension": ["group", "group"],
+                "dimension_value": ["Minas Gerais", "Centro-Oeste"],
+                "team_avg": [90.0, 95.0],
+                "team_volume": [100, 50],
+                "team_successes": [90, 47],
+                "team_losses": [10, 3],
+            }
+        )
+
+        table = _chat_group_table(details, team)
+
+        minas = table[table["Grupo"] == "Minas Gerais"].iloc[0]
+        self.assertEqual(10, minas["Volume"])
+        self.assertEqual(8, minas["Aderentes"])
+        self.assertEqual("80,0%", minas["Aderência %"])
+        self.assertEqual("90,0%", minas["Média equipe %"])
+
+    def test_indicator_recent_rows_limits_etit_to_last_seven_days_with_team(self):
+        payload = {
+            "individual": [
+                {
+                    "indicator_key": "emp_etit_event",
+                    "period": f"2026-09-{day:02d}",
+                    "value": 80.0 + day,
+                }
+                for day in range(1, 11)
+            ],
+            "team_daily": [
+                {
+                    "indicator_key": "emp_etit_event",
+                    "period": f"2026-09-{day:02d}",
+                    "team_avg": 90.0,
+                }
+                for day in range(1, 11)
+            ],
+        }
+
+        rows = _indicator_recent_rows(
+            payload,
+            "emp_etit_event",
+            limit=7,
+            include_team=True,
+        )
+
+        self.assertEqual(7, len(rows))
+        self.assertEqual("04/09", rows[0]["date_label"])
+        self.assertEqual("10/09", rows[-1]["date_label"])
+        self.assertEqual(90.0, rows[0]["team_avg"])
 
     def test_validation_summary_matches_total_adherents_losses_tmr_and_team(self):
         row = {

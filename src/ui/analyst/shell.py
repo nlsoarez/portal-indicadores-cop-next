@@ -979,6 +979,75 @@ class AnalystShell:
         st.dataframe(pd.DataFrame(rows), use_container_width=True, hide_index=True)
 
 
+def _cancelled_tasks_user_summary(
+    details: pd.DataFrame,
+    team_details: pd.DataFrame,
+) -> dict:
+    overall = _dimension_rows(details, "overall")
+    if overall.empty:
+        cancelled = 0.0
+    else:
+        cancelled = float(
+            pd.to_numeric(overall.get("losses"), errors="coerce")
+            .fillna(0)
+            .sum()
+        )
+
+    team_overall = _dimension_rows(team_details, "overall")
+    team_average = None
+    if not team_overall.empty:
+        team_losses = float(
+            pd.to_numeric(
+                team_overall.get("team_losses"),
+                errors="coerce",
+            )
+            .fillna(0)
+            .sum()
+        )
+        analysts = pd.to_numeric(
+            team_overall.get("team_analysts"),
+            errors="coerce",
+        ).fillna(0)
+        analyst_count = float(analysts.max()) if not analysts.empty else 0.0
+        if analyst_count > 0:
+            team_average = team_losses / analyst_count
+
+    # Regra operacional: quanto menor, melhor. A referência de bom desempenho
+    # é ficar pelo menos 15% abaixo da média de canceladas da equipe.
+    tone = "neutral"
+    if team_average is not None and team_average >= 0:
+        reference = team_average * 0.85
+        if cancelled <= reference:
+            tone = "good"
+        elif cancelled <= team_average:
+            tone = "attention"
+        else:
+            tone = "bad"
+
+    return {
+        "cancelled": cancelled,
+        "team_average": team_average,
+        "tone": tone,
+    }
+
+
+def _render_cancelled_tasks_kpi(
+    label: str,
+    value: str,
+    tone: str,
+) -> None:
+    safe_tone = tone if tone in {"neutral", "good", "attention", "bad", "team"} else "neutral"
+    st.markdown(
+        (
+            f"<article class='cop-cancel-user-kpi cop-cancel-user-{safe_tone}'>"
+            f"<span>{escape(label)}</span>"
+            f"<strong>{escape(value)}</strong>"
+            "</article>"
+        ),
+        unsafe_allow_html=True,
+    )
+
+
 def _productivity_user_summary(
     row: dict,
     details: pd.DataFrame,

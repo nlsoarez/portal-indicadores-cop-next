@@ -2,8 +2,8 @@
 set -Eeuo pipefail
 
 APP_DIR="${APP_DIR:-/opt/portal-indicadores-cop-next}"
-SYNC_HOUR="${SYNC_HOUR:-5}"
-SYNC_MINUTE="${SYNC_MINUTE:-15}"
+SYNC_HOUR="${SYNC_HOUR:-18}"
+SYNC_MINUTE="${SYNC_MINUTE:-30}"
 CRON_FILE="/etc/cron.d/portal-indicadores-m365-etit"
 LOG_FILE="${M365_SYNC_LOG:-/var/log/portal-m365-etit.log}"
 LOCK_FILE="${M365_SYNC_LOCK:-/var/lock/portal-m365-etit.lock}"

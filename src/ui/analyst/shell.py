@@ -1240,13 +1240,19 @@ def _performance_indicator_state(
     breakdowns: list[dict],
     team_breakdowns: list[dict],
 ) -> str | None:
+    """Classifica cada indicador como bom ou atenção.
+
+    Mantém a mesma semântica da leitura qualitativa do dashboard legado:
+    o estado "misto" nasce da combinação de indicadores bons e de atenção
+    dentro de um mesmo tema, não de uma faixa intermediária de um indicador.
+    """
     key = str(row.get("indicator_key") or "")
     value = _number(row.get("value"))
     if value is None:
         return None
 
     if key == "dpa_official":
-        return "good" if value >= 90.0 else "mixed" if value >= 85.0 else "attention"
+        return "good" if value >= 90.0 else "attention"
 
     if key == "toa_cancellation_rate":
         details = _latest_indicator_rows(breakdowns, key)
@@ -1255,38 +1261,25 @@ def _performance_indicator_state(
         tone = str(summary.get("tone") or "neutral")
         if tone == "good":
             return "good"
-        if tone == "attention":
-            return "mixed"
-        if tone == "bad":
+        if tone in {"attention", "bad"}:
             return "attention"
         return None
 
     target = _number(row.get("target_value"))
     direction = str(row.get("direction") or "higher_is_better")
     if target is not None:
-        if _meets_target(value, target, direction):
-            return "good"
-
-        if target == 0:
-            return "attention"
-        if direction == "lower_is_better":
-            distance = (value - target) / abs(target) if target else 1.0
-        else:
-            distance = (target - value) / abs(target)
-        return "mixed" if distance <= 0.10 else "attention"
+        return "good" if _meets_target(value, target, direction) else "attention"
 
     team_avg = _number(team.get("team_avg"))
     if team_avg is None:
         return None
 
-    favorable = value >= team_avg if direction != "lower_is_better" else value <= team_avg
-    if favorable:
-        return "good"
-
-    if team_avg == 0:
-        return "attention"
-    relative_gap = abs(value - team_avg) / abs(team_avg)
-    return "mixed" if relative_gap <= 0.10 else "attention"
+    favorable = (
+        value >= team_avg
+        if direction != "lower_is_better"
+        else value <= team_avg
+    )
+    return "good" if favorable else "attention"
 
 
 def _build_analyst_performance_feedback(
@@ -1344,18 +1337,18 @@ def _build_analyst_performance_feedback(
         )
     elif not to_improve:
         summary = (
-            "Analista consistente, com desempenho equilibrado e sob controle nas frentes "
-            "avaliadas neste período."
+            "Analista consistente, com desempenho equilibrado e sob controle em todas as "
+            "frentes avaliadas — um período sólido do começo ao fim."
         )
     elif not strong and not mixed:
         summary = (
-            "Período de ajustes: as principais frentes pedem atenção e devem ser tratadas "
-            "em ordem de impacto."
+            "Período de ajustes: as principais frentes pedem atenção, mas o quadro é "
+            "totalmente recuperável com foco em poucos pontos de cada vez."
         )
     else:
         summary = (
             "Analista com bons fundamentos e algumas frentes em desenvolvimento neste "
-            "período — o equilíbrio depende de ajustes pontuais na rotina."
+            "período — o equilíbrio está ao alcance com ajustes pontuais na rotina."
         )
 
     highlights = (
@@ -1378,8 +1371,8 @@ def _build_analyst_performance_feedback(
             )
     else:
         point_strong = (
-            "Ainda não há uma frente totalmente consolidada; priorizar um foco por vez "
-            "tende a acelerar a recuperação dos demais indicadores."
+            "Mesmo sem uma frente totalmente consolidada, há base para evoluir rápido: "
+            "escolher um único foco por semana costuma destravar os demais indicadores."
         )
 
     if to_improve:
@@ -1393,12 +1386,12 @@ def _build_analyst_performance_feedback(
         suggestion += "."
     else:
         point_attention = (
-            "Nenhuma frente exige atenção relevante neste período. O cuidado é manter a "
-            "constância para preservar o patamar atual."
+            "Nenhuma frente exige atenção neste período. O cuidado agora é manter a "
+            "constância para preservar esse bom patamar."
         )
         suggestion = (
-            "Manter a rotina atual e registrar as práticas que estão funcionando para "
-            "sustentar o resultado ao longo dos próximos períodos."
+            "Seguir mantendo a rotina atual e compartilhar com a equipe o que está "
+            "funcionando — isso fortalece o time e reforça a sua referência técnica."
         )
 
     return {

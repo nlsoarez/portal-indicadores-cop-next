@@ -60,8 +60,13 @@ class AnalystShell:
         self.dashboard = DashboardService()
 
     def render(self, ctx: AccessContext, segments: list[Segment]) -> None:
+        render_sidebar_brand(
+            role="analyst",
+            user_name=ctx.user.display_name,
+        )
         if len(segments) == 1:
             segment = segments[0]
+            st.sidebar.caption(f"Segmento: {segment.name}")
         else:
             segment = st.sidebar.selectbox(
                 "Meu segmento",
@@ -70,12 +75,6 @@ class AnalystShell:
                 key="analyst_segment_selector",
             )
         switch_segment_state(st.session_state, segment.id)
-
-        render_sidebar_brand(
-            role="analyst",
-            user_name=ctx.user.display_name,
-            segment_name=segment.name,
-        )
 
         page = st.sidebar.radio(
             "Navegação",

@@ -376,12 +376,17 @@ class AdminShell:
                     scoped_accounts,
                     format_func=lambda item: (
                         f"{item['display_name']} · {item['login']} · "
-                        f"{'Liderança' if item['role_code'] == 'subadmin' else 'Analista'}"
+                        f"{'Liderança' if item['role_code'] == 'subadmin' else 'Analista'} · "
+                        f"{'Troca de senha pendente' if item.get('must_change_password') else 'Senha definida'}"
                     ),
                     key="admin_password_reset_user",
                 )
+                pending_count = sum(
+                    1 for account in scoped_accounts if account.get("must_change_password")
+                )
                 st.caption(
-                    "O reset gera uma senha temporária segura. No próximo login, "
+                    f"{pending_count} conta(s) neste contexto aguardam troca de senha. "
+                    "O reset gera uma senha temporária segura; no próximo login, "
                     "o usuário será obrigado a cadastrar uma nova senha."
                 )
 

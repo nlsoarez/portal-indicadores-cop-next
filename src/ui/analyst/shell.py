@@ -4275,6 +4275,58 @@ def _inject_analyst_styles() -> None:
             }
         }
 
+        .cop-assert-kpi {
+            min-height:112px;
+            padding:1rem 1.05rem;
+            border:1px solid rgba(148,163,184,.15);
+            border-top:3px solid #64748b;
+            border-radius:16px;
+            background:linear-gradient(180deg, rgba(16,38,61,.90), rgba(8,21,36,.97));
+            box-shadow:0 14px 30px rgba(0,0,0,.13);
+            text-align:center;
+        }
+        .cop-assert-kpi span {
+            display:block;
+            color:#8294aa;
+            font-size:.66rem;
+            font-weight:850;
+            letter-spacing:.07em;
+            text-transform:uppercase;
+        }
+        .cop-assert-kpi strong {
+            display:block;
+            margin-top:.6rem;
+            color:#f7fbff;
+            font-size:1.72rem;
+            line-height:1;
+            font-weight:900;
+            letter-spacing:-.035em;
+        }
+        .cop-assert-good {
+            border-top-color:#31d58a;
+        }
+        .cop-assert-good strong {
+            color:#65e3a5;
+        }
+        .cop-assert-bad {
+            border-top-color:#ff4d5f;
+        }
+        .cop-assert-bad strong {
+            color:#ff6b79;
+        }
+        .cop-assert-warning {
+            border-top-color:#f7b84b;
+        }
+        .cop-assert-warning strong {
+            color:#ffc966;
+        }
+        .cop-assert-team {
+            border-top-color:#38bdf8;
+        }
+        .cop-assert-team strong {
+            color:#7dd3fc;
+        }
+
         .cop-etit-user-kpi {
             min-height:112px;
             padding:1rem 1.05rem;

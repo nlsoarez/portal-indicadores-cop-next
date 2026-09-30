@@ -237,6 +237,18 @@ class AnalystShell:
         team_avg = _number(team.get("team_avg"))
 
         st.markdown(f"### {indicator_name}")
+        if indicator_key == "toa_cancellation_rate":
+            details = _latest_indicator_rows(
+                payload.get("breakdowns") or [],
+                indicator_key,
+            )
+            team_details = _latest_indicator_rows(
+                payload.get("team_breakdowns") or [],
+                indicator_key,
+            )
+            self._render_cancelled_tasks_view(details, team_details)
+            return
+
         if indicator_key == "productivity_avg_daily":
             details = _latest_indicator_rows(
                 payload.get("breakdowns") or [],
@@ -316,6 +328,35 @@ class AnalystShell:
         self._render_loss_references(details, indicator_key)
         self._render_full_detail(details, team_details, indicator_key, direction)
         self._render_recent_evolution(payload, indicator_key, unit)
+
+    def _render_cancelled_tasks_view(
+        self,
+        details: pd.DataFrame,
+        team_details: pd.DataFrame,
+    ) -> None:
+        summary = _cancelled_tasks_user_summary(details, team_details)
+
+        cols = st.columns(3)
+        cards = [
+            (
+                "TOTAL — TAREFAS CANCELADAS",
+                _format_integer(summary["cancelled"]),
+                "neutral",
+            ),
+            (
+                "CANCELADAS (↓ MENOR MELHOR)",
+                _format_integer(summary["cancelled"]),
+                summary["tone"],
+            ),
+            (
+                "MÉDIA CANCELADAS EQUIPE",
+                _format_decimal(summary["team_average"]),
+                "team",
+            ),
+        ]
+        for column, (label, value, tone) in zip(cols, cards):
+            with column:
+                _render_cancelled_tasks_kpi(label, value, tone)
 
     def _render_productivity_view(
         self,

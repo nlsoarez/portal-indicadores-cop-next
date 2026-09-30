@@ -43,5 +43,14 @@ printf '\n=== Health público ===\n'
 curl -fsS --max-time 12 "${PUBLIC_URL}/_stcore/health"
 printf '\n'
 
+printf '\n=== Microsoft 365 ETIT piloto ===\n'
+if grep -Eq '^[[:space:]]*M365_TENANT_ID=.+' "${APP_DIR}/.env.vps" \
+  && grep -Eq '^[[:space:]]*M365_CLIENT_ID=.+' "${APP_DIR}/.env.vps"; then
+  "${COMPOSE[@]}" run --rm --no-deps portal \
+    python -m src.integrations.m365_cli status || true
+else
+  printf 'Piloto ainda sem M365_TENANT_ID/M365_CLIENT_ID em .env.vps\n'
+fi
+
 printf '\n=== Últimos logs ===\n'
 "${COMPOSE[@]}" logs --tail=80 portal

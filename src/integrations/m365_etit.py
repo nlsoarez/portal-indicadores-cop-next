@@ -25,6 +25,7 @@ DEFAULT_SYNC_STATE = DEFAULT_STATE_DIR / "etit_sync_state.json"
 MAX_REMOTE_FILE_SIZE = 128 * 1024 * 1024
 MAX_GRAPH_JSON_BYTES = 16 * 1024 * 1024
 ALLOWED_GRAPH_HOSTS = {"graph.microsoft.com"}
+M365_TOKEN_CACHE_KEY_ENV = "M365_TOKEN_CACHE_KEY"
 
 PILOT_SOURCE_KEYS = (
     "residential_indicators",
@@ -178,10 +179,16 @@ class M365TokenProvider:
         tenant_id: str | None = None,
         client_id: str | None = None,
         cache_path: Path | None = None,
+        cache_key: str | None = None,
     ):
         self.tenant_id = (tenant_id or os.environ.get("M365_TENANT_ID", "")).strip()
         self.client_id = (client_id or os.environ.get("M365_CLIENT_ID", "")).strip()
         self.cache_path = cache_path or DEFAULT_TOKEN_CACHE
+        self.cache_key = (
+            cache_key
+            if cache_key is not None
+            else os.environ.get(M365_TOKEN_CACHE_KEY_ENV, "")
+        ).strip()
         scopes_raw = os.environ.get("M365_SCOPES", "Files.Read.All")
         self.scopes = tuple(
             scope.strip()
@@ -195,53 +202,91 @@ class M365TokenProvider:
             self.tenant_id
             and self.client_id
             and self.scopes
+            and self.cache_key
             and not _looks_like_placeholder(self.tenant_id)
             and not _looks_like_placeholder(self.client_id)
         )
 
+    def _cipher(self):
+        if not self.cache_key:
+            raise M365ConfigurationError(
+                f"Configure {M365_TOKEN_CACHE_KEY_ENV} para proteger o cache de token."
+            )
+        try:
+            from cryptography.fernet import Fernet
+            return Fernet(self.cache_key.encode("ascii"))
+        except (ImportError, ValueError, UnicodeEncodeError) as exc:
+            raise M365ConfigurationError(
+                f"{M365_TOKEN_CACHE_KEY_ENV} inválida ou suporte criptográfico indisponível."
+            ) from exc
+
     def _build_app(self):
-        if not self.configured:
-            if _looks_like_placeholder(self.tenant_id) or _looks_like_placeholder(self.client_id):
-                raise M365ConfigurationError(
-                    "M365_TENANT_ID/M365_CLIENT_ID ainda contêm valores de exemplo. "
-                    "Substitua pelos IDs reais da App Registration antes de autenticar."
-                )
+        if _looks_like_placeholder(self.tenant_id) or _looks_like_placeholder(self.client_id):
+            raise M365ConfigurationError(
+                "M365_TENANT_ID/M365_CLIENT_ID ainda contêm valores de exemplo. "
+                "Substitua pelos IDs reais da App Registration antes de autenticar."
+            )
+        if not self.tenant_id or not self.client_id:
             raise M365ConfigurationError(
                 "Configure M365_TENANT_ID e M365_CLIENT_ID antes de autenticar."
             )
+        cipher = self._cipher()
         try:
             import msal
+            from cryptography.fernet import InvalidToken
         except ImportError as exc:
             raise M365ConfigurationError(
-                "Pacote msal não instalado. Refaça o build da aplicação."
+                "Dependências MSAL/cryptography não instaladas. Refaça o build da aplicação."
             ) from exc
 
         cache = msal.SerializableTokenCache()
+        migrate_plaintext = False
         if self.cache_path.exists():
             try:
-                cache.deserialize(self.cache_path.read_text(encoding="utf-8"))
-            except OSError:
-                pass
+                raw = self.cache_path.read_bytes()
+                if raw.lstrip().startswith(b"{"):
+                    serialized = raw.decode("utf-8")
+                    migrate_plaintext = True
+                else:
+                    try:
+                        serialized = cipher.decrypt(raw).decode("utf-8")
+                    except InvalidToken as exc:
+                        raise M365ConfigurationError(
+                            "Não foi possível descriptografar o cache Microsoft 365. "
+                            "Verifique M365_TOKEN_CACHE_KEY ou refaça o login."
+                        ) from exc
+                cache.deserialize(serialized)
+            except OSError as exc:
+                raise M365ConfigurationError(
+                    "Não foi possível ler o cache Microsoft 365."
+                ) from exc
 
         app = msal.PublicClientApplication(
             self.client_id,
             authority=f"https://login.microsoftonline.com/{self.tenant_id}",
             token_cache=cache,
         )
-        return app, cache
+        return app, cache, cipher, migrate_plaintext
 
-    def _save_cache(self, cache) -> None:
-        if not cache.has_state_changed:
+    def _save_cache(self, cache, cipher, *, force: bool = False) -> None:
+        if not cache.has_state_changed and not force:
             return
         self.cache_path.parent.mkdir(parents=True, exist_ok=True)
-        self.cache_path.write_text(cache.serialize(), encoding="utf-8")
+        encrypted = cipher.encrypt(cache.serialize().encode("utf-8"))
+        temp = self.cache_path.with_suffix(self.cache_path.suffix + ".tmp")
+        temp.write_bytes(encrypted)
+        try:
+            temp.chmod(0o600)
+        except OSError:
+            pass
+        temp.replace(self.cache_path)
         try:
             self.cache_path.chmod(0o600)
         except OSError:
             pass
 
     def acquire_silent(self) -> str:
-        app, cache = self._build_app()
+        app, cache, cipher, migrate_plaintext = self._build_app()
         accounts = app.get_accounts()
         if not accounts:
             raise M365ConfigurationError(
@@ -249,7 +294,7 @@ class M365TokenProvider:
             )
 
         result = app.acquire_token_silent(list(self.scopes), account=accounts[0])
-        self._save_cache(cache)
+        self._save_cache(cache, cipher, force=migrate_plaintext)
         if not result or "access_token" not in result:
             detail = ""
             if isinstance(result, dict):
@@ -261,7 +306,7 @@ class M365TokenProvider:
         return str(result["access_token"])
 
     def device_login(self) -> dict[str, Any]:
-        app, cache = self._build_app()
+        app, cache, cipher, migrate_plaintext = self._build_app()
         flow = app.initiate_device_flow(scopes=list(self.scopes))
         if "user_code" not in flow:
             raise M365ConfigurationError(
@@ -271,7 +316,7 @@ class M365TokenProvider:
 
         print(flow.get("message") or "")
         result = app.acquire_token_by_device_flow(flow)
-        self._save_cache(cache)
+        self._save_cache(cache, cipher, force=migrate_plaintext)
         if "access_token" not in result:
             raise M365ConfigurationError(
                 "Falha na autenticação Microsoft 365: "

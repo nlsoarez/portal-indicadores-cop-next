@@ -57,12 +57,16 @@ class AnalystShell:
     def render(self, ctx: AccessContext, segments: list[Segment]) -> None:
         st.sidebar.markdown("<span class='cop-role-analyst'>ANALISTA</span>", unsafe_allow_html=True)
         st.sidebar.markdown(f"### {ctx.user.display_name}")
-        segment = st.sidebar.selectbox(
-            "Meu segmento",
-            segments,
-            format_func=lambda item: item.name,
-            key="analyst_segment_selector",
-        )
+        if len(segments) == 1:
+            segment = segments[0]
+            st.sidebar.caption(f"Segmento: {segment.name}")
+        else:
+            segment = st.sidebar.selectbox(
+                "Meu segmento",
+                segments,
+                format_func=lambda item: item.name,
+                key="analyst_segment_selector",
+            )
         switch_segment_state(st.session_state, segment.id)
         page = st.sidebar.radio(
             "Navegação",
@@ -79,7 +83,7 @@ class AnalystShell:
         )
 
         payload = self.dashboard.analyst_payload(ctx, segment.id)
-        render_indicator_freshness(payload.get("freshness") or [])
+        render_indicator_freshness(payload.get("freshness") or [], compact=True)
 
         if page == "Meu painel":
             self._render_panel(payload)

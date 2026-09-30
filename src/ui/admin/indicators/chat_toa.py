@@ -61,6 +61,15 @@ def render_admin_chat_toa(
     best, worst = ranking_extremes(ranking)
     _render_extremes(best, worst)
 
+    st.markdown("### 🏢🏠 TMA por Segmento")
+    st.caption(
+        "Aderência e TMA individual separados por segmento, mantendo o mesmo critério de ≤ 10 minutos."
+    )
+    _render_sector_tables(
+        build_tma_sector_tables(ranking),
+        target_num,
+    )
+
 
 def overall_summary(
     rows: pd.DataFrame,
@@ -95,39 +104,57 @@ def build_tma_ranking(
     people: pd.DataFrame,
     metrics: pd.DataFrame,
 ) -> pd.DataFrame:
-    if people is None or people.empty:
-        return pd.DataFrame()
+    people_frame = people.copy() if people is not None else pd.DataFrame()
+    metrics_frame = metrics.copy() if metrics is not None else pd.DataFrame()
 
-    identity_cols = [
-        column
-        for column in ("login", "display_name", "segment_name")
-        if column in people.columns
-    ]
-    if "login" not in identity_cols:
-        return pd.DataFrame()
-
-    identity = (
-        people[identity_cols]
-        .dropna(subset=["login"])
-        .drop_duplicates(subset=["login"])
-    )
+    identity: dict[str, dict[str, str]] = {}
+    if not people_frame.empty and "login" in people_frame.columns:
+        for _, row in people_frame.iterrows():
+            login = _normalize_login(row.get("login"))
+            if not login:
+                continue
+            identity[login] = {
+                "display_name": _clean_text(row.get("display_name")),
+                "segment_name": _clean_text(row.get("segment_name")),
+            }
 
     if (
-        metrics is not None
-        and not metrics.empty
-        and {"login", "volume", "successes"}.issubset(metrics.columns)
+        not metrics_frame.empty
+        and {"login", "volume", "successes"}.issubset(metrics_frame.columns)
     ):
-        frame = metrics.copy()
-        frame["volume"] = pd.to_numeric(frame["volume"], errors="coerce").fillna(0)
-        frame["successes"] = pd.to_numeric(frame["successes"], errors="coerce").fillna(0)
+        metrics_frame["login"] = metrics_frame["login"].apply(_normalize_login)
+        metrics_frame["volume"] = pd.to_numeric(
+            metrics_frame["volume"], errors="coerce"
+        ).fillna(0)
+        metrics_frame["successes"] = pd.to_numeric(
+            metrics_frame["successes"], errors="coerce"
+        ).fillna(0)
 
         records = []
-        for login, part in frame.groupby("login", dropna=False):
+        for login, part in metrics_frame.groupby("login", dropna=False):
+            login = _normalize_login(login)
+            if not login:
+                continue
+
             volume = float(part["volume"].sum())
             adherents = float(part["successes"].sum())
+            metric_name = _first_text(part, "display_name")
+            metric_sector = _first_text(part, "segment_name")
+            fallback = identity.get(login, {})
+
             records.append(
                 {
                     "login": login,
+                    "Analista": (
+                        metric_name
+                        or fallback.get("display_name")
+                        or login
+                    ),
+                    "Setor": (
+                        metric_sector
+                        or fallback.get("segment_name")
+                        or "—"
+                    ).upper(),
                     "Vol. TMA": volume,
                     "Aderentes": adherents,
                     "TMA Médio (min)": _minutes(
@@ -137,50 +164,65 @@ def build_tma_ranking(
             )
         totals = pd.DataFrame(records)
     else:
-        frame = people.copy()
-        if not {"login", "volume", "value"}.issubset(frame.columns):
+        if (
+            people_frame.empty
+            or not {"login", "volume", "value"}.issubset(people_frame.columns)
+        ):
             return pd.DataFrame()
 
-        frame["volume"] = pd.to_numeric(frame["volume"], errors="coerce").fillna(0)
-        frame["value"] = pd.to_numeric(frame["value"], errors="coerce").fillna(0)
-        frame["_adherents"] = frame["volume"] * frame["value"] / 100
-        totals = (
-            frame.groupby("login", dropna=False)
-            .agg(
-                **{
-                    "Vol. TMA": ("volume", "sum"),
-                    "Aderentes": ("_adherents", "sum"),
+        people_frame["login"] = people_frame["login"].apply(_normalize_login)
+        people_frame["volume"] = pd.to_numeric(
+            people_frame["volume"], errors="coerce"
+        ).fillna(0)
+        people_frame["value"] = pd.to_numeric(
+            people_frame["value"], errors="coerce"
+        ).fillna(0)
+        people_frame["_adherents"] = (
+            people_frame["volume"] * people_frame["value"] / 100
+        )
+
+        records = []
+        for login, part in people_frame.groupby("login", dropna=False):
+            login = _normalize_login(login)
+            if not login:
+                continue
+            records.append(
+                {
+                    "login": login,
+                    "Analista": _first_text(part, "display_name") or login,
+                    "Setor": (_first_text(part, "segment_name") or "—").upper(),
+                    "Vol. TMA": float(part["volume"].sum()),
+                    "Aderentes": float(part["_adherents"].sum()),
+                    "TMA Médio (min)": None,
                 }
             )
-            .reset_index()
-        )
-        totals["TMA Médio (min)"] = None
+        totals = pd.DataFrame(records)
 
     if totals.empty:
         return pd.DataFrame()
 
-    totals = totals.merge(identity, on="login", how="left")
-    totals["Vol. TMA"] = pd.to_numeric(totals["Vol. TMA"], errors="coerce").fillna(0)
-    totals["Aderentes"] = pd.to_numeric(totals["Aderentes"], errors="coerce").fillna(0)
+    totals["Vol. TMA"] = pd.to_numeric(
+        totals["Vol. TMA"], errors="coerce"
+    ).fillna(0)
+    totals["Aderentes"] = pd.to_numeric(
+        totals["Aderentes"], errors="coerce"
+    ).fillna(0)
     totals = totals[totals["Vol. TMA"] > 0].copy()
 
     totals["TMA %"] = totals.apply(
         lambda row: _ratio(row["Aderentes"], row["Vol. TMA"]),
         axis=1,
     )
-    totals["Analista"] = totals.get(
-        "display_name",
-        pd.Series(index=totals.index, dtype="object"),
-    ).fillna(totals["login"])
-    totals["Setor"] = totals.get(
-        "segment_name",
-        pd.Series(index=totals.index, dtype="object"),
-    ).fillna("—").astype(str).str.upper()
+    totals["Analista"] = totals.apply(
+        lambda row: _clean_text(row.get("Analista"))
+        or _normalize_login(row.get("login")),
+        axis=1,
+    )
+    totals["Setor"] = totals["Setor"].fillna("—").astype(str).str.upper()
 
     for column in ("Vol. TMA", "Aderentes"):
         totals[column] = totals[column].round().astype(int)
 
-    # Ranking da referência é por volume de chats, não por aderência.
     totals = totals.sort_values(
         ["Vol. TMA", "TMA %", "Analista"],
         ascending=[False, False, True],
@@ -198,6 +240,59 @@ def build_tma_ranking(
             "TMA Médio (min)",
         ]
     ]
+
+
+def build_tma_sector_tables(
+    ranking: pd.DataFrame,
+) -> dict[str, pd.DataFrame]:
+    if ranking is None or ranking.empty or "Setor" not in ranking.columns:
+        return {}
+
+    output: dict[str, pd.DataFrame] = {}
+    for sector, part in ranking.groupby("Setor", dropna=False):
+        sector_name = str(sector or "—").upper()
+        scoped = part.copy().sort_values(
+            ["TMA %", "Vol. TMA", "Analista"],
+            ascending=[False, False, True],
+        ).reset_index(drop=True)
+        scoped["#"] = range(1, len(scoped) + 1)
+        output[sector_name] = scoped[
+            [
+                "#",
+                "Analista",
+                "Vol. TMA",
+                "Aderentes",
+                "TMA %",
+                "TMA Médio (min)",
+            ]
+        ]
+    return output
+
+
+def sector_tma_summary(table: pd.DataFrame) -> dict:
+    if table is None or table.empty:
+        return {"volume": 0, "adherents": 0, "adherence": 0.0, "tma_minutes": None}
+
+    volume = float(pd.to_numeric(table["Vol. TMA"], errors="coerce").fillna(0).sum())
+    adherents = float(
+        pd.to_numeric(table["Aderentes"], errors="coerce").fillna(0).sum()
+    )
+
+    valid_tma = pd.to_numeric(table["TMA Médio (min)"], errors="coerce")
+    weights = pd.to_numeric(table["Vol. TMA"], errors="coerce").fillna(0)
+    valid = valid_tma.notna() & (weights > 0)
+    tma_minutes = (
+        float((valid_tma[valid] * weights[valid]).sum() / weights[valid].sum())
+        if valid.any()
+        else None
+    )
+
+    return {
+        "volume": int(round(volume)),
+        "adherents": int(round(adherents)),
+        "adherence": _ratio(adherents, volume),
+        "tma_minutes": tma_minutes,
+    }
 
 
 def ranking_extremes(
@@ -246,6 +341,52 @@ def style_tma_ranking(
         )
 
     return styler
+
+
+def _render_sector_tables(
+    tables: dict[str, pd.DataFrame],
+    target: float | None,
+) -> None:
+    if not tables:
+        st.caption("Sem dados suficientes para separar os analistas por segmento.")
+        return
+
+    preferred = ["RESIDENCIAL", "EMPRESARIAL", "PREVENTIVA"]
+    sectors = [sector for sector in preferred if sector in tables]
+    sectors.extend(sorted(sector for sector in tables if sector not in sectors))
+
+    for start in range(0, len(sectors), 2):
+        cols = st.columns(2)
+        for column, sector in zip(cols, sectors[start:start + 2]):
+            table = tables[sector]
+            summary = sector_tma_summary(table)
+            color = _result_color(summary["adherence"], target)
+            icon = _sector_icon(sector)
+            tma_text = (
+                "—"
+                if summary["tma_minutes"] is None
+                else f"{summary['tma_minutes']:.2f} min"
+            )
+
+            with column:
+                st.markdown(
+                    (
+                        "<div class='cop-chat-sector-head'>"
+                        f"<div><b>{icon} {sector}</b></div>"
+                        "<div class='cop-chat-sector-meta'>"
+                        f"<span style='color:{color}'>{summary['adherence']:.1f}% aderência</span>"
+                        f"<span>{summary['volume']} chats</span>"
+                        f"<span>TMA médio {tma_text}</span>"
+                        "</div>"
+                        "</div>"
+                    ),
+                    unsafe_allow_html=True,
+                )
+                st.dataframe(
+                    style_tma_ranking(table, target),
+                    use_container_width=True,
+                    hide_index=True,
+                )
 
 
 def compact_period(value: str | None) -> str:
@@ -414,6 +555,40 @@ def _minutes(seconds) -> float | None:
     return number / 60.0
 
 
+def _normalize_login(value) -> str:
+    return str(value or "").strip().upper()
+
+
+def _clean_text(value) -> str:
+    if value is None:
+        return ""
+    text = " ".join(str(value).split()).strip()
+    if text.lower() in {"nan", "none", "null"}:
+        return ""
+    return text
+
+
+def _first_text(frame: pd.DataFrame, column: str) -> str:
+    if frame is None or frame.empty or column not in frame.columns:
+        return ""
+    for value in frame[column].tolist():
+        text = _clean_text(value)
+        if text:
+            return text
+    return ""
+
+
+def _sector_icon(sector: str) -> str:
+    normalized = str(sector or "").strip().upper()
+    if normalized == "EMPRESARIAL":
+        return "🏢"
+    if normalized == "RESIDENCIAL":
+        return "🏠"
+    if normalized == "PREVENTIVA":
+        return "🛠️"
+    return "📍"
+
+
 def _number(value) -> float | None:
     if value is None:
         return None
@@ -433,18 +608,18 @@ def _inject_styles() -> None:
         """
         <style>
         .cop-chat-card {
-            background:#ffffff;
-            border:1px solid rgba(15,23,42,.06);
-            border-left:4px solid #111827;
+            background:linear-gradient(180deg, rgba(17,37,59,.94), rgba(9,22,37,.97));
+            border:1px solid rgba(148,163,184,.16);
+            border-left:4px solid rgba(148,163,184,.28);
             border-radius:16px;
-            box-shadow:0 8px 20px rgba(15,23,42,.07);
+            box-shadow:0 14px 34px rgba(0,0,0,.16);
             min-height:96px;
             padding:18px 16px 14px;
             text-align:center;
             margin-bottom:12px;
         }
         .cop-chat-card-label {
-            color:#858990;
+            color:#8fa0b6;
             font-size:.68rem;
             font-weight:800;
             letter-spacing:.08em;
@@ -457,9 +632,33 @@ def _inject_styles() -> None:
             margin-top:8px;
         }
         .cop-chat-extreme {
-            padding:4px 8px;
+            padding:7px 10px;
             font-size:.82rem;
             line-height:1.4;
+            border-radius:8px;
+        }
+        .cop-chat-sector-head {
+            display:flex;
+            align-items:flex-start;
+            justify-content:space-between;
+            gap:12px;
+            margin:8px 0 10px;
+            padding:10px 12px;
+            border:1px solid rgba(148,163,184,.14);
+            border-radius:12px;
+            background:rgba(15,32,52,.72);
+            color:#f4f7fb;
+        }
+        .cop-chat-sector-meta {
+            display:flex;
+            flex-wrap:wrap;
+            justify-content:flex-end;
+            gap:8px 12px;
+            color:#8fa0b6;
+            font-size:.68rem;
+        }
+        .cop-chat-sector-meta span:first-child {
+            font-weight:800;
         }
         .cop-chat-best {
             background:rgba(34,197,94,.11);

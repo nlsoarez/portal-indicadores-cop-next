@@ -402,6 +402,13 @@ class AdminShell:
                 reset_result = st.session_state.get("_cop_password_reset_result")
                 if (
                     isinstance(reset_result, dict)
+                    and int(reset_result.get("user_id", -1)) != int(target["id"])
+                ):
+                    st.session_state.pop("_cop_password_reset_result", None)
+                    reset_result = None
+
+                if (
+                    isinstance(reset_result, dict)
                     and int(reset_result.get("user_id", -1)) == int(target["id"])
                 ):
                     st.success(

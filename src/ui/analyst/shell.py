@@ -1370,6 +1370,8 @@ def _performance_indicator_state(
     team: dict,
     breakdowns: list[dict],
     team_breakdowns: list[dict],
+    *,
+    cancellation_etit_volume: float | None = None,
 ) -> str | None:
     """Classifica cada indicador como bom ou atenção.
 
@@ -1388,7 +1390,12 @@ def _performance_indicator_state(
     if key == "toa_cancellation_rate":
         details = _latest_indicator_rows(breakdowns, key)
         team_details = _latest_indicator_rows(team_breakdowns, key)
-        summary = _cancelled_tasks_user_summary(details, team_details)
+        summary = _cancelled_tasks_user_summary(
+            details,
+            team_details,
+            etit_volume=cancellation_etit_volume,
+            target_pct=_number(row.get("target_value")) or 15.0,
+        )
         tone = str(summary.get("tone") or "neutral")
         if tone == "good":
             return "good"
@@ -1428,11 +1435,20 @@ def _build_analyst_performance_feedback(
             continue
 
         team = team_index.get((str(row.get("period")), key), {})
+        cancellation_etit_volume = None
+        if key == "toa_cancellation_rate":
+            cancellation_etit_volume = _indicator_volume_for_period(
+                latest,
+                "emp_etit_event",
+                str(row.get("period") or ""),
+            )
+
         state = _performance_indicator_state(
             row,
             team,
             breakdowns,
             team_breakdowns,
+            cancellation_etit_volume=cancellation_etit_volume,
         )
         if state is None:
             continue

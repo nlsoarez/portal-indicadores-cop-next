@@ -1,0 +1,9 @@
+services:
+  portal:
+    networks:
+      - default
+      - evolution-hostinger_edge
+
+networks:
+  evolution-hostinger_edge:
+    external: true

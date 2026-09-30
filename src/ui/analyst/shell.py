@@ -2447,6 +2447,57 @@ def _inject_analyst_styles() -> None:
             box-shadow:inset 3px 0 0 #ed1c24;
         }
 
+        .cop-cancel-user-kpi {
+            min-height:118px;
+            padding:1rem 1.05rem;
+            border:1px solid rgba(148,163,184,.15);
+            border-top:3px solid #64748b;
+            border-radius:16px;
+            background:linear-gradient(180deg, rgba(16,38,61,.92), rgba(8,21,36,.98));
+            box-shadow:0 14px 30px rgba(0,0,0,.13);
+        }
+        .cop-cancel-user-kpi span {
+            display:block;
+            color:#8fa0b6;
+            font-size:.67rem;
+            font-weight:900;
+            letter-spacing:.075em;
+            text-transform:uppercase;
+        }
+        .cop-cancel-user-kpi strong {
+            display:block;
+            margin-top:.72rem;
+            color:#f7fbff;
+            font-size:1.8rem;
+            line-height:1;
+            font-weight:900;
+            letter-spacing:-.035em;
+        }
+        .cop-cancel-user-good {
+            border-top-color:#31d58a;
+        }
+        .cop-cancel-user-good strong {
+            color:#65e3a5;
+        }
+        .cop-cancel-user-attention {
+            border-top-color:#f7b84b;
+        }
+        .cop-cancel-user-attention strong {
+            color:#ffc966;
+        }
+        .cop-cancel-user-bad {
+            border-top-color:#ff4d5f;
+        }
+        .cop-cancel-user-bad strong {
+            color:#ff6b79;
+        }
+        .cop-cancel-user-team {
+            border-top-color:#38bdf8;
+        }
+        .cop-cancel-user-team strong {
+            color:#7dd3fc;
+        }
+
         .cop-productivity-kpi {
             min-height:132px;
             padding:1.05rem 1.1rem;

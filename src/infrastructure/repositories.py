@@ -171,6 +171,54 @@ class UserRepository:
                 "UPDATE users SET password_hash=?, password_salt=?, must_change_password=0 WHERE id=?",
                 (password_hash, salt, user_id),
             )
+    def reset_password(self, user_id: int, password_hash: str, salt: str) -> None:
+        """Define senha temporária e força troca no próximo login."""
+        with transaction() as conn:
+            conn.execute(
+                "UPDATE users SET password_hash=?, password_salt=?, must_change_password=1 "
+                "WHERE id=? AND active=1",
+                (password_hash, salt, user_id),
+            )
+
+    def list_manageable_accounts(self) -> list[dict]:
+        """Contas ativas que um Admin pode gerenciar (analistas e lideranças)."""
+        with connection() as conn:
+            rows = conn.execute(
+                """
+                SELECT DISTINCT
+                       u.id, u.login, u.display_name, u.full_name,
+                       r.code AS role_code, r.name AS role_name,
+                       s.id AS segment_id, s.name AS segment_name
+                FROM users u
+                JOIN user_roles ur ON ur.user_id=u.id
+                JOIN roles r ON r.id=ur.role_id
+                LEFT JOIN user_segments us ON us.user_id=u.id
+                LEFT JOIN segments s ON s.id=us.segment_id AND s.active=1
+                WHERE u.active=1 AND r.code IN ('analyst', 'subadmin')
+                ORDER BY u.display_name, u.login, s.name
+                """
+            ).fetchall()
+
+        accounts: dict[int, dict] = {}
+        for row in rows:
+            user_id = int(row["id"])
+            item = accounts.setdefault(
+                user_id,
+                {
+                    "id": user_id,
+                    "login": str(row["login"]),
+                    "display_name": str(row["display_name"]),
+                    "full_name": str(row["full_name"]),
+                    "role_code": str(row["role_code"]),
+                    "role_name": str(row["role_name"]),
+                    "segments": [],
+                },
+            )
+            segment_name = row["segment_name"]
+            if segment_name and str(segment_name) not in item["segments"]:
+                item["segments"].append(str(segment_name))
+
+        return list(accounts.values())
 
     def last_access_for_segment(self, segment_id: int) -> list[dict]:
         with connection() as conn:

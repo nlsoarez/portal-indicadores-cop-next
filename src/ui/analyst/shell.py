@@ -237,6 +237,24 @@ class AnalystShell:
         team_avg = _number(team.get("team_avg"))
 
         st.markdown(f"### {indicator_name}")
+        if indicator_key == "productivity_avg_daily":
+            details = _latest_indicator_rows(
+                payload.get("breakdowns") or [],
+                indicator_key,
+            )
+            team_details = _latest_indicator_rows(
+                payload.get("team_breakdowns") or [],
+                indicator_key,
+            )
+            self._render_productivity_view(
+                payload,
+                row,
+                team,
+                details,
+                team_details,
+            )
+            return
+
         if indicator_key == "dpa_official":
             c1, c2, c3, c4 = st.columns(4)
             c1.metric("Meu resultado", _format_ptbr_metric(value, unit))
@@ -298,6 +316,76 @@ class AnalystShell:
         self._render_loss_references(details, indicator_key)
         self._render_full_detail(details, team_details, indicator_key, direction)
         self._render_recent_evolution(payload, indicator_key, unit)
+
+    def _render_productivity_view(
+        self,
+        payload: dict,
+        row: dict,
+        team: dict,
+        details: pd.DataFrame,
+        team_details: pd.DataFrame,
+    ) -> None:
+        summary = _productivity_user_summary(row, details, team, team_details)
+
+        st.markdown("#### Visão rápida do período")
+        cols = st.columns(3)
+        cards = [
+            (
+                "VOLUME TOTAL",
+                _format_integer(summary["volume_total"]),
+                _comparison_context(
+                    summary["volume_total"],
+                    summary["team_volume_avg"],
+                    "referência do setor",
+                ),
+                "box",
+            ),
+            (
+                "MÉDIA POR DIA",
+                _format_decimal(summary["daily_avg"]),
+                _comparison_context(
+                    summary["daily_avg"],
+                    summary["team_daily_avg"],
+                    "referência do setor",
+                ),
+                "chart",
+            ),
+            (
+                "DIAS ATIVOS",
+                str(summary["active_days"]),
+                "Dias com produção no período",
+                "calendar",
+            ),
+        ]
+        for column, (label, value, context, icon) in zip(cols, cards):
+            with column:
+                _render_productivity_kpi(label, value, context, icon)
+
+        st.markdown(
+            _productivity_quick_read(summary),
+            unsafe_allow_html=True,
+        )
+
+        st.markdown("#### Últimos dias")
+        st.caption(
+            "Volume diário comparado à média diária da equipe."
+        )
+        recent = _productivity_recent_rows(payload)
+        if recent:
+            _render_productivity_daily_chart(recent)
+        else:
+            st.caption("Sem histórico diário suficiente para exibir o gráfico.")
+
+        st.markdown("#### Produção por atividade")
+        activity = _productivity_activity_table(details)
+        if activity.empty:
+            st.caption("Sem detalhamento por atividade disponível no período.")
+        else:
+            st.dataframe(
+                activity,
+                use_container_width=True,
+                hide_index=True,
+            )
 
     def _render_dpa_recent_chart(self, payload: dict) -> None:
         rows = _dpa_recent_chart_rows(payload)

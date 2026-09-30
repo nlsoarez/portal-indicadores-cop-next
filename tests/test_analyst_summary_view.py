@@ -14,6 +14,10 @@ from src.ui.analyst.shell import (
     _etit_team_demand_cards,
     _meets_target,
     _period_label,
+    _productivity_activity_table,
+    _productivity_chart_scale,
+    _productivity_recent_rows,
+    _productivity_user_summary,
 )
 
 
@@ -251,6 +255,104 @@ class AnalystSummaryViewTest(unittest.TestCase):
         ]
 
         self.assertEqual(130.0, _dpa_chart_scale(rows))
+
+    def test_productivity_summary_uses_exact_volume_days_and_sector_references(self):
+        row = {
+            "indicator_key": "productivity_avg_daily",
+            "value": 63.8,
+            "volume": 17,
+        }
+        details = pd.DataFrame(
+            {
+                "dimension": ["productivity_total"],
+                "dimension_value": ["Volume Total"],
+                "successes": [1085],
+                "volume": [1085],
+            }
+        )
+        team = {"team_avg": 84.0}
+        team_details = pd.DataFrame(
+            {
+                "dimension": ["productivity_total"],
+                "dimension_value": ["Volume Total"],
+                "team_successes": [7045],
+                "team_volume": [7045],
+                "team_analysts": [5],
+            }
+        )
+
+        summary = _productivity_user_summary(
+            row,
+            details,
+            team,
+            team_details,
+        )
+
+        self.assertEqual(1085.0, summary["volume_total"])
+        self.assertEqual(63.8, summary["daily_avg"])
+        self.assertEqual(17, summary["active_days"])
+        self.assertEqual(1409.0, summary["team_volume_avg"])
+        self.assertEqual(84.0, summary["team_daily_avg"])
+
+    def test_productivity_activity_table_sums_and_sorts_components(self):
+        details = pd.DataFrame(
+            {
+                "dimension": [
+                    "productivity_component",
+                    "productivity_component",
+                    "productivity_component",
+                ],
+                "dimension_value": [
+                    "Tratativa RAL",
+                    "Tratativa RAL",
+                    "Fechamento Tarefa TOA",
+                ],
+                "successes": [200, 99, 230],
+            }
+        )
+
+        table = _productivity_activity_table(details)
+
+        self.assertEqual(
+            ["Tratativa RAL", "Fechamento Tarefa TOA"],
+            table["Atividade"].tolist(),
+        )
+        self.assertEqual([299, 230], table["Volume"].tolist())
+
+    def test_productivity_recent_rows_include_team_reference_and_chart_scale(self):
+        payload = {
+            "individual": [
+                {
+                    "indicator_key": "productivity_avg_daily",
+                    "period": "2026-09-28",
+                    "value": 55.0,
+                },
+                {
+                    "indicator_key": "productivity_avg_daily",
+                    "period": "2026-09-29",
+                    "value": 80.0,
+                },
+            ],
+            "team_daily": [
+                {
+                    "indicator_key": "productivity_avg_daily",
+                    "period": "2026-09-28",
+                    "team_avg": 60.0,
+                },
+                {
+                    "indicator_key": "productivity_avg_daily",
+                    "period": "2026-09-29",
+                    "team_avg": 75.0,
+                },
+            ],
+        }
+
+        rows = _productivity_recent_rows(payload)
+
+        self.assertEqual(["28/09", "29/09"], [row["date_label"] for row in rows])
+        self.assertEqual([55.0, 80.0], [row["value"] for row in rows])
+        self.assertEqual([60.0, 75.0], [row["team_avg"] for row in rows])
+        self.assertEqual(80.0, _productivity_chart_scale(rows))
 
     def test_summary_snapshot_counts_targets_and_team_comparison(self):
         latest = [

@@ -7,6 +7,7 @@ from src.ui.analyst.shell import (
     _closing_cause_table,
     _closing_dimension_table,
     _cancelled_tasks_user_summary,
+    _build_analyst_performance_feedback,
     _closing_review_rows,
     _dpa_chart_scale,
     _dpa_recent_chart_rows,
@@ -21,6 +22,7 @@ from src.ui.analyst.shell import (
     _productivity_user_summary,
     _validation_group_table,
     _validation_time_user_summary,
+    _enterprise_certification_status,
 )
 
 
@@ -457,6 +459,68 @@ class AnalystSummaryViewTest(unittest.TestCase):
         self.assertEqual(70, minas["Total"])
         self.assertEqual(58, minas["Aderentes"])
         self.assertEqual("82,9%", minas["Aderência %"])
+
+    def test_enterprise_certification_green_requires_etit_and_dpa_at_90(self):
+        result = _enterprise_certification_status(90.5, 92.5)
+
+        self.assertEqual("good", result["status"])
+        self.assertEqual("✅ Você está certificando", result["title"])
+        self.assertIn("dentro da meta", result["message"])
+
+    def test_enterprise_certification_uses_dpa_alert_band_between_85_and_90(self):
+        result = _enterprise_certification_status(94.0, 87.5)
+
+        self.assertEqual("attention", result["status"])
+        self.assertEqual("⚠️ Você está certificando", result["title"])
+
+    def test_enterprise_certification_fails_below_etit_or_low_dpa(self):
+        result = _enterprise_certification_status(88.0, 82.0)
+
+        self.assertEqual("bad", result["status"])
+        self.assertIn("ETIT por Evento abaixo de 90%", result["message"])
+        self.assertIn("DPA individual abaixo de 85%", result["message"])
+
+    def test_performance_reading_combines_strength_attention_and_suggestion(self):
+        latest = [
+            {
+                "indicator_key": "productivity_avg_daily",
+                "period": "2026-09",
+                "value": 80.0,
+                "target_value": None,
+                "direction": "higher_is_better",
+            },
+            {
+                "indicator_key": "dpa_official",
+                "period": "2026-09",
+                "value": 92.0,
+                "target_value": 90.0,
+                "direction": "higher_is_better",
+            },
+            {
+                "indicator_key": "chat_10m",
+                "period": "2026-09",
+                "value": 60.0,
+                "target_value": 75.0,
+                "direction": "higher_is_better",
+            },
+        ]
+        team_index = {
+            ("2026-09", "productivity_avg_daily"): {"team_avg": 70.0},
+            ("2026-09", "dpa_official"): {"team_avg": 90.0},
+            ("2026-09", "chat_10m"): {"team_avg": 72.0},
+        }
+
+        feedback = _build_analyst_performance_feedback(
+            latest,
+            team_index,
+            [],
+            [],
+        )
+
+        self.assertIn("bons fundamentos", feedback["summary"])
+        self.assertIn("produtividade alta", feedback["point_strong"])
+        self.assertIn("chat", feedback["point_attention"].lower())
+        self.assertIn("padronizar respostas", feedback["suggestion"].lower())
 
     def test_summary_snapshot_counts_targets_and_team_comparison(self):
         latest = [

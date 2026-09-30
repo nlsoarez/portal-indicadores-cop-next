@@ -4,6 +4,8 @@ import pandas as pd
 
 from src.ui.admin.indicators.chat_toa import (
     build_tma_ranking,
+    build_tma_sector_tables,
+    sector_tma_summary,
     compact_period,
     overall_summary,
     ranking_extremes,
@@ -79,6 +81,83 @@ class ChatToaAdminViewTest(unittest.TestCase):
 
         self.assertEqual("MONICA", best["Analista"])
         self.assertEqual("KELLY", worst["Analista"])
+
+
+    def test_metrics_display_name_resolves_login_even_without_people_result(self):
+        people = pd.DataFrame(
+            {
+                "login": ["A"],
+                "display_name": ["RAISSA"],
+                "segment_name": ["Residencial"],
+                "volume": [153],
+                "value": [49.0],
+            }
+        )
+        metrics = pd.DataFrame(
+            {
+                "login": ["N5923221", "A"],
+                "display_name": ["KELLY LIRA", None],
+                "segment_name": ["Residencial", "Residencial"],
+                "volume": [20, 153],
+                "successes": [5, 75],
+                "losses": [15, 78],
+                "tma_seconds": [1200.0, 3334.8],
+            }
+        )
+
+        table = build_tma_ranking(people, metrics)
+
+        self.assertIn("KELLY LIRA", table["Analista"].tolist())
+        self.assertNotIn("N5923221", table["Analista"].tolist())
+
+    def test_sector_tables_show_analysts_and_percentages_per_segment(self):
+        ranking = pd.DataFrame(
+            {
+                "#": [1, 2, 3],
+                "Analista": ["MARISTELLA", "RAISSA", "FERNANDA"],
+                "Setor": ["PREVENTIVA", "RESIDENCIAL", "EMPRESARIAL"],
+                "Vol. TMA": [201, 153, 141],
+                "Aderentes": [124, 75, 82],
+                "TMA %": [61.7, 49.0, 58.2],
+                "TMA Médio (min)": [21.52, 55.58, 12.88],
+            }
+        )
+
+        tables = build_tma_sector_tables(ranking)
+
+        self.assertEqual(
+            ["MARISTELLA"],
+            tables["PREVENTIVA"]["Analista"].tolist(),
+        )
+        self.assertAlmostEqual(
+            61.7,
+            float(tables["PREVENTIVA"].iloc[0]["TMA %"]),
+            places=1,
+        )
+        self.assertEqual(
+            ["RAISSA"],
+            tables["RESIDENCIAL"]["Analista"].tolist(),
+        )
+        self.assertEqual(
+            ["FERNANDA"],
+            tables["EMPRESARIAL"]["Analista"].tolist(),
+        )
+
+    def test_sector_summary_is_weighted_by_chat_volume(self):
+        table = pd.DataFrame(
+            {
+                "Vol. TMA": [100, 50],
+                "Aderentes": [80, 25],
+                "TMA Médio (min)": [8.0, 20.0],
+            }
+        )
+
+        summary = sector_tma_summary(table)
+
+        self.assertEqual(150, summary["volume"])
+        self.assertEqual(105, summary["adherents"])
+        self.assertEqual(70.0, summary["adherence"])
+        self.assertEqual(12.0, summary["tma_minutes"])
 
     def test_period_is_displayed_as_yyyymm(self):
         self.assertEqual("202609", compact_period("2026-09"))

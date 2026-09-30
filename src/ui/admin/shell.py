@@ -46,13 +46,6 @@ class AdminShell:
             role="admin",
             user_name=ctx.user.display_name,
         )
-        segment = st.sidebar.selectbox(
-            "Segmento em foco",
-            segments,
-            format_func=lambda item: item.name,
-            key="admin_segment_selector",
-        )
-        switch_segment_state(st.session_state, segment.id)
 
         nav_icons = {
             "Dashboard": "◉",
@@ -70,12 +63,24 @@ class AdminShell:
             label_visibility="collapsed",
         )
 
+        st.sidebar.markdown("<div class='cop-sidebar-section'>CONTEXTO</div>", unsafe_allow_html=True)
+        segment = st.sidebar.selectbox(
+            "Segmento em foco",
+            [None, *segments],
+            index=0,
+            format_func=lambda item: "Geral" if item is None else item.name,
+            key="admin_segment_selector",
+        )
+        segment_label = "Geral" if segment is None else segment.name
+        switch_segment_state(st.session_state, 0 if segment is None else segment.id)
+        scope_segments = segments if segment is None else [segment]
+
         if page == "Dashboard":
             render_page_header(
                 title="Dashboard",
                 subtitle="Leitura executiva da operação, pessoas e qualidade em um único fluxo.",
                 eyebrow="Gestão operacional",
-                badge=segment.name,
+                badge=segment_label,
             )
             render_dashboard_hero(
                 title="Performance que gera resultado.",
@@ -123,17 +128,17 @@ class AdminShell:
             )
 
         if page == "Dashboard":
-            analysts = self.access.visible_users(ctx, segment.id)
-            freshness = self.indicators.freshness(segment.id)
-            last_access = self.users.last_access_for_segment(segment.id)
-            definitions = self.indicators.definitions(segment.id)
+            analysts, freshness, last_access, definitions = self._dashboard_scope(
+                ctx,
+                scope_segments,
+            )
 
             c1, c2, c3, c4 = st.columns(4)
             c1.metric("Analistas", len(analysts))
             c2.metric("Indicadores", len(definitions))
             c3.metric(
                 "Já acessaram",
-                sum(1 for row in last_access if row["last_access"]),
+                sum(1 for row in last_access if row.get("last_access")),
             )
             c4.metric(
                 "Fontes com dados",
@@ -143,22 +148,23 @@ class AdminShell:
             st.markdown("### Leitura da equipe")
             render_dashboard_insights(
                 ctx,
-                segments,
+                scope_segments,
                 self.dashboard,
             )
 
-            st.markdown("### Atualização e uso")
-            col_fresh, col_access = st.columns([1.1, .9])
-            with col_fresh:
-                with st.expander("Cobertura dos indicadores", expanded=True):
-                    render_indicator_freshness(freshness, show_title=False)
-            with col_access:
-                with st.expander("Últimos acessos", expanded=True):
-                    st.dataframe(
-                        pd.DataFrame(last_access),
-                        use_container_width=True,
-                        hide_index=True,
-                    )
+            st.markdown("### Atualização dos dados")
+            render_indicator_freshness(
+                freshness,
+                show_title=False,
+                columns=3,
+            )
+
+            with st.expander("Acessos recentes", expanded=False):
+                st.dataframe(
+                    pd.DataFrame(last_access),
+                    use_container_width=True,
+                    hide_index=True,
+                )
 
         elif page == "Indicadores":
             render_management_indicators(ctx, segments, self.dashboard)
@@ -172,7 +178,15 @@ class AdminShell:
             )
 
         elif page == "Analistas":
-            analysts = self.access.visible_users(ctx, segment.id)
+            analysis_segment = segment
+            if analysis_segment is None:
+                analysis_segment = st.selectbox(
+                    "Segmento para análise individual",
+                    segments,
+                    format_func=lambda item: item.name,
+                    key="admin_analyst_segment",
+                )
+            analysts = self.access.visible_users(ctx, analysis_segment.id)
             if not analysts:
                 st.info("Nenhum analista cadastrado neste segmento.")
             else:
@@ -180,9 +194,14 @@ class AdminShell:
                     "Analista",
                     analysts,
                     format_func=lambda user: f"{user.display_name} · {user.login}",
-                    key=f"admin_analyst:{segment.id}",
+                    key=f"admin_analyst:{analysis_segment.id}",
                 )
-                render_person_performance(ctx, segment.id, target, self.dashboard)
+                render_person_performance(
+                    ctx,
+                    analysis_segment.id,
+                    target,
+                    self.dashboard,
+                )
 
         elif page == "Líderes":
             render_leaders_overview(
@@ -197,11 +216,63 @@ class AdminShell:
             self._render_uploads(ctx)
 
         else:
+            _, _, audit_rows, _ = self._dashboard_scope(
+                ctx,
+                scope_segments,
+            )
             st.dataframe(
-                pd.DataFrame(self.users.last_access_for_segment(segment.id)),
+                pd.DataFrame(audit_rows),
                 use_container_width=True,
                 hide_index=True,
             )
+
+    def _dashboard_scope(
+        self,
+        ctx: AccessContext,
+        segments: list[Segment],
+    ) -> tuple[list, list[dict], list[dict], list[dict]]:
+        analysts_by_id = {}
+        freshness_by_key: dict[str, dict] = {}
+        access_by_key: dict[str, dict] = {}
+        definitions_by_key: dict[str, dict] = {}
+
+        for scope in segments:
+            for user in self.access.visible_users(ctx, scope.id):
+                analysts_by_id[user.id] = user
+
+            for row in self.indicators.freshness(scope.id):
+                key = str(row.get("indicator_key") or row.get("name") or "")
+                previous = freshness_by_key.get(key)
+                if previous is None or str(row.get("data_through") or "") > str(previous.get("data_through") or ""):
+                    freshness_by_key[key] = row
+
+            for row in self.indicators.definitions(scope.id):
+                key = str(row.get("indicator_key") or row.get("name") or "")
+                definitions_by_key[key] = row
+
+            for row in self.users.last_access_for_segment(scope.id):
+                key = str(row.get("id") or row.get("login") or row.get("email") or row)
+                previous = access_by_key.get(key)
+                if previous is None or str(row.get("last_access") or "") > str(previous.get("last_access") or ""):
+                    access_by_key[key] = row
+
+        freshness = sorted(
+            freshness_by_key.values(),
+            key=lambda row: str(row.get("name") or row.get("indicator_key") or ""),
+        )
+        last_access = sorted(
+            access_by_key.values(),
+            key=lambda row: (
+                str(row.get("last_access") or ""),
+                str(row.get("full_name") or row.get("display_name") or row.get("login") or ""),
+            ),
+            reverse=True,
+        )
+        definitions = sorted(
+            definitions_by_key.values(),
+            key=lambda row: str(row.get("name") or row.get("indicator_key") or ""),
+        )
+        return list(analysts_by_id.values()), freshness, last_access, definitions
 
     def _render_uploads(self, ctx: AccessContext) -> None:
         st.markdown("#### Atualização das 7 fontes oficiais")

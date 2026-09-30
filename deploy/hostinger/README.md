@@ -92,17 +92,40 @@ o cache de token em um volume Docker privado.
 
 ### Variáveis obrigatórias
 
-Adicione em `.env.vps`:
+O piloto prefere localizar as pastas pelo proprietário e caminho interno do OneDrive,
+evitando depender da API de links compartilhados. Isso permite trabalhar somente com
+permissões de leitura.
+
+Na VPS, execute primeiro:
+
+```bash
+cd /opt/portal-indicadores-cop-next
+bash deploy/hostinger/configure-m365-etit.sh
+```
+
+O helper configura as duas pastas usadas neste piloto:
+
+- `Indicadores_COP_Rede/ICG_COPREDE_MDU/ICG_COPREDE/Analítico Residencial/Novo BI`
+- `Indicadores_COP_Rede/ICG_COPREDE_MDU/ICG_COPREDE/Analítico Empresarial/Novo BI`
+
+e grava `M365_SCOPES=Files.Read.All`.
+
+Ainda é necessário informar em `.env.vps`:
 
 ```env
 M365_TENANT_ID=...
 M365_CLIENT_ID=...
-M365_SCOPES=Files.Read
-M365_ETIT_RESIDENTIAL_URL=https://...
-M365_ETIT_ENTERPRISE_URL=https://...
+M365_SCOPES=Files.Read.All
+M365_ETIT_RESIDENTIAL_OWNER_UPN=fernando_pereiracunha@claro.com.br
+M365_ETIT_RESIDENTIAL_FOLDER_PATH=Indicadores_COP_Rede/ICG_COPREDE_MDU/ICG_COPREDE/Analítico Residencial/Novo BI
+M365_ETIT_ENTERPRISE_OWNER_UPN=fernando_pereiracunha@claro.com.br
+M365_ETIT_ENTERPRISE_FOLDER_PATH=Indicadores_COP_Rede/ICG_COPREDE_MDU/ICG_COPREDE/Analítico Empresarial/Novo BI
 ```
 
+Como alternativas, cada fonte também aceita `DRIVE_ID/FOLDER_ID` ou a URL compartilhada original.
+
 A App Registration do Microsoft Entra precisa permitir **public client flows/device code**.
+Não é necessário client secret para este piloto.
 
 ### Primeiro login
 

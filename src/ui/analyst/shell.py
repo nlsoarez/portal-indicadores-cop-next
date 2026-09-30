@@ -179,45 +179,42 @@ class AnalystShell:
                     )
 
             with indicators_tab:
+                # Abas fixas: não desaparecem quando uma fonte ainda não foi
+                # processada no período. A ordem prioriza leitura operacional.
                 residential_order = [
-                    "res_etit_fibra_hfc",
-                    "res_etit_gpon",
-                    "res_assert_fibra_hfc",
-                    "res_assert_gpon",
-                    "dpa_official",
-                    "validacao_20m",
-                    "chat_10m",
-                    "productivity_avg_daily",
-                    "toa_cancellation_rate",
+                    ("productivity_avg_daily", "📦 Produtividade"),
+                    ("res_etit_fibra_hfc", "⚡ ETIT HFC"),
+                    ("res_etit_gpon", "🔎 ETIT GPON"),
+                    ("dpa_official", "⏱️ DPA"),
+                    ("validacao_20m", "✅ Tempo de Validação"),
+                    ("chat_10m", "💬 Chat Livre"),
+                    ("res_assert_fibra_hfc", "📡 Assert. HFC"),
+                    ("res_assert_gpon", "📶 Assert. GPON"),
+                    ("toa_cancellation_rate", "❌ Canceladas"),
                 ]
-                ordered_rows = [
-                    latest_index[key]
-                    for key in residential_order
-                    if key in latest_index
-                ]
-                remaining_rows = [
-                    row
-                    for row in latest
-                    if str(row.get("indicator_key")) not in residential_order
-                ]
-                ordered_rows.extend(remaining_rows)
 
                 sub_labels = [
-                    _indicator_tab_label(
-                        str(row.get("indicator_key")),
-                        str(row.get("name") or "Indicador"),
-                    )
-                    for row in ordered_rows
+                    label
+                    for _, label in residential_order
                 ]
                 sub_labels.append("✅ Analista Certificado")
                 sub_tabs = st.tabs(sub_labels)
 
                 team_index = _team_index(payload)
-                for tab, row in zip(sub_tabs[:-1], ordered_rows):
+                for tab, (indicator_key, _) in zip(
+                    sub_tabs[:-1],
+                    residential_order,
+                ):
                     with tab:
-                        key = str(row.get("indicator_key"))
+                        row = latest_index.get(indicator_key)
+                        if row is None:
+                            st.info(
+                                "Ainda não há dados processados para este indicador."
+                            )
+                            continue
+
                         team = team_index.get(
-                            (str(row.get("period")), key),
+                            (str(row.get("period")), indicator_key),
                             {},
                         )
                         self._render_indicator(payload, row, team)

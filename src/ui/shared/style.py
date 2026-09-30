@@ -727,6 +727,7 @@ def inject_global_style() -> None:
         .cop-chat-card,
         .cop-cert-card,
         .cop-leader-card,
+        .cop-leader-insight,
         .cop-dashboard-insight,
         .cop-prod-highlight,
         .cop-val-extreme,
@@ -748,6 +749,7 @@ def inject_global_style() -> None:
         .cop-chat-card:hover,
         .cop-cert-card:hover,
         .cop-leader-card:hover,
+        .cop-leader-insight:hover,
         .cop-dashboard-insight:hover {
             transform:translateY(-2px);
             border-color:rgba(56,189,248,.24) !important;

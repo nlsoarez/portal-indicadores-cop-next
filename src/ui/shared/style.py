@@ -403,6 +403,37 @@ def inject_global_style() -> None:
             overflow:hidden;
             background:rgba(11,23,39,.72);
             box-shadow:0 12px 30px rgba(0,0,0,.10);
+            animation:copFadeUp .45s ease both;
+        }
+
+        div[data-testid="stAlert"] {
+            border-radius:14px;
+            border:1px solid var(--cop-line);
+            background:rgba(12,28,46,.86);
+            color:var(--cop-text);
+        }
+
+        [data-testid="stCaptionContainer"] {
+            color:#8395ab;
+        }
+
+        ::-webkit-scrollbar {
+            width:10px;
+            height:10px;
+        }
+
+        ::-webkit-scrollbar-track {
+            background:#07111f;
+        }
+
+        ::-webkit-scrollbar-thumb {
+            background:#23384d;
+            border:2px solid #07111f;
+            border-radius:999px;
+        }
+
+        ::-webkit-scrollbar-thumb:hover {
+            background:#36536f;
         }
 
         [data-testid="stExpander"] {

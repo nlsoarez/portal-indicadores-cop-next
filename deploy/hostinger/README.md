@@ -165,7 +165,7 @@ bash deploy/hostinger/m365-etit.sh sync --force
 
 ### Agendar 1 vez por dia
 
-O instalador usa 05:15 no timezone do servidor por padrão:
+O instalador usa 18:30 (America/Sao_Paulo) por padrão, para capturar atualizações feitas ao longo do expediente:
 
 ```bash
 bash deploy/hostinger/install-m365-etit-cron.sh

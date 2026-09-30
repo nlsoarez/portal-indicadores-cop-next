@@ -801,21 +801,20 @@ class AnalystShell:
         details: pd.DataFrame,
         team_details: pd.DataFrame,
     ) -> None:
-        etit_volume = _indicator_volume_for_period(
+        etit_base = _cancellation_etit_base_for_period(
             payload.get("summary") or [],
-            "emp_etit_event",
             str(row.get("period") or ""),
         )
         summary = _cancelled_tasks_user_summary(
             details,
             team_details,
-            etit_volume=etit_volume,
+            etit_volume=etit_base["volume"],
             target_pct=_number(row.get("target_value")) or 15.0,
         )
 
         cards = [
             (
-                "VOLUME ETIT",
+                etit_base["label"],
                 _format_integer(summary["etit_volume"]),
                 "neutral",
             ),
@@ -1763,11 +1762,10 @@ def _build_analyst_performance_feedback(
         team = team_index.get((str(row.get("period")), key), {})
         cancellation_etit_volume = None
         if key == "toa_cancellation_rate":
-            cancellation_etit_volume = _indicator_volume_for_period(
+            cancellation_etit_volume = _cancellation_etit_base_for_period(
                 latest,
-                "emp_etit_event",
                 str(row.get("period") or ""),
-            )
+            )["volume"]
 
         state = _performance_indicator_state(
             row,
@@ -3368,6 +3366,49 @@ def _indicator_volume_for_period(
         reverse=True,
     )
     return _number(selected[0].get("volume"))
+
+
+def _cancellation_etit_base_for_period(
+    rows: list[dict],
+    period: str,
+) -> dict:
+    enterprise = _indicator_volume_for_period(
+        rows,
+        "emp_etit_event",
+        period,
+    )
+    if enterprise is not None and enterprise > 0:
+        return {
+            "volume": enterprise,
+            "label": "VOLUME ETIT",
+            "source": "emp_etit_event",
+        }
+
+    hfc = _indicator_volume_for_period(
+        rows,
+        "res_etit_fibra_hfc",
+        period,
+    )
+    gpon = _indicator_volume_for_period(
+        rows,
+        "res_etit_gpon",
+        period,
+    )
+    residential_values = [
+        value
+        for value in (hfc, gpon)
+        if value is not None and value > 0
+    ]
+    residential_total = (
+        sum(residential_values)
+        if residential_values
+        else None
+    )
+    return {
+        "volume": residential_total,
+        "label": "VOLUME ETIT HFC + GPON",
+        "source": "res_etit_hfc_gpon",
+    }
 
 
 def _team_index(payload: dict) -> dict[tuple[str, str], dict]:

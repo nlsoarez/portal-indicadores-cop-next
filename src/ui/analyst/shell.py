@@ -1651,7 +1651,7 @@ def _render_validation_kpi(
 ) -> None:
     safe_tone = (
         tone
-        if tone in {"neutral", "good", "bad", "attention", "warning", "team"}
+        if tone in {"neutral", "good", "bad", "attention", "warning", "team", "target"}
         else "neutral"
     )
     st.markdown(
@@ -1668,6 +1668,9 @@ def _render_validation_kpi(
 def _cancelled_tasks_user_summary(
     details: pd.DataFrame,
     team_details: pd.DataFrame,
+    *,
+    analyst_pct: float | None = None,
+    target_pct: float = 15.0,
 ) -> dict:
     overall = _dimension_rows(details, "overall")
     if overall.empty:
@@ -1698,14 +1701,22 @@ def _cancelled_tasks_user_summary(
         if analyst_count > 0:
             team_average = team_losses / analyst_count
 
-    # Regra operacional: quanto menor, melhor. A referência de bom desempenho
-    # é ficar pelo menos 15% abaixo da média de canceladas da equipe.
+    pct = _number(analyst_pct)
+    target = float(target_pct)
+    if pct is None:
+        volume = float(
+            pd.to_numeric(overall.get("volume"), errors="coerce")
+            .fillna(0)
+            .sum()
+        ) if not overall.empty else 0.0
+        pct = None if volume <= 0 else cancelled / volume * 100
+
+    # Meta operacional oficial: até 15% de cancelamento. Quanto menor, melhor.
     tone = "neutral"
-    if team_average is not None and team_average >= 0:
-        reference = team_average * 0.85
-        if cancelled <= reference:
+    if pct is not None:
+        if pct <= target:
             tone = "good"
-        elif cancelled <= team_average:
+        elif pct <= target + 5:
             tone = "attention"
         else:
             tone = "bad"
@@ -1713,6 +1724,8 @@ def _cancelled_tasks_user_summary(
     return {
         "cancelled": cancelled,
         "team_average": team_average,
+        "analyst_pct": pct,
+        "target_pct": target,
         "tone": tone,
     }
 
@@ -1722,7 +1735,7 @@ def _render_cancelled_tasks_kpi(
     value: str,
     tone: str,
 ) -> None:
-    safe_tone = tone if tone in {"neutral", "good", "attention", "bad", "team"} else "neutral"
+    safe_tone = tone if tone in {"neutral", "good", "attention", "bad", "team", "target"} else "neutral"
     st.markdown(
         (
             f"<article class='cop-cancel-user-kpi cop-cancel-user-{safe_tone}'>"

@@ -9,6 +9,33 @@ import streamlit as st
 INDICATOR_KEY = "chat_10m"
 TMA_LIMIT_MINUTES = 10.0
 
+# Fallback de identidade preservado do dashboard legado. É usado somente quando
+# a matrícula existe no analítico de Chat, mas ainda não possui nome no cadastro
+# atual do portal.
+LEGACY_TEAM_NAMES = {
+    "N6088107": "LEANDRO CARVALHO",
+    "N5619600": "BRUNO BUCARD",
+    "N0189105": "IGOR MARINS",
+    "N5737414": "SANDRO CARVALHO",
+    "N5713690": "GABRIELA SILVA",
+    "N5802257": "MAGNO MORAIS",
+    "F201714": "FERNANDA FREITAS",
+    "N6173055": "JEFFERSON COITINHO",
+    "N0125317": "ROBERTO NASCIMENTO",
+    "F218860": "ALDENES SILVA",
+    "N5819183": "RODRIGO BERNARDINO",
+    "N5926003": "SUELLEN SILVA",
+    "N5932064": "MONICA RODRIGUES",
+    "N0238475": "MARLEY RIBEIRO",
+    "N5923221": "KELLY LIRA",
+    "N5772086": "THIAGO SILVA",
+    "N0239871": "LEONARDO ALMEIDA",
+    "N5577565": "MARISTELLA SANTOS",
+    "N5972428": "CRISTIANE SILVA",
+    "N4014011": "ALAN DIAS",
+    "F106664": "RAISSA OLIVEIRA",
+}
+
 
 def render_admin_chat_toa(
     *,
@@ -148,6 +175,7 @@ def build_tma_ranking(
                     "Analista": (
                         metric_name
                         or fallback.get("display_name")
+                        or LEGACY_TEAM_NAMES.get(login)
                         or login
                     ),
                     "Setor": (
@@ -189,7 +217,11 @@ def build_tma_ranking(
             records.append(
                 {
                     "login": login,
-                    "Analista": _first_text(part, "display_name") or login,
+                    "Analista": (
+                        _first_text(part, "display_name")
+                        or LEGACY_TEAM_NAMES.get(login)
+                        or login
+                    ),
                     "Setor": (_first_text(part, "segment_name") or "—").upper(),
                     "Vol. TMA": float(part["volume"].sum()),
                     "Aderentes": float(part["_adherents"].sum()),
@@ -215,6 +247,7 @@ def build_tma_ranking(
     )
     totals["Analista"] = totals.apply(
         lambda row: _clean_text(row.get("Analista"))
+        or LEGACY_TEAM_NAMES.get(_normalize_login(row.get("login")))
         or _normalize_login(row.get("login")),
         axis=1,
     )

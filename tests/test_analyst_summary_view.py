@@ -7,6 +7,9 @@ from src.ui.analyst.shell import (
     _closing_cause_table,
     _closing_dimension_table,
     _closing_review_rows,
+    _etit_dimension_table,
+    _etit_operational_summary,
+    _etit_team_demand_cards,
     _meets_target,
     _period_label,
 )
@@ -118,6 +121,89 @@ class AnalystSummaryViewTest(unittest.TestCase):
         )
         self.assertEqual("0,0%", rows[0]["Resultado do dia"])
         self.assertEqual("66,7%", rows[0]["Média da equipe no dia"])
+
+    def test_etit_operational_summary_keeps_events_adherents_and_durations(self):
+        details = pd.DataFrame(
+            {
+                "dimension": ["overall", "overall"],
+                "dimension_value": ["Total", "Total"],
+                "volume": [5, 3],
+                "successes": [4, 2],
+                "losses": [1, 1],
+                "tma_seconds": [120.0, 240.0],
+                "tmr_seconds": [600.0, 900.0],
+            }
+        )
+
+        summary = _etit_operational_summary(details)
+
+        self.assertEqual(8, summary["volume"])
+        self.assertEqual(6, summary["successes"])
+        self.assertEqual(2, summary["losses"])
+        self.assertEqual(75.0, summary["adherence"])
+        self.assertAlmostEqual(165.0, summary["tma_seconds"], places=1)
+        self.assertAlmostEqual(712.5, summary["tmr_seconds"], places=1)
+
+    def test_etit_residential_service_table_compares_with_team(self):
+        details = pd.DataFrame(
+            {
+                "dimension": ["service", "service"],
+                "dimension_value": ["BROWNFIELD", "GREENFIELD"],
+                "volume": [10, 4],
+                "successes": [9, 2],
+                "losses": [1, 2],
+                "tma_seconds": [60.0, 120.0],
+                "tmr_seconds": [600.0, 900.0],
+            }
+        )
+        team = pd.DataFrame(
+            {
+                "dimension": ["service", "service"],
+                "dimension_value": ["BROWNFIELD", "GREENFIELD"],
+                "team_avg": [95.0, 80.0],
+                "team_volume": [100, 20],
+                "team_successes": [95, 16],
+                "team_losses": [5, 4],
+                "team_analysts": [5, 5],
+            }
+        )
+
+        table = _etit_dimension_table(
+            details,
+            team,
+            "service",
+            "Serviço",
+            include_duration=True,
+        )
+
+        brownfield = table[table["Serviço"] == "BROWNFIELD"].iloc[0]
+        greenfield = table[table["Serviço"] == "GREENFIELD"].iloc[0]
+
+        self.assertEqual("90,0%", brownfield["Aderência %"])
+        self.assertEqual("95,0%", brownfield["Média equipe %"])
+        self.assertEqual("00:01:00", brownfield["TMA"])
+        self.assertEqual("50,0%", greenfield["Aderência %"])
+
+    def test_etit_enterprise_team_demand_cards_show_ral_rec(self):
+        team = pd.DataFrame(
+            {
+                "dimension": ["demand", "demand"],
+                "dimension_value": ["RAL", "REC"],
+                "team_avg": [92.2, 94.6],
+                "team_volume": [100, 50],
+                "team_successes": [92.2, 47.3],
+                "team_losses": [7.8, 2.7],
+                "team_analysts": [2, 2],
+            }
+        )
+
+        cards = _etit_team_demand_cards(team)
+        labels = [item["label"] for item in cards]
+
+        self.assertIn("% RAL Ader. (média equipe)", labels)
+        self.assertIn("RAL N. Ader. (média equipe)", labels)
+        self.assertIn("% REC Ader. (média equipe)", labels)
+        self.assertIn("REC N. Ader. (média equipe)", labels)
 
     def test_summary_snapshot_counts_targets_and_team_comparison(self):
         latest = [

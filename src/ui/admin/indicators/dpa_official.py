@@ -65,7 +65,7 @@ def render_admin_dpa(
                     _render_sector_block(
                         sector,
                         summary_row,
-                        sector_tables.get(sector, pd.DataFrame()),
+                        sector_tables.get(str(sector).upper(), pd.DataFrame()),
                     )
 
     st.markdown("### 🚦 Painel de Semáforo — Todos os Analistas")
@@ -379,17 +379,17 @@ def _inject_styles() -> None:
         """
         <style>
         .cop-dpa-card {
-            background: #ffffff;
-            border: 1px solid rgba(15,23,42,.06);
-            border-left: 4px solid #111827;
+            background: linear-gradient(180deg, rgba(17,37,59,.94), rgba(9,22,37,.97));
+            border: 1px solid rgba(148,163,184,.16);
+            border-left: 4px solid rgba(148,163,184,.28);
             border-radius: 16px;
-            box-shadow: 0 8px 20px rgba(15,23,42,.07);
+            box-shadow: 0 14px 34px rgba(0,0,0,.16);
             min-height: 96px;
             padding: 18px 16px 14px;
             text-align: center;
         }
         .cop-dpa-card-label {
-            color: #858990;
+            color: #8fa0b6;
             font-size: .68rem;
             font-weight: 800;
             letter-spacing: .08em;
@@ -402,27 +402,37 @@ def _inject_styles() -> None:
             margin-top: 8px;
         }
         .cop-dpa-sector-caption {
-            color: #8a8f98;
+            color: #91a2b7;
             font-size: .78rem;
             margin: 4px 0 12px;
         }
+        .cop-dpa-sector-caption b {
+            color: #f4f7fb;
+        }
         .cop-dpa-traffic {
-            background: #ffffff;
-            border: 1px solid rgba(15,23,42,.08);
+            background: linear-gradient(180deg, rgba(17,37,59,.94), rgba(9,22,37,.97));
+            border: 1px solid rgba(148,163,184,.16);
             border-left: 4px solid;
             border-radius: 14px;
-            min-height: 92px;
+            min-height: 94px;
             padding: 15px 16px 12px;
             margin-bottom: 10px;
+            box-shadow: 0 10px 28px rgba(0,0,0,.12);
         }
         .cop-dpa-traffic-name {
-            color: #111827;
+            color: #f4f7fb;
             font-size: .78rem;
+            line-height: 1.35;
+        }
+        .cop-dpa-traffic-name b {
+            color: #f8fbff;
+            font-weight: 800;
         }
         .cop-dpa-traffic-name span {
-            color: #9ca3af;
+            color: #9fb0c4;
             font-size: .65rem;
-            font-weight: 700;
+            font-weight: 800;
+            margin-left: .2rem;
         }
         .cop-dpa-traffic-value {
             font-size: 1.22rem;

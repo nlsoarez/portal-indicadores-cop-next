@@ -17,6 +17,9 @@ DATABASE_URL = (
 DB_PATH = Path(os.environ.get("COP_PORTAL_DB", "data/portal.db"))
 POSTGRES_APP_SCHEMA = "cop_portal"
 POSTGRES_POOL_MAX_SIZE = max(1, int(os.environ.get("DB_POOL_MAX_SIZE", "4")))
+DB_AUTO_MIGRATE = os.environ.get("COP_DB_AUTO_MIGRATE", "1").strip().lower() not in {
+    "0", "false", "no", "off"
+}
 
 
 SQLITE_SCHEMA = """
@@ -428,6 +431,13 @@ def insert_returning_id(conn: ConnectionAdapter, sql: str, params: Iterable[Any]
 
 
 def initialize_database() -> None:
+    if using_postgres() and not DB_AUTO_MIGRATE:
+        # Runtime mode for a least-privilege application role. Schema changes
+        # must be executed separately by src.infrastructure.migrate.
+        with connection() as conn:
+            conn.execute("SELECT 1 FROM users LIMIT 1").fetchone()
+        return
+
     if using_postgres():
         with transaction() as conn:
             conn.executescript(POSTGRES_SCHEMA)

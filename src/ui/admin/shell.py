@@ -14,6 +14,7 @@ from src.features.ingestion.excel import ImportValidationError
 from src.features.ingestion.source_catalog import UPLOAD_SOURCES
 from src.infrastructure.database import database_backend, database_is_persistent, persistence_diagnostics
 from src.infrastructure.repositories import IndicatorRepository, UploadRepository, UserRepository
+from src.ui.admin.certified_analysts import render_certified_analysts
 from src.ui.shared.chunked_upload import chunked_file_uploader, clear_chunked_upload
 from src.ui.shared.freshness import render_indicator_freshness
 from src.ui.shared.management_indicators import render_management_indicators
@@ -38,7 +39,7 @@ class AdminShell:
         st.sidebar.markdown(f"### {ctx.user.display_name}")
         page = st.sidebar.radio(
             "Navegação",
-            ["Indicadores", "Visão geral", "Analistas", "Líderes", "Uploads", "Auditoria"],
+            ["Indicadores", "Analista Certificado", "Visão geral", "Analistas", "Líderes", "Uploads", "Auditoria"],
             label_visibility="collapsed",
         )
         segment = st.sidebar.selectbox(
@@ -56,6 +57,12 @@ class AdminShell:
                 "<div class='cop-subtitle'>Visão consolidada geral, por setor e por analista.</div>",
                 unsafe_allow_html=True,
             )
+        elif page == "Analista Certificado":
+            st.markdown("<div class='cop-title'>Analista Certificado</div>", unsafe_allow_html=True)
+            st.markdown(
+                "<div class='cop-subtitle'>Status de certificação consolidado da equipe Residencial e Empresarial.</div>",
+                unsafe_allow_html=True,
+            )
         else:
             st.markdown(f"<div class='cop-title'>{segment.name}</div>", unsafe_allow_html=True)
             st.markdown(
@@ -65,6 +72,14 @@ class AdminShell:
 
         if page == "Indicadores":
             render_management_indicators(ctx, segments, self.dashboard)
+
+        elif page == "Analista Certificado":
+            render_certified_analysts(
+                ctx,
+                segments,
+                self.dashboard,
+                self.access,
+            )
 
         elif page == "Visão geral":
             analysts = self.access.visible_users(ctx, segment.id)

@@ -91,6 +91,10 @@ class SubadminShell:
                 sum(1 for row in last_access if row["last_access"]),
             )
 
+            st.caption(
+                "Use a cobertura dos dados e os acessos recentes para validar se a leitura "
+                "da equipe está completa antes de aprofundar os indicadores."
+            )
             col_fresh, col_access = st.columns([1.15, .85])
             with col_fresh:
                 with st.expander("Cobertura dos indicadores", expanded=True):

@@ -919,10 +919,11 @@ class AnalystShell:
 
         summary = _etit_operational_summary(details)
         st.markdown("#### Resumo operacional do período")
-        cols = st.columns(4)
+        cols = st.columns(5)
         cards = [
             ("Eventos", str(summary["volume"])),
             ("Aderentes", str(summary["successes"])),
+            ("Não aderentes", str(summary["losses"])),
             ("TMA médio", _format_duration(summary["tma_seconds"])),
             ("TMR médio", _format_duration(summary["tmr_seconds"])),
         ]
@@ -1269,9 +1270,16 @@ class AnalystShell:
             identifier = raw
             if "|||" in raw:
                 demand, identifier = raw.split("|||", 1)
+            demand_label = demand or "—"
+            if (
+                not demand
+                and indicator_key in {"res_etit_fibra_hfc", "res_etit_gpon"}
+            ):
+                demand_label = _residential_occurrence_type(identifier)
+
             rows.append({
                 "Data": _format_date(item.get("day")),
-                "Demanda": demand or "—",
+                "Demanda": demand_label,
                 "Identificador": identifier or "—",
                 "Perdas": int(item.get("losses") or 0),
             })
@@ -1405,6 +1413,13 @@ class AnalystShell:
         st.markdown("### Histórico mensal")
         st.caption("A equipe aparece somente como média agregada de referência.")
         st.dataframe(pd.DataFrame(rows), use_container_width=True, hide_index=True)
+
+
+def _residential_occurrence_type(identifier: object | None) -> str:
+    raw = str(identifier or "").strip().upper()
+    if raw.startswith("INM"):
+        return "Outage"
+    return "Incidente"
 
 
 def _enterprise_certification_status(

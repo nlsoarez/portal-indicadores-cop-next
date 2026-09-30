@@ -14,6 +14,26 @@ Este diretório contém o fluxo de deploy para a VPS Hostinger já existente.
 
 O script não instala Docker, não altera firewall e não reescreve o Caddy. Esses componentes já existem na VPS.
 
+## Validação isolada antes do deploy
+
+Use o validador de segurança para construir e testar o commit sem trocar o checkout
+principal e sem subir o container de produção:
+
+```bash
+cd /opt/portal-indicadores-cop-next
+chmod +x deploy/hostinger/validate-security.sh
+./deploy/hostinger/validate-security.sh security/guardian-fixes-20260930 <SHA_COMPLETO_APROVADO>
+```
+
+O script:
+- confirma que o SHA é exatamente o HEAD remoto aprovado;
+- cria um `git worktree` temporário;
+- constrói uma imagem Docker temporária;
+- executa `compileall`;
+- executa toda a suíte `unittest` com URLs PostgreSQL zeradas e SQLite temporário;
+- remove worktree e imagem ao terminar;
+- não executa `docker compose up` e não altera o container ativo.
+
 ## Deploy
 
 Na VPS:

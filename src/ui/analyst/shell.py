@@ -858,11 +858,12 @@ def _inject_analyst_styles() -> None:
         .cop-analyst-identity {
             position:relative;
             overflow:hidden;
-            display:flex;
-            justify-content:space-between;
-            gap:2rem;
-            min-height:210px;
-            padding:2rem 2.15rem;
+            display:grid;
+            grid-template-columns:auto minmax(0, 1fr) auto;
+            align-items:center;
+            gap:1.4rem;
+            min-height:238px;
+            padding:2.15rem 2.3rem;
             margin:.1rem 0 1.25rem;
             border:1px solid rgba(148,163,184,.16);
             border-radius:22px;
@@ -882,14 +883,34 @@ def _inject_analyst_styles() -> None:
             border-radius:50%;
             background:rgba(237,28,36,.18);
         }
+        .cop-analyst-avatar-wrap {
+            position:relative;
+            z-index:2;
+            align-self:flex-start;
+            padding-top:.2rem;
+        }
+        .cop-analyst-avatar {
+            width:70px;
+            height:70px;
+            display:grid;
+            place-items:center;
+            border-radius:20px;
+            color:#fff;
+            font-size:1.15rem;
+            font-weight:900;
+            letter-spacing:.02em;
+            background:linear-gradient(145deg, #ed1c24, #86111a);
+            border:1px solid rgba(255,255,255,.14);
+            box-shadow:0 16px 36px rgba(237,28,36,.24);
+        }
         .cop-analyst-identity-main {
             position:relative;
             z-index:2;
-            max-width:850px;
+            max-width:900px;
         }
         .cop-analyst-eyebrow {
             color:#ff9aa1;
-            font-size:.76rem;
+            font-size:.82rem;
             font-weight:850;
             letter-spacing:.12em;
             margin-bottom:.8rem;
@@ -897,7 +918,7 @@ def _inject_analyst_styles() -> None:
         .cop-analyst-identity h1 {
             margin:0 !important;
             color:#fff !important;
-            font-size:clamp(2rem, 3vw, 3rem) !important;
+            font-size:clamp(2.35rem, 3.6vw, 3.65rem) !important;
             line-height:1.05 !important;
             font-weight:900 !important;
             letter-spacing:-.045em !important;
@@ -906,7 +927,7 @@ def _inject_analyst_styles() -> None:
             max-width:760px;
             margin:.8rem 0 0 !important;
             color:rgba(255,255,255,.78) !important;
-            font-size:1rem !important;
+            font-size:1.06rem !important;
             line-height:1.55 !important;
         }
         .cop-analyst-chips {
@@ -925,8 +946,8 @@ def _inject_analyst_styles() -> None:
             background:rgba(255,255,255,.08);
             color:#edf5fc;
             padding:.42rem .75rem;
-            font-size:.76rem;
-            font-weight:750;
+            font-size:.80rem;
+            font-weight:760;
         }
         .cop-analyst-private {
             position:relative;
@@ -948,9 +969,9 @@ def _inject_analyst_styles() -> None:
             background:rgba(8,20,34,.78);
         }
         .stApp:has(.cop-analyst-shell) .stTabs [data-baseweb="tab"] {
-            min-height:44px;
-            border-radius:10px;
-            padding:.6rem .95rem;
+            min-height:48px;
+            border-radius:11px;
+            padding:.68rem 1rem;
             color:#91a2b7;
             font-weight:750;
             white-space:nowrap;
@@ -973,6 +994,7 @@ def _inject_analyst_styles() -> None:
             box-shadow:0 14px 32px rgba(0,0,0,.14);
         }
         .cop-personal-kpi-good { border-top-color:#31d58a; }
+        .cop-personal-kpi-attention { border-top-color:#f7b84b; }
         .cop-personal-kpi-label {
             color:#8fa0b6;
             font-size:.68rem;
@@ -993,6 +1015,35 @@ def _inject_analyst_styles() -> None:
             color:#8294aa;
             font-size:.72rem;
             line-height:1.35;
+        }
+
+        .cop-personal-executive {
+            margin:1.15rem 0 1.35rem;
+            padding:1rem 1.15rem;
+            border:1px solid rgba(148,163,184,.14);
+            border-left:4px solid #64748b;
+            border-radius:14px;
+            background:linear-gradient(135deg, rgba(14,31,50,.90), rgba(9,22,37,.96));
+        }
+        .cop-personal-executive-good { border-left-color:#31d58a; }
+        .cop-personal-executive-attention { border-left-color:#f7b84b; }
+        .cop-personal-executive-label {
+            color:#7dd3fc;
+            font-size:.64rem;
+            font-weight:850;
+            letter-spacing:.10em;
+        }
+        .cop-personal-executive-title {
+            margin-top:.32rem;
+            color:#f8fbff;
+            font-size:1rem;
+            font-weight:850;
+        }
+        .cop-personal-executive-text {
+            margin-top:.28rem;
+            color:#9aacbf;
+            font-size:.78rem;
+            line-height:1.45;
         }
 
         .cop-personal-insight {
@@ -1117,6 +1168,16 @@ def _inject_analyst_styles() -> None:
                 min-height:auto;
                 padding:1.35rem;
                 display:block;
+            }
+            .cop-analyst-avatar-wrap {
+                padding-top:0;
+                margin-bottom:.9rem;
+            }
+            .cop-analyst-avatar {
+                width:54px;
+                height:54px;
+                border-radius:16px;
+                font-size:.95rem;
             }
             .cop-analyst-private {
                 margin-top:1rem;

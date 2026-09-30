@@ -151,7 +151,7 @@ class AdminShell:
             col_fresh, col_access = st.columns([1.1, .9])
             with col_fresh:
                 with st.expander("Cobertura dos indicadores", expanded=True):
-                    render_indicator_freshness(freshness)
+                    render_indicator_freshness(freshness, show_title=False)
             with col_access:
                 with st.expander("Últimos acessos", expanded=True):
                     st.dataframe(

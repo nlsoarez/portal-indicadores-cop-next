@@ -11,6 +11,7 @@ from src.infrastructure.database import database_is_persistent, initialize_datab
 from src.infrastructure.repositories import SegmentRepository
 from src.ui.admin.shell import AdminShell
 from src.ui.analyst.shell import AnalystShell
+from src.ui.shared.chrome import render_login_intro
 from src.ui.shared.style import inject_global_style
 from src.ui.subadmin.shell import SubadminShell
 
@@ -47,13 +48,15 @@ def _access_snapshot(user_id: int):
 
 
 def _login() -> None:
-    st.markdown("<div class='cop-eyebrow'>COP Rede</div>", unsafe_allow_html=True)
-    st.markdown("<div class='cop-title'>Portal de Indicadores</div>", unsafe_allow_html=True)
-    st.markdown("<div class='cop-subtitle'>Acesso por perfil e segmento.</div>", unsafe_allow_html=True)
-    with st.form("login"):
-        login = st.text_input("Login")
-        password = st.text_input("Senha", type="password")
-        submitted = st.form_submit_button("Entrar", use_container_width=True)
+    render_login_intro()
+    left, center, right = st.columns([1.1, 1.0, 1.1])
+    with center:
+        st.markdown("### Acesso ao portal")
+        st.caption("Entre com seu login corporativo para acessar seu perfil e segmento.")
+        with st.form("login"):
+            login = st.text_input("Login", placeholder="Ex.: N1234567")
+            password = st.text_input("Senha", type="password", placeholder="Sua senha")
+            submitted = st.form_submit_button("Entrar", use_container_width=True)
     if submitted:
         result = AuthService().authenticate(login, password)
         if not result:

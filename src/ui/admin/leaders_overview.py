@@ -691,55 +691,71 @@ def _inject_styles() -> None:
         """
         <style>
         .cop-leader-card {
-            background:#fff;
-            border:1px solid rgba(15,23,42,.07);
-            border-top:3px solid #c87900;
-            border-radius:14px;
-            box-shadow:0 7px 18px rgba(15,23,42,.07);
-            min-height:142px;
-            padding:17px 18px 15px;
-            margin-bottom:10px;
+            background:linear-gradient(180deg, rgba(17,37,59,.96), rgba(9,22,37,.98)) !important;
+            border:1px solid rgba(148,163,184,.16) !important;
+            border-top:3px solid rgba(247,184,75,.88) !important;
+            border-radius:16px;
+            box-shadow:0 14px 34px rgba(0,0,0,.16) !important;
+            min-height:150px;
+            padding:18px 19px 16px;
+            margin-bottom:12px;
+            color:#f4f7fb !important;
         }
         .cop-leader-card-head {
             display:flex;
             gap:8px;
             align-items:center;
             flex-wrap:wrap;
-            color:#111827;
+            color:#f8fbff !important;
             font-size:.82rem;
         }
+        .cop-leader-card-head strong {
+            color:#f8fbff !important;
+            font-weight:850;
+            letter-spacing:.01em;
+        }
         .cop-leader-badge {
-            display:inline-block;
-            background:#fff2df;
-            border:1px solid #f2cf96;
+            display:inline-flex;
+            align-items:center;
+            background:rgba(247,184,75,.10) !important;
+            border:1px solid rgba(247,184,75,.30) !important;
+            color:#ffd98c !important;
             border-radius:7px;
             padding:2px 7px;
-            margin-left:6px;
-            font-size:.63rem;
-            font-weight:800;
+            margin-left:4px;
+            font-size:.62rem;
+            font-weight:850;
         }
         .cop-leader-volume {
-            color:#ef233c;
-            font-size:1.35rem;
-            font-weight:800;
-            margin-top:9px;
+            color:#ff5361 !important;
+            font-size:1.42rem;
+            font-weight:850;
+            margin-top:10px;
+            letter-spacing:-.02em;
         }
         .cop-leader-stat {
-            color:#4b5563;
+            color:#91a2b7 !important;
             font-size:.73rem;
-            margin-top:6px;
+            margin-top:7px;
+            line-height:1.45;
         }
         .cop-leader-vs {
-            color:#111827;
+            color:#c9d6e5 !important;
         }
+        .cop-leader-vs span {
+            font-weight:800 !important;
+        }
+
         .cop-leader-insight {
-            background:#fff;
-            border:1px solid rgba(15,23,42,.07);
-            border-left:3px solid;
-            border-radius:12px;
-            padding:14px 16px;
-            min-height:86px;
-            margin-bottom:10px;
+            background:linear-gradient(180deg, rgba(17,37,59,.96), rgba(9,22,37,.98)) !important;
+            border:1px solid rgba(148,163,184,.16) !important;
+            border-left:3px solid !important;
+            border-radius:14px;
+            padding:15px 17px;
+            min-height:96px;
+            margin-bottom:12px;
+            color:#eef5fb !important;
+            box-shadow:0 12px 30px rgba(0,0,0,.14);
         }
         .cop-leader-insight-head {
             display:flex;
@@ -747,54 +763,69 @@ def _inject_styles() -> None:
             gap:12px;
             align-items:center;
             font-size:.78rem;
+            color:#eef5fb !important;
+        }
+        .cop-leader-insight-head strong {
+            color:#f8fbff !important;
+            font-weight:850;
         }
         .cop-leader-rank {
-            display:inline-block;
-            background:#f3f4f6;
-            border:1px solid #e5e7eb;
-            border-radius:6px;
+            display:inline-flex;
+            align-items:center;
+            background:rgba(148,163,184,.10) !important;
+            border:1px solid rgba(148,163,184,.18) !important;
+            color:#c8d5e4 !important;
+            border-radius:7px;
             padding:2px 7px;
             margin-left:6px;
-            font-size:.62rem;
+            font-size:.61rem;
+            font-weight:750;
         }
         .cop-leader-insight-metric {
             white-space:nowrap;
             text-align:right;
+            color:#dce7f3 !important;
+        }
+        .cop-leader-insight-metric strong {
+            color:#f8fbff !important;
         }
         .cop-leader-dpa {
-            color:#9ca3af;
-            font-size:.70rem;
+            color:#8fa1b6 !important;
+            font-size:.69rem;
             margin-left:6px;
         }
         .cop-leader-insight-tags {
-            margin-top:8px;
+            margin-top:10px;
             font-size:.72rem;
+            color:#c9d6e5 !important;
         }
         .cop-leader-label {
-            color:#9ca3af;
+            color:#8193a9 !important;
         }
         .cop-leader-label-gap {
-            margin-left:9px;
+            margin-left:10px;
         }
         .cop-leader-tag-green,
         .cop-leader-tag-red {
             display:inline-block;
             border-radius:7px;
-            padding:2px 6px;
+            padding:3px 7px;
             margin-left:4px;
             font-size:.64rem;
-            font-weight:700;
+            font-weight:800;
         }
         .cop-leader-tag-green {
-            color:#0b6b2d;
-            background:rgba(34,197,94,.12);
+            color:#70e7ac !important;
+            background:rgba(34,197,94,.10) !important;
+            border:1px solid rgba(34,197,94,.30);
         }
         .cop-leader-tag-red {
-            color:#b42318;
-            background:rgba(239,68,68,.12);
+            color:#ff8b94 !important;
+            background:rgba(239,68,68,.10) !important;
+            border:1px solid rgba(239,68,68,.30);
         }
         .cop-leader-empty {
-            color:#c4c7cc;
+            color:#61738a !important;
         }
         </style>
         """,

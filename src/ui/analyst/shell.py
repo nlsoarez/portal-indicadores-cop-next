@@ -1542,6 +1542,138 @@ def _residential_occurrence_type(identifier: object | None) -> str:
     return "Incidente"
 
 
+def _residential_certification_status(
+    etit_hfc: float | None,
+    dpa: float | None,
+    assert_hfc: float | None,
+    assert_gpon: float | None,
+) -> dict:
+    assert_values = [
+        value
+        for value in (assert_hfc, assert_gpon)
+        if value is not None
+    ]
+    assert_avg = (
+        sum(assert_values) / len(assert_values)
+        if assert_values
+        else None
+    )
+
+    etit_ok = etit_hfc is None or etit_hfc >= 90.0
+    dpa_ok = dpa is None or dpa >= 90.0
+    dpa_alert = dpa is not None and 85.0 <= dpa < 90.0
+    assert_ok = assert_avg is None or assert_avg >= 85.0
+
+    missing: list[str] = []
+    if etit_hfc is None:
+        missing.append("ETIT Fibra HFC")
+    if dpa is None:
+        missing.append("DPA")
+    if assert_avg is None:
+        missing.append("Média Assertividade")
+
+    if etit_ok and dpa_ok and assert_ok:
+        status = "good"
+        title = "✅ Você está certificando"
+        message = (
+            "ETIT Fibra HFC, DPA individual e média de Assertividade "
+            "dentro das metas."
+        )
+    elif etit_ok and dpa_alert and assert_ok:
+        status = "attention"
+        title = "⚠️ Você está certificando"
+        message = (
+            "O DPA individual está em faixa de atenção "
+            "(85% ≤ DPA < 90%); ETIT Fibra HFC e média de "
+            "Assertividade permanecem dentro das metas."
+        )
+    else:
+        status = "bad"
+        title = "❌ Você NÃO está certificando"
+        reasons: list[str] = []
+        if etit_hfc is not None and etit_hfc < 90.0:
+            reasons.append(
+                f"ETIT Fibra HFC abaixo de 90% ({etit_hfc:.1f}%)"
+            )
+        if dpa is not None and dpa < 85.0:
+            reasons.append(
+                f"DPA individual abaixo de 85% ({dpa:.1f}%)"
+            )
+        if assert_avg is not None and assert_avg < 85.0:
+            reasons.append(
+                f"Média Assertividade abaixo de 85% ({assert_avg:.1f}%)"
+            )
+        message = (
+            "Indicadores fora da meta — "
+            + " · ".join(reasons)
+            + "."
+        )
+
+    if missing:
+        message += (
+            f" Sem dados de {', '.join(missing)}; seguindo a regra do portal "
+            "anterior, esses itens são considerados dentro da meta."
+        )
+
+    return {
+        "status": status,
+        "title": title,
+        "message": message,
+        "etit_hfc": etit_hfc,
+        "dpa": dpa,
+        "assert_hfc": assert_hfc,
+        "assert_gpon": assert_gpon,
+        "assert_avg": assert_avg,
+    }
+
+
+def _render_residential_certification_status(
+    certification: dict,
+) -> None:
+    status = str(certification.get("status") or "neutral")
+    st.markdown(
+        (
+            f"<section class='cop-user-cert-status cop-user-cert-{escape(status)}'>"
+            "<div class='cop-user-cert-team'>EQUIPE NELSON (RESIDENCIAL)</div>"
+            f"<div class='cop-user-cert-title'>{escape(str(certification.get('title') or '—'))}</div>"
+            f"<div class='cop-user-cert-message'>{escape(str(certification.get('message') or ''))}</div>"
+            "</section>"
+        ),
+        unsafe_allow_html=True,
+    )
+
+
+def _render_residential_certification_metric(
+    label: str,
+    value: float | None,
+    kind: str,
+) -> None:
+    if value is None:
+        tone = "neutral"
+    elif kind == "etit":
+        tone = "good" if value >= 90.0 else "bad"
+    elif kind == "dpa":
+        tone = (
+            "good"
+            if value >= 90.0
+            else "attention"
+            if value >= 85.0
+            else "bad"
+        )
+    else:
+        tone = "good" if value >= 85.0 else "bad"
+
+    st.markdown(
+        (
+            f"<article class='cop-user-cert-metric cop-user-cert-metric-{tone}'>"
+            f"<span>{escape(label)}</span>"
+            f"<strong>{escape('—' if value is None else f'{value:.1f}'.replace('.', ','))}</strong>"
+            "</article>"
+        ),
+        unsafe_allow_html=True,
+    )
+
+
 def _enterprise_certification_status(
     etit: float | None,
     dpa: float | None,

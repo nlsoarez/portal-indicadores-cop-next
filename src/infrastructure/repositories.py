@@ -893,14 +893,15 @@ class IndicatorRepository:
                     ROUND(CAST(SUM(b.value * b.volume) AS NUMERIC) / NULLIF(SUM(b.volume), 0), 1) AS team_avg,
                     SUM(b.volume) AS team_volume,
                     SUM(b.successes) AS team_successes,
-                    SUM(b.losses) AS team_losses
+                    SUM(b.losses) AS team_losses,
+                    COUNT(DISTINCT b.login) AS team_analysts
                 FROM indicator_breakdowns b
                 JOIN indicator_definitions d ON d.id=b.indicator_definition_id
                 WHERE b.segment_id=? AND b.scope='team' AND d.active=1
                   AND b.dimension IN (
-                    'group', 'service', 'demand', 'cause', 'cause_toa', 'cause_sir',
+                    'overall', 'group', 'service', 'demand', 'cause', 'cause_toa', 'cause_sir',
                     'area', 'area_involved', 'network', 'activity_type', 'incident_type',
-                    'aging', 'hour', 'base', 'queue', 'queue_type', 'productivity_component',
+                    'aging', 'hour', 'turn', 'base', 'queue', 'queue_type', 'productivity_component',
                     'nature', 'impact', 'solution', 'city', 'technology', 'type'
                   )
                 GROUP BY b.data_month, d.indicator_key, d.name, d.unit,

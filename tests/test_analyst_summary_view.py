@@ -19,6 +19,8 @@ from src.ui.analyst.shell import (
     _productivity_chart_scale,
     _productivity_recent_rows,
     _productivity_user_summary,
+    _validation_group_table,
+    _validation_time_user_summary,
 )
 
 
@@ -402,6 +404,59 @@ class AnalystSummaryViewTest(unittest.TestCase):
         self.assertEqual("good", good["tone"])
         self.assertEqual("attention", attention["tone"])
         self.assertEqual("bad", bad["tone"])
+
+    def test_validation_summary_matches_total_adherents_losses_tmr_and_team(self):
+        row = {
+            "indicator_key": "validacao_20m",
+            "value": 86.5,
+            "volume": 104,
+        }
+        team = {"team_avg": 84.2}
+        details = pd.DataFrame(
+            {
+                "dimension": ["overall", "overall"],
+                "volume": [70, 34],
+                "successes": [58, 32],
+                "losses": [12, 2],
+                "tmr_seconds": [942.0, 660.0],
+            }
+        )
+
+        summary = _validation_time_user_summary(row, team, details)
+
+        self.assertEqual(104.0, summary["total"])
+        self.assertEqual(90.0, summary["successes"])
+        self.assertEqual(14.0, summary["losses"])
+        self.assertAlmostEqual(86.53846, summary["adherence"], places=4)
+        self.assertAlmostEqual(
+            ((942.0 * 70) + (660.0 * 34)) / 104 / 60,
+            summary["tmr_minutes"],
+            places=4,
+        )
+        self.assertEqual(84.2, summary["team_avg"])
+
+    def test_validation_group_table_keeps_only_requested_operational_columns(self):
+        details = pd.DataFrame(
+            {
+                "dimension": ["group", "group", "group"],
+                "dimension_value": ["Minas Gerais", "Minas Gerais", "Nordeste"],
+                "volume": [50, 20, 10],
+                "successes": [40, 18, 10],
+                "losses": [10, 2, 0],
+                "tmr_seconds": [960.0, 780.0, 114.0],
+            }
+        )
+
+        table = _validation_group_table(details)
+
+        self.assertEqual(
+            ["Grupo", "Total", "Aderentes", "Aderência %", "TMR (min)"],
+            table.columns.tolist(),
+        )
+        minas = table[table["Grupo"] == "Minas Gerais"].iloc[0]
+        self.assertEqual(70, minas["Total"])
+        self.assertEqual(58, minas["Aderentes"])
+        self.assertEqual("82,9%", minas["Aderência %"])
 
     def test_summary_snapshot_counts_targets_and_team_comparison(self):
         latest = [

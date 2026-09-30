@@ -759,6 +759,222 @@ class AnalystShell:
         st.dataframe(pd.DataFrame(rows), use_container_width=True, hide_index=True)
 
 
+def _etit_operational_summary(details: pd.DataFrame) -> dict:
+    overall = _dimension_rows(details, "overall")
+    source = overall if not overall.empty else details
+
+    volume = float(pd.to_numeric(source.get("volume"), errors="coerce").fillna(0).sum())
+    successes = float(
+        pd.to_numeric(source.get("successes"), errors="coerce").fillna(0).sum()
+    )
+    losses = float(
+        pd.to_numeric(source.get("losses"), errors="coerce").fillna(0).sum()
+    )
+
+    return {
+        "volume": int(round(volume)),
+        "successes": int(round(successes)),
+        "losses": int(round(losses)),
+        "adherence": None if volume <= 0 else successes / volume * 100,
+        "tma_seconds": _weighted_breakdown_duration(source, "tma_seconds"),
+        "tmr_seconds": _weighted_breakdown_duration(source, "tmr_seconds"),
+    }
+
+
+def _weighted_breakdown_duration(
+    frame: pd.DataFrame,
+    column: str,
+) -> float | None:
+    if frame is None or frame.empty or column not in frame.columns:
+        return None
+    values = pd.to_numeric(frame[column], errors="coerce")
+    weights = pd.to_numeric(frame.get("volume"), errors="coerce").fillna(0)
+    valid = values.notna() & weights.gt(0)
+    if not valid.any():
+        return None
+    return float((values[valid] * weights[valid]).sum() / weights[valid].sum())
+
+
+def _format_duration(seconds: float | None) -> str:
+    value = _number(seconds)
+    if value is None or value < 0:
+        return "—"
+    total = int(round(value))
+    hours, remainder = divmod(total, 3600)
+    minutes, secs = divmod(remainder, 60)
+    return f"{hours:02d}:{minutes:02d}:{secs:02d}"
+
+
+def _render_etit_kpi(label: str, value: str) -> None:
+    st.markdown(
+        (
+            "<article class='cop-etit-user-kpi'>"
+            f"<span>{escape(label)}</span>"
+            f"<strong>{escape(value)}</strong>"
+            "</article>"
+        ),
+        unsafe_allow_html=True,
+    )
+
+
+def _etit_team_demand_cards(team_details: pd.DataFrame) -> list[dict]:
+    demand = _dimension_rows(team_details, "demand")
+    if demand.empty:
+        return []
+
+    demand = demand.copy()
+    demand["dimension_value"] = (
+        demand["dimension_value"].astype(str).str.upper().str.strip()
+    )
+    cards: list[dict] = []
+    for demand_name in ("RAL", "REC"):
+        part = demand[demand["dimension_value"] == demand_name]
+        if part.empty:
+            continue
+
+        volume = float(
+            pd.to_numeric(part.get("team_volume"), errors="coerce").fillna(0).sum()
+        )
+        successes = float(
+            pd.to_numeric(part.get("team_successes"), errors="coerce").fillna(0).sum()
+        )
+        losses = float(
+            pd.to_numeric(part.get("team_losses"), errors="coerce").fillna(0).sum()
+        )
+        analysts_series = pd.to_numeric(
+            part.get("team_analysts"),
+            errors="coerce",
+        ).fillna(0)
+        analysts = float(analysts_series.max()) if not analysts_series.empty else 0.0
+
+        adherence = None if volume <= 0 else successes / volume * 100
+        avg_losses = None if analysts <= 0 else losses / analysts
+        cards.extend(
+            [
+                {
+                    "label": f"% {demand_name} Ader. (média equipe)",
+                    "value": _pct(adherence),
+                    "tone": "good" if adherence is not None and adherence >= 90 else "neutral",
+                },
+                {
+                    "label": f"{demand_name} N. Ader. (média equipe)",
+                    "value": "—" if avg_losses is None else f"{avg_losses:.1f}".replace(".", ","),
+                    "tone": "attention" if avg_losses is not None and avg_losses > 0 else "neutral",
+                },
+            ]
+        )
+    return cards
+
+
+def _render_etit_team_card(item: dict) -> None:
+    tone = str(item.get("tone") or "neutral")
+    st.markdown(
+        (
+            f"<article class='cop-etit-team-card cop-etit-team-{escape(tone)}'>"
+            f"<span>{escape(str(item.get('label') or ''))}</span>"
+            f"<strong>{escape(str(item.get('value') or '—'))}</strong>"
+            "</article>"
+        ),
+        unsafe_allow_html=True,
+    )
+
+
+def _etit_dimension_table(
+    details: pd.DataFrame,
+    team_details: pd.DataFrame,
+    dimension: str,
+    label: str,
+    *,
+    include_duration: bool = False,
+) -> pd.DataFrame:
+    mine = _dimension_rows(details, dimension)
+    if mine.empty:
+        return pd.DataFrame()
+
+    team = _dimension_rows(team_details, dimension)
+    records: list[dict] = []
+
+    for raw_value, part in mine.groupby("dimension_value", dropna=False):
+        value = str(raw_value or "").strip()
+        if not value:
+            continue
+
+        volume = float(pd.to_numeric(part.get("volume"), errors="coerce").fillna(0).sum())
+        successes = float(
+            pd.to_numeric(part.get("successes"), errors="coerce").fillna(0).sum()
+        )
+        losses = float(
+            pd.to_numeric(part.get("losses"), errors="coerce").fillna(0).sum()
+        )
+        adherence = None if volume <= 0 else successes / volume * 100
+
+        team_avg = _team_value(team_details, dimension, value)
+        row = {
+            label: value,
+            "Eventos": int(round(volume)),
+            "Aderentes": int(round(successes)),
+            "Não aderentes": int(round(losses)),
+            "Aderência %": _pct(adherence),
+            "Média equipe %": _pct(team_avg),
+            "_result": -1.0 if adherence is None else float(adherence),
+        }
+        if include_duration:
+            row["TMA"] = _format_duration(
+                _weighted_breakdown_duration(part, "tma_seconds")
+            )
+            row["TMR"] = _format_duration(
+                _weighted_breakdown_duration(part, "tmr_seconds")
+            )
+        records.append(row)
+
+    if not records:
+        return pd.DataFrame()
+
+    table = pd.DataFrame(records).sort_values(
+        ["Eventos", "_result", label],
+        ascending=[False, False, True],
+    )
+
+    ordered = [label, "Eventos", "Aderentes", "Não aderentes"]
+    if include_duration:
+        ordered.extend(["TMA", "TMR"])
+    ordered.extend(["Aderência %", "Média equipe %"])
+    return table[ordered].reset_index(drop=True)
+
+
+def _render_etit_dimension_highlight(
+    table: pd.DataFrame,
+    label: str,
+) -> None:
+    if table is None or table.empty or "Aderência %" not in table.columns:
+        return
+
+    scoring = table.copy()
+    scoring["_score"] = (
+        scoring["Aderência %"]
+        .astype(str)
+        .str.replace("%", "", regex=False)
+        .str.replace(",", ".", regex=False)
+    )
+    scoring["_score"] = pd.to_numeric(scoring["_score"], errors="coerce")
+    scoring = scoring.dropna(subset=["_score"])
+    if scoring.empty:
+        return
+
+    best = scoring.sort_values(
+        ["_score", "Eventos"],
+        ascending=[False, False],
+    ).iloc[0]
+    worst = scoring.sort_values(
+        ["_score", "Eventos"],
+        ascending=[True, False],
+    ).iloc[0]
+    st.caption(
+        f"Melhor: {best[label]} ({best['Aderência %']}) · "
+        f"Maior atenção: {worst[label]} ({worst['Aderência %']})"
+    )
+
+
 def _closing_demand_summary(
     details: pd.DataFrame,
     team_details: pd.DataFrame,

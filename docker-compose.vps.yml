@@ -11,6 +11,8 @@ services:
       DB_POOL_MAX_SIZE: ${DB_POOL_MAX_SIZE:-8}
     ports:
       - "127.0.0.1:${PORTAL_PORT:-8501}:8501"
+    volumes:
+      - ./data/m365:/app/data/m365
     tmpfs:
       - /tmp:size=512m,mode=1777
     healthcheck:

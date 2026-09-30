@@ -105,6 +105,14 @@ log "Construindo imagem"
 log "Validando sintaxe Python da imagem"
 "${COMPOSE[@]}" run --rm --no-deps portal python -m compileall -q /app
 
+log "Executando suíte de testes em SQLite isolado"
+"${COMPOSE[@]}" run --rm --no-deps \
+  -e DATABASE_URL= \
+  -e POSTGRES_URL= \
+  -e POSTGRES_URL_NON_POOLING= \
+  -e COP_DB_AUTO_MIGRATE=1 \
+  portal python -m unittest discover -s tests -p 'test_*.py'
+
 if grep -Eqi '^[[:space:]]*COP_DB_AUTO_MIGRATE=(0|false|no|off)[[:space:]]*$' "${ENV_FILE}"; then
   grep -Eq '^[[:space:]]*DATABASE_ADMIN_URL=.+' "${ENV_FILE}" \
     || fail "COP_DB_AUTO_MIGRATE está desabilitado, mas DATABASE_ADMIN_URL não foi configurada."

@@ -16,6 +16,7 @@ from src.ui.analyst.shell import (
     _etit_operational_summary,
     _etit_team_demand_cards,
     _indicator_recent_rows,
+    _indicator_volume_for_period,
     _meets_target,
     _period_label,
     _productivity_activity_table,
@@ -352,18 +353,18 @@ class AnalystSummaryViewTest(unittest.TestCase):
         self.assertEqual([60.0, 75.0], [row["team_avg"] for row in rows])
         self.assertEqual(80.0, _productivity_chart_scale(rows))
 
-    def test_cancelled_tasks_summary_uses_counts_percentage_and_team_average(self):
+    def test_cancelled_tasks_summary_uses_etit_volume_as_percentage_base(self):
         details = pd.DataFrame(
             {
                 "dimension": ["overall", "overall"],
                 "losses": [1, 1],
-                "volume": [5, 5],
+                "volume": [1, 1],
             }
         )
         team = pd.DataFrame(
             {
                 "dimension": ["overall"],
-                "team_losses": [180],
+                "team_losses": [15],
                 "team_analysts": [7],
             }
         )
@@ -371,38 +372,54 @@ class AnalystSummaryViewTest(unittest.TestCase):
         summary = _cancelled_tasks_user_summary(
             details,
             team,
-            analyst_pct=12.5,
+            etit_volume=137,
             target_pct=15.0,
         )
 
         self.assertEqual(2.0, summary["cancelled"])
-        self.assertEqual(12.5, summary["analyst_pct"])
+        self.assertEqual(137.0, summary["etit_volume"])
+        self.assertAlmostEqual((2 / 137) * 100, summary["analyst_pct"], places=6)
         self.assertEqual(15.0, summary["target_pct"])
-        self.assertAlmostEqual(25.7142857, summary["team_average"], places=5)
+        self.assertAlmostEqual(15 / 7, summary["team_average"], places=5)
         self.assertEqual("good", summary["tone"])
 
     def test_cancelled_tasks_uses_official_15_percent_max_target(self):
         team = pd.DataFrame()
 
         good = _cancelled_tasks_user_summary(
-            pd.DataFrame(),
+            pd.DataFrame({"dimension": ["overall"], "losses": [15]}),
             team,
-            analyst_pct=15.0,
+            etit_volume=100,
         )
         attention = _cancelled_tasks_user_summary(
-            pd.DataFrame(),
+            pd.DataFrame({"dimension": ["overall"], "losses": [18]}),
             team,
-            analyst_pct=18.0,
+            etit_volume=100,
         )
         bad = _cancelled_tasks_user_summary(
-            pd.DataFrame(),
+            pd.DataFrame({"dimension": ["overall"], "losses": [25]}),
             team,
-            analyst_pct=25.0,
+            etit_volume=100,
         )
 
         self.assertEqual("good", good["tone"])
         self.assertEqual("attention", attention["tone"])
         self.assertEqual("bad", bad["tone"])
+
+    def test_indicator_volume_for_period_uses_matching_etit_month(self):
+        rows = [
+            {"indicator_key": "emp_etit_event", "period": "2026-08", "volume": 99},
+            {"indicator_key": "emp_etit_event", "period": "2026-09", "volume": 137},
+            {"indicator_key": "toa_cancellation_rate", "period": "2026-09", "volume": 2},
+        ]
+
+        volume = _indicator_volume_for_period(
+            rows,
+            "emp_etit_event",
+            "2026-09",
+        )
+
+        self.assertEqual(137.0, volume)
 
     def test_chat_group_table_exposes_group_volume_adherence_and_team_reference(self):
         details = pd.DataFrame(

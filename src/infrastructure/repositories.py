@@ -492,7 +492,10 @@ class IndicatorRepository:
                     JOIN segments s ON s.id=b.segment_id
                     WHERE b.segment_id IN ({placeholders})
                       AND b.scope='team'
-                      AND b.dimension IN ('demand', 'service')
+                      AND b.dimension IN (
+                          'demand', 'service', 'hour',
+                          'productivity_component', 'productivity_total'
+                      )
                 ),
                 latest AS (
                     SELECT indicator_key, MAX(data_month) AS data_month

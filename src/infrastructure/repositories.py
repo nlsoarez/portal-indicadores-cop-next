@@ -872,7 +872,7 @@ class IndicatorRepository:
                     name,
                     unit,
                     CASE
-                        WHEN indicator_key='dpa_official'
+                        WHEN indicator_key IN ('dpa_official', 'productivity_avg_daily')
                             THEN ROUND(AVG(user_avg), 1)
                         ELSE ROUND(
                             CAST(SUM(weighted_value) AS NUMERIC)
@@ -932,7 +932,7 @@ class IndicatorRepository:
                     name,
                     unit,
                     CASE
-                        WHEN indicator_key='dpa_official'
+                        WHEN indicator_key IN ('dpa_official', 'productivity_avg_daily')
                             THEN ROUND(AVG(user_avg), 1)
                         ELSE ROUND(
                             CAST(SUM(weighted_value) AS NUMERIC)

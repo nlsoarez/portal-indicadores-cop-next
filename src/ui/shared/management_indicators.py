@@ -409,6 +409,20 @@ def _render_indicator(
         )
         return
 
+    if ctx.is_admin and indicator_key == "chat_10m":
+        from src.ui.admin.indicators.chat_toa import render_admin_chat_toa
+
+        render_admin_chat_toa(
+            rows=rows,
+            people=people,
+            metrics=metrics,
+            details=details,
+            period=period,
+            data_through=fresh.get("data_through") or period or "—",
+            target=target,
+        )
+        return
+
     if ctx.is_admin and indicator_key == "productivity_avg_daily":
         from src.ui.admin.indicators.productivity import render_admin_productivity
 

@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from html import escape
 import math
 
 import pandas as pd
@@ -107,9 +108,9 @@ def render_admin_enterprise_etit(
                 (
                     "<div class='cop-emp-bestworst'>"
                     f"<span class='cop-emp-best'>●</span> Melhor: "
-                    f"<b>{best['Grupo']}</b> ({best['Aderência %']:.1f}%) · "
+                    f"<b>{escape(str(best['Grupo']))}</b> ({best['Aderência %']:.1f}%) · "
                     "<span class='cop-emp-worst'>●</span> Pior: "
-                    f"<b>{worst['Grupo']}</b> ({worst['Aderência %']:.1f}%)"
+                    f"<b>{escape(str(worst['Grupo']))}</b> ({worst['Aderência %']:.1f}%)"
                     "</div>"
                 ),
                 unsafe_allow_html=True,

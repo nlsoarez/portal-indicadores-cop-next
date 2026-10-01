@@ -75,7 +75,7 @@ As sete fontes possuem adapter funcional. O backend identifica os usuários auto
 
 - Usuários, roles, segmentos, memberships, indicadores, resultados, uploads, cobertura dos dados e logs de acesso ficam no banco relacional. Em Vercel, configure `DATABASE_URL` para PostgreSQL persistente; SQLite fica apenas como fallback local/teste.
 - Existe uma separação entre segmento que o usuário pode **consultar** e segmento em que seu próprio **desempenho** deve ser contabilizado.
-- Senha inicial `claro123`, persistida somente como hash PBKDF2, com troca obrigatória no primeiro acesso.
+- Não existe senha inicial compartilhada. Novas contas comuns recebem um segredo aleatório desconhecido e devem ser ativadas pelo reset administrativo com senha temporária; um banco PostgreSQL novo exige `COP_ADMIN_BOOTSTRAP_PASSWORD` somente para criar o primeiro Admin.
 - Autorização é validada no backend (`AccessService`); esconder um controle na interface não é usado como proteção de acesso.
 - O portal **não possui módulo de escala**.
 - O projeto **não usa GitHub Actions** e não possui `.github/workflows/`.

@@ -17,6 +17,7 @@ class M365EtitPilotTest(unittest.TestCase):
         provider = M365TokenProvider(
             tenant_id="SEU_TENANT_ID",
             client_id="SEU_CLIENT_ID",
+            cache_key="invalid-but-present",
         )
         self.assertFalse(provider.configured)
 
@@ -24,8 +25,45 @@ class M365EtitPilotTest(unittest.TestCase):
         provider = M365TokenProvider(
             tenant_id="55247d4b-b435-47a5-881b-ca7627434e79",
             client_id="5c36fcc6-8e44-481a-b822-b56a22ccc767",
+            cache_key="MDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDA=",
         )
         self.assertTrue(provider.configured)
+
+    def test_token_provider_requires_cache_encryption_key(self):
+        provider = M365TokenProvider(
+            tenant_id="55247d4b-b435-47a5-881b-ca7627434e79",
+            client_id="5c36fcc6-8e44-481a-b822-b56a22ccc767",
+            cache_key="",
+        )
+        self.assertFalse(provider.configured)
+
+    def test_token_cache_is_encrypted_at_rest(self):
+        import tempfile
+        from pathlib import Path
+        from cryptography.fernet import Fernet
+
+        class FakeCache:
+            has_state_changed = True
+
+            @staticmethod
+            def serialize():
+                return '{"AccessToken":{"sensitive":"value"}}'
+
+        with tempfile.TemporaryDirectory() as tmp:
+            cache_path = Path(tmp) / "token_cache.json"
+            key = Fernet.generate_key()
+            provider = M365TokenProvider(
+                tenant_id="55247d4b-b435-47a5-881b-ca7627434e79",
+                client_id="5c36fcc6-8e44-481a-b822-b56a22ccc767",
+                cache_path=cache_path,
+                cache_key=key.decode("ascii"),
+            )
+            cipher = provider._cipher()
+            provider._save_cache(FakeCache(), cipher)
+
+            raw = cache_path.read_bytes()
+            self.assertNotIn(b"AccessToken", raw)
+            self.assertIn(b"AccessToken", cipher.decrypt(raw))
 
     def test_share_id_uses_graph_u_prefix(self):
         value = graph_share_id("https://example.sharepoint.com/shared?id=abc")

@@ -16,7 +16,7 @@ class UserRepository:
     def get_credentials(self, login: str):
         with connection() as conn:
             row = conn.execute(
-                "SELECT id, login, password_hash, password_salt, must_change_password, active "
+                "SELECT id, login, password_hash, password_salt, must_change_password, auth_version, active "
                 "FROM users WHERE UPPER(login)=UPPER(?)",
                 (login.strip(),),
             ).fetchone()
@@ -165,20 +165,44 @@ class UserRepository:
             ).fetchone()
         return row is not None
 
-    def change_password(self, user_id: int, password_hash: str, salt: str) -> None:
+    def get_auth_version(self, user_id: int) -> int | None:
+        with connection() as conn:
+            row = conn.execute(
+                "SELECT auth_version FROM users WHERE id=? AND active=1",
+                (user_id,),
+            ).fetchone()
+        return int(row["auth_version"]) if row else None
+
+    def change_password(self, user_id: int, password_hash: str, salt: str) -> int:
         with transaction() as conn:
             conn.execute(
-                "UPDATE users SET password_hash=?, password_salt=?, must_change_password=0 WHERE id=?",
+                "UPDATE users SET password_hash=?, password_salt=?, must_change_password=0, "
+                "auth_version=auth_version+1 WHERE id=? AND active=1",
                 (password_hash, salt, user_id),
             )
-    def reset_password(self, user_id: int, password_hash: str, salt: str) -> None:
-        """Define senha temporária e força troca no próximo login."""
+            row = conn.execute(
+                "SELECT auth_version FROM users WHERE id=? AND active=1",
+                (user_id,),
+            ).fetchone()
+        if not row:
+            raise ValueError("Usuário inexistente ou inativo")
+        return int(row["auth_version"])
+
+    def reset_password(self, user_id: int, password_hash: str, salt: str) -> int:
+        """Define senha temporária, força troca e revoga sessões anteriores."""
         with transaction() as conn:
             conn.execute(
-                "UPDATE users SET password_hash=?, password_salt=?, must_change_password=1 "
-                "WHERE id=? AND active=1",
+                "UPDATE users SET password_hash=?, password_salt=?, must_change_password=1, "
+                "auth_version=auth_version+1 WHERE id=? AND active=1",
                 (password_hash, salt, user_id),
             )
+            row = conn.execute(
+                "SELECT auth_version FROM users WHERE id=? AND active=1",
+                (user_id,),
+            ).fetchone()
+        if not row:
+            raise ValueError("Usuário inexistente ou inativo")
+        return int(row["auth_version"])
 
     def list_manageable_accounts(self) -> list[dict]:
         """Contas ativas que um Admin pode gerenciar (analistas e lideranças)."""
@@ -186,7 +210,7 @@ class UserRepository:
             rows = conn.execute(
                 """
                 SELECT DISTINCT
-                       u.id, u.login, u.display_name, u.full_name,
+                       u.id, u.login, u.display_name, u.full_name, u.must_change_password,
                        r.code AS role_code, r.name AS role_name,
                        s.id AS segment_id, s.name AS segment_name
                 FROM users u
@@ -209,6 +233,7 @@ class UserRepository:
                     "login": str(row["login"]),
                     "display_name": str(row["display_name"]),
                     "full_name": str(row["full_name"]),
+                    "must_change_password": bool(row["must_change_password"]),
                     "role_code": str(row["role_code"]),
                     "role_name": str(row["role_name"]),
                     "segments": [],
@@ -253,6 +278,57 @@ class UserRepository:
                 """
             ).fetchall()
         return [dict(row) for row in rows]
+
+
+class LoginThrottleRepository:
+    """Persistent per-login throttle shared by all application processes."""
+
+    @staticmethod
+    def _normalize(login: str) -> str:
+        return login.strip().upper()
+
+    def get(self, login: str) -> dict | None:
+        normalized = self._normalize(login)
+        if not normalized:
+            return None
+        with connection() as conn:
+            row = conn.execute(
+                "SELECT login, failure_count, window_started_at, blocked_until "
+                "FROM auth_throttle WHERE login=?",
+                (normalized,),
+            ).fetchone()
+        return dict(row) if row else None
+
+    def upsert(
+        self,
+        login: str,
+        *,
+        failure_count: int,
+        window_started_at: str,
+        blocked_until: str | None,
+    ) -> None:
+        normalized = self._normalize(login)
+        if not normalized:
+            return
+        with transaction() as conn:
+            conn.execute(
+                """
+                INSERT INTO auth_throttle(login, failure_count, window_started_at, blocked_until)
+                VALUES (?, ?, ?, ?)
+                ON CONFLICT(login) DO UPDATE SET
+                    failure_count=excluded.failure_count,
+                    window_started_at=excluded.window_started_at,
+                    blocked_until=excluded.blocked_until
+                """,
+                (normalized, int(failure_count), window_started_at, blocked_until),
+            )
+
+    def clear(self, login: str) -> None:
+        normalized = self._normalize(login)
+        if not normalized:
+            return
+        with transaction() as conn:
+            conn.execute("DELETE FROM auth_throttle WHERE login=?", (normalized,))
 
 
 class SegmentRepository:

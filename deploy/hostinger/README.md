@@ -14,6 +14,26 @@ Este diretório contém o fluxo de deploy para a VPS Hostinger já existente.
 
 O script não instala Docker, não altera firewall e não reescreve o Caddy. Esses componentes já existem na VPS.
 
+## Validação isolada antes do deploy
+
+Use o validador de segurança para construir e testar o commit sem trocar o checkout
+principal e sem subir o container de produção:
+
+```bash
+cd /opt/portal-indicadores-cop-next
+chmod +x deploy/hostinger/validate-security.sh
+./deploy/hostinger/validate-security.sh security/guardian-fixes-20260930 <SHA_COMPLETO_APROVADO>
+```
+
+O script:
+- confirma que o SHA é exatamente o HEAD remoto aprovado;
+- cria um `git worktree` temporário;
+- constrói uma imagem Docker temporária;
+- executa `compileall`;
+- executa toda a suíte `unittest` com URLs PostgreSQL zeradas e SQLite temporário;
+- remove worktree e imagem ao terminar;
+- não executa `docker compose up` e não altera o container ativo.
+
 ## Deploy
 
 Na VPS:
@@ -21,13 +41,13 @@ Na VPS:
 ```bash
 cd /opt/portal-indicadores-cop-next
 chmod +x deploy/hostinger/deploy.sh deploy/hostinger/check.sh
-./deploy/hostinger/deploy.sh feat/admin-etit-operational-view
+./deploy/hostinger/deploy.sh feat/admin-etit-operational-view <SHA_COMPLETO_APROVADO>
 ```
 
 Depois que esta feature estiver incorporada à `main`:
 
 ```bash
-./deploy/hostinger/deploy.sh main
+./deploy/hostinger/deploy.sh main <SHA_COMPLETO_APROVADO>
 ```
 
 O deploy executa:
@@ -35,7 +55,7 @@ O deploy executa:
 1. valida `.env.vps` e `DATABASE_URL`;
 2. valida a rede Docker usada pelo Caddy;
 3. busca a branch no GitHub;
-4. usa exatamente o commit remoto da branch;
+4. compara o HEAD remoto com o SHA completo informado pelo operador e aborta se houver divergência;
 5. valida o Compose;
 6. faz o build da imagem;
 7. sobe o container;
@@ -76,12 +96,49 @@ portal-indicadores.179-198-124-8.sslip.io
 O arquivo `.env.vps` deve continuar fora do Git. Exemplo mínimo:
 
 ```env
-DATABASE_URL=postgresql://...
+DATABASE_URL=postgresql://cop_portal_app.PROJECT_REF:...
+DATABASE_ADMIN_URL=postgresql://postgres.PROJECT_REF:...
+COP_DB_AUTO_MIGRATE=0
 DB_POOL_MAX_SIZE=8
 PORTAL_PORT=8501
+# Obrigatório somente para o primeiro ADMIN de um banco PostgreSQL novo:
+COP_ADMIN_BOOTSTRAP_PASSWORD=...
 ```
 
 Não faça commit da URI real do banco nem de senhas.
+
+### Papel PostgreSQL de runtime
+
+O processo web não deve operar como `postgres`.
+
+#### Rollout seguro em duas etapas
+
+O banco atual precisa receber primeiro as novas estruturas de autenticação antes de o papel restrito ser usado.
+
+**Etapa 1 — atualizar schema mantendo a credencial atual**
+1. faça deploy do código com o `DATABASE_URL` administrativo atual e `COP_DB_AUTO_MIGRATE=1`;
+2. valide que foram criados `users.auth_version` e `auth_throttle`;
+3. confirme login, reset de senha e healthcheck.
+
+**Etapa 2 — reduzir privilégios**
+1. revise e execute `deploy/supabase/runtime-role.sql.example`;
+2. defina a senha do `cop_portal_app` fora do Git;
+3. configure `DATABASE_URL` com esse papel;
+4. configure `DATABASE_ADMIN_URL` apenas para migração;
+5. defina `COP_DB_AUTO_MIGRATE=0`;
+6. faça novo deploy usando SHA aprovado e valide novamente.
+
+Antes de ativar o modo separado:
+
+1. revise `deploy/supabase/runtime-role.sql.example`;
+2. crie `cop_portal_app` no Supabase com senha forte gerada fora do Git;
+3. configure `DATABASE_URL` com esse papel;
+4. mantenha `DATABASE_ADMIN_URL` restrita ao deploy;
+5. defina `COP_DB_AUTO_MIGRATE=0`.
+
+Quando esse modo está ativo, `deploy.sh` executa `python -m src.infrastructure.migrate`
+com a credencial administrativa antes de iniciar o portal. O processo web apenas valida que o
+schema já existe e opera com DML de runtime.
 
 
 ## Piloto Microsoft 365 — ETIT Residencial e Empresarial
@@ -116,6 +173,7 @@ Ainda é necessário informar em `.env.vps`:
 M365_TENANT_ID=...
 M365_CLIENT_ID=...
 M365_SCOPES=Files.Read.All
+M365_TOKEN_CACHE_KEY=...
 M365_ETIT_RESIDENTIAL_OWNER_UPN=fernando_pereiracunha@claro.com.br
 M365_ETIT_RESIDENTIAL_FOLDER_PATH=Indicadores_COP_Rede/ICG_COPREDE_MDU/ICG_COPREDE/Analítico Residencial/Novo BI
 M365_ETIT_ENTERPRISE_OWNER_UPN=fernando_pereiracunha@claro.com.br
@@ -152,8 +210,12 @@ cd /opt/portal-indicadores-cop-next
 bash deploy/hostinger/m365-etit.sh login
 ```
 
+Antes do primeiro login, configure `M365_TOKEN_CACHE_KEY` como uma chave Fernet gerada fora do Git.
+O cache MSAL existente em texto será migrado para conteúdo criptografado na primeira renovação/login
+com a chave configurada.
+
 O comando mostra uma URL e um código Microsoft. Abra a URL em um navegador, informe o código e faça
-login com uma conta corporativa que tenha acesso às duas pastas.
+login com uma conta corporativa dedicada ao portal e que tenha acesso apenas ao necessário para o piloto.
 
 ### Validar sem processar
 

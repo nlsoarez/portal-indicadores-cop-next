@@ -5,6 +5,7 @@ python-calamine==0.8.2
 numpy==2.0.1
 pyarrow==16.1.0
 matplotlib==3.9.1
-psycopg[binary]>=3.2,<4
-psycopg-pool>=3.2,<4
-msal>=1.31,<2
+psycopg[binary]==3.3.6
+psycopg-pool==3.3.2
+msal==1.39.0
+cryptography==50.0.1

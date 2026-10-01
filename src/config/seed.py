@@ -1,14 +1,17 @@
 from __future__ import annotations
 
+import os
+import secrets
+
 from src.application.security import hash_password
 from src.config.leaders import LEADER_SUBADMINS
 from src.features.segments.catalog import SEGMENTS
 from src.features.segments.empresarial import ENTERPRISE_ANALYSTS, ENTERPRISE_INDICATORS
 from src.features.segments.preventiva import PREVENTIVA_ANALYSTS, PREVENTIVA_INDICATORS
 from src.features.segments.residencial import RESIDENTIAL_ANALYSTS, RESIDENTIAL_INDICATORS
-from src.infrastructure.database import insert_returning_id, transaction
+from src.infrastructure.database import insert_returning_id, transaction, using_postgres
 
-DEFAULT_PASSWORD = "claro123"
+ADMIN_BOOTSTRAP_PASSWORD_ENV = "COP_ADMIN_BOOTSTRAP_PASSWORD"
 RETIRED_ANALYST_LOGINS = ("F218860",)
 
 
@@ -142,13 +145,37 @@ def _ensure_user(conn, login: str, full_name: str, display_name: str) -> int:
         )
         return user_id
 
-    password_hash, salt = hash_password(DEFAULT_PASSWORD)
+    password_hash, salt = hash_password(_initial_password(login))
     return insert_returning_id(
         conn,
         "INSERT INTO users(login, full_name, display_name, password_hash, password_salt, must_change_password) "
         "VALUES (?, ?, ?, ?, ?, 1)",
         (login, full_name, display_name, password_hash, salt),
     )
+
+
+def _initial_password(login: str) -> str:
+    """Generate a non-shared initial secret.
+
+    Existing users are never changed here. On a brand-new PostgreSQL database,
+    the first ADMIN must be bootstrapped explicitly through an environment
+    secret. Regular accounts receive an unguessable secret and must be issued a
+    temporary password through the Admin password-reset flow before first use.
+    """
+    if login.strip().upper() == "ADMIN":
+        configured = os.environ.get(ADMIN_BOOTSTRAP_PASSWORD_ENV, "").strip()
+        if configured:
+            if len(configured) < 12:
+                raise RuntimeError(
+                    f"{ADMIN_BOOTSTRAP_PASSWORD_ENV} precisa ter pelo menos 12 caracteres"
+                )
+            return configured
+        if using_postgres():
+            raise RuntimeError(
+                "Banco PostgreSQL novo sem senha de bootstrap do ADMIN. "
+                f"Configure {ADMIN_BOOTSTRAP_PASSWORD_ENV} antes da primeira inicialização."
+            )
+    return secrets.token_urlsafe(32)
 
 
 def _set_single_role(conn, user_id: int, role_code: str) -> None:

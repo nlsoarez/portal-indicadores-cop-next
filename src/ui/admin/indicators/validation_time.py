@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from html import escape
 import math
 
 import pandas as pd
@@ -98,9 +99,9 @@ def render_admin_validation_time(
             (
                 "<div class='cop-val-bestworst'>"
                 f"<span class='cop-val-best'>●</span> Melhor: "
-                f"<b>{best['Grupo']}</b> ({best['Aderência %']:.1f}%) · "
+                f"<b>{escape(str(best['Grupo']))}</b> ({best['Aderência %']:.1f}%) · "
                 "<span class='cop-val-worst'>●</span> Pior: "
-                f"<b>{worst['Grupo']}</b> ({worst['Aderência %']:.1f}%)"
+                f"<b>{escape(str(worst['Grupo']))}</b> ({worst['Aderência %']:.1f}%)"
                 "</div>"
             ),
             unsafe_allow_html=True,
@@ -393,7 +394,7 @@ def _render_extreme_card(
         (
             f"<div class='cop-val-extreme' style='border-left-color:{border};background:{background}'>"
             f"<div class='cop-val-extreme-label'>{label}</div>"
-            f"<div class='cop-val-extreme-name' style='color:{border}'>{row.get('Analista') or '—'}</div>"
+            f"<div class='cop-val-extreme-name' style='color:{border}'>{escape(str(row.get('Analista') or '—'))}</div>"
             f"<div class='cop-val-extreme-sub'>{float(row.get('Aderência %') or 0):.1f}% · TMR: {tmr_label}</div>"
             "</div>"
         ),

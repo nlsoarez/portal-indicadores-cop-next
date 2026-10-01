@@ -7,6 +7,7 @@ import xml.etree.ElementTree as ET
 from datetime import date, datetime, timedelta
 from zipfile import ZipFile
 
+from src.features.ingestion.archive_safety import validate_workbook_bytes
 from src.features.ingestion.excel import ImportValidationError
 
 MAIN = "{http://schemas.openxmlformats.org/spreadsheetml/2006/main}"
@@ -25,8 +26,7 @@ def iter_rows(
 ):
     """Stream rows from XLSX XML without loading the worksheet into memory."""
     optional_headers = optional_headers or set()
-    if not raw_bytes:
-        raise ImportValidationError("Arquivo vazio.")
+    validate_workbook_bytes(raw_bytes)
 
     with ZipFile(io.BytesIO(raw_bytes)) as archive:
         shared = _load_shared_strings(archive)

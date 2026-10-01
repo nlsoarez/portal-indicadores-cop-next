@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from html import escape
 import pandas as pd
 import streamlit as st
 
@@ -94,9 +95,9 @@ def render_admin_closing_assertiveness(
                 (
                     "<div class='cop-close-bestworst'>"
                     f"<span class='cop-close-best'>●</span> Melhor: "
-                    f"<b>{best_group['Grupo']}</b> ({best_group['Assertividade %']:.1f}%) · "
+                    f"<b>{escape(str(best_group['Grupo']))}</b> ({best_group['Assertividade %']:.1f}%) · "
                     "<span class='cop-close-worst'>●</span> Pior: "
-                    f"<b>{worst_group['Grupo']}</b> ({worst_group['Assertividade %']:.1f}%)"
+                    f"<b>{escape(str(worst_group['Grupo']))}</b> ({worst_group['Assertividade %']:.1f}%)"
                     "</div>"
                 ),
                 unsafe_allow_html=True,
@@ -385,7 +386,7 @@ def _render_extreme_card(
         (
             f"<div class='cop-close-extreme' style='border-left-color:{border};background:{background}'>"
             f"<div class='cop-close-extreme-label'>{label}</div>"
-            f"<div class='cop-close-extreme-name' style='color:{border}'>{row.get('Analista') or '—'}</div>"
+            f"<div class='cop-close-extreme-name' style='color:{border}'>{escape(str(row.get('Analista') or '—'))}</div>"
             f"<div class='cop-close-extreme-sub'>{float(row.get('Assertividade %') or 0):.1f}% · "
             f"{int(row.get('Tarefas') or 0)} tarefas</div>"
             "</div>"

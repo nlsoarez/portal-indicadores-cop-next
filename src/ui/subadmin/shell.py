@@ -7,15 +7,120 @@ from src.application.access_service import AccessService
 from src.application.dashboard_service import DashboardService
 from src.application.segment_context import switch_segment_state
 from src.domain.entities import AccessContext, Segment
-from src.infrastructure.repositories import IndicatorRepository, UserRepository
-from src.ui.shared.chrome import (
-    render_dashboard_hero,
-    render_page_header,
-    render_sidebar_brand,
-)
-from src.ui.shared.freshness import render_indicator_freshness
+from src.infrastructure.repositories import UserRepository
+from src.ui.analyst.shell import AnalystShell
+from src.ui.shared.chrome import render_page_header, render_sidebar_brand
 from src.ui.shared.management_indicators import render_management_indicators
+from src.ui.shared.metrics import format_metric, format_target
 from src.ui.shared.person_performance import render_person_performance
+
+
+def _operational_segment(
+    ctx: AccessContext,
+    segments: list[Segment],
+    users: UserRepository,
+    access: AccessService,
+) -> Segment:
+    """Restrict leaders to the one segment assigned to their performance."""
+    if not ctx.is_subadmin or ctx.is_admin:
+        raise PermissionError("A visão de liderança exige perfil de líder")
+    assigned = {row.id for row in users.performance_segments_for_user(ctx.user.id)}
+    permitted = [row for row in segments if row.id in assigned]
+    if len(permitted) != 1:
+        raise PermissionError("O líder deve possuir exatamente um segmento operacional")
+    access.assert_segment_access(ctx, permitted[0].id)
+    return permitted[0]
+
+
+def _team_snapshot(summary_rows: list[dict], analyst_count: int) -> dict:
+    """Metas comparadas apenas com o consolidado da equipe no último período."""
+    frame = pd.DataFrame(summary_rows)
+    if frame.empty:
+        return {
+            "analysts": analyst_count, "indicators": 0,
+            "with_target": 0, "met": 0, "attention": 0,
+            "rows": [],
+        }
+
+    # A consulta já devolve a última competência de cada indicador.
+    # Esta proteção mantém uma única linha por indicador se houver duplicatas.
+    frame["period"] = frame["period"].fillna("").astype(str)
+    frame = frame.sort_values("period").drop_duplicates("indicator_key", keep="last")
+    rows = frame.to_dict("records")
+
+    assessed = 0
+    met = 0
+    for row in rows:
+        value = _safe_number(row.get("value"))
+        target = _safe_number(row.get("target_value"))
+        row["status"] = None
+        if value is None or target is None:
+            continue
+        assessed += 1
+        direction = str(row.get("direction") or "higher_is_better")
+        passed = value <= target if direction == "lower_is_better" else value >= target
+        row["status"] = "Dentro da meta" if passed else "Abaixo da meta"
+        met += int(passed)
+
+    return {
+        "analysts": analyst_count,
+        "indicators": len(rows),
+        "with_target": assessed,
+        "met": met,
+        "attention": assessed - met,
+        "rows": sorted(rows, key=lambda row: str(row.get("name") or "")),
+    }
+
+
+def _safe_number(value) -> float | None:
+    if value is None:
+        return None
+    try:
+        parsed = float(value)
+        return parsed if pd.notna(parsed) else None
+    except (ValueError, TypeError):
+        return None
+
+
+def _team_ranking(summary_rows: list[dict], analyst_rows: list[dict], indicator_key: str) -> pd.DataFrame:
+    """Ranking restricted to the indicator and competence shown to the leader."""
+    source = next(
+        (row for row in summary_rows if str(row.get("indicator_key")) == indicator_key),
+        None,
+    )
+    if not source:
+        return pd.DataFrame()
+    period = str(source.get("period") or "")
+    rows = [
+        row for row in analyst_rows
+        if str(row.get("indicator_key")) == indicator_key
+        and str(row.get("period") or "") == period
+    ]
+    if not rows:
+        return pd.DataFrame()
+    descending = str(source.get("direction") or "higher_is_better") != "lower_is_better"
+    ranking = pd.DataFrame(rows)
+    ranking["value"] = pd.to_numeric(ranking["value"], errors="coerce")
+    ranking = ranking.sort_values(
+        ["value", "display_name"], ascending=[not descending, True], na_position="last"
+    )
+    unit = source.get("unit")
+    return pd.DataFrame(
+        [
+            {
+                "Analista": row["display_name"],
+                "Login": row["login"],
+                "Resultado": (
+                    "—" if pd.isna(row["value"])
+                    else format_metric(float(row["value"]), unit).replace(".", ",")
+                    if (unit or "percent").lower() == "percent"
+                    else format_metric(float(row["value"]), unit)
+                ),
+                "Base": int(row.get("volume") or 0),
+            }
+            for _, row in ranking.iterrows()
+        ]
+    )
 
 
 class SubadminShell:
@@ -23,102 +128,131 @@ class SubadminShell:
         self.access = AccessService()
         self.dashboard = DashboardService(access=self.access)
         self.users = UserRepository()
-        self.indicators = IndicatorRepository()
 
     def render(self, ctx: AccessContext, segments: list[Segment]) -> None:
+        segment = _operational_segment(ctx, segments, self.users, self.access)
         render_sidebar_brand(
             role="subadmin",
             user_name=ctx.user.display_name,
+            segment_name=segment.name,
         )
-        segment = st.sidebar.selectbox(
-            "Segmento em foco",
-            segments,
-            format_func=lambda item: item.name,
-            key="subadmin_segment_selector",
-        )
+        st.sidebar.caption(f"Setor de responsabilidade: {segment.name}")
         switch_segment_state(st.session_state, segment.id)
 
-        nav_icons = {
-            "Dashboard": "◉",
-            "Indicadores": "▦",
-            "Analistas": "◎",
-        }
         page = st.sidebar.radio(
-            "Navegação",
-            ["Dashboard", "Indicadores", "Analistas"],
-            format_func=lambda item: f"{nav_icons.get(item, '•')}  {item}",
-            label_visibility="collapsed",
+            "Visão",
+            ["Meu Dashboard", "Minha Equipe"],
+            format_func=lambda value: {
+                "Meu Dashboard": "◎  Meu Dashboard",
+                "Minha Equipe": "▦  Minha Equipe",
+            }[value],
+            key="leader_workspace_v2",
         )
 
-        if page == "Dashboard":
+        if page == "Meu Dashboard":
             render_page_header(
-                title="Dashboard",
-                subtitle="Resumo da equipe, cobertura dos dados e atividade recente.",
-                eyebrow="Visão de liderança",
+                title="Meu Dashboard",
+                subtitle="Seus resultados, metas, produtividade e evolução individual.",
+                eyebrow="Meu desempenho",
                 badge=segment.name,
             )
-            render_dashboard_hero(
-                title="A equipe certa, com o contexto certo.",
-                subtitle="Use o painel para identificar rapidamente cobertura, acesso e pontos que exigem investigação.",
-                kicker="Liderança · Operação · Qualidade",
-            )
-        elif page == "Indicadores":
-            render_page_header(
-                title="Indicadores",
-                subtitle="Visões consolidadas gerais, por setor e por analista.",
-                eyebrow="Performance operacional",
-                badge=segment.name,
-            )
+            # Reuse the fully featured personal analyst dashboard.
+            # Its data source remains the authenticated leader's user ID.
+            AnalystShell().render(ctx, [segment], embedded=True)
+            return
+
+        render_page_header(
+            title="Minha Equipe",
+            subtitle="Indicadores consolidados e acompanhamento dos analistas do seu setor.",
+            eyebrow="Visão de liderança",
+            badge=segment.name,
+        )
+        section = st.radio(
+            "Explorar equipe",
+            ["Visão geral", "Indicadores", "Analistas"],
+            horizontal=True,
+            label_visibility="collapsed",
+            key="leader_team_section_v2",
+        )
+
+        if section == "Indicadores":
+            render_management_indicators(ctx, [segment], self.dashboard)
+        elif section == "Analistas":
+            self._render_analysts(ctx, segment)
         else:
-            render_page_header(
-                title="Analistas",
-                subtitle="Consulta individual dos analistas autorizados para sua liderança.",
-                eyebrow="Gestão de pessoas",
-                badge=segment.name,
-            )
+            self._render_team_overview(ctx, segment)
 
-        if page == "Dashboard":
-            analysts = self.access.visible_users(ctx, segment.id)
-            freshness = self.indicators.freshness(segment.id)
-            last_access = self.users.last_access_for_segment(segment.id)
-            definitions = self.indicators.definitions(segment.id)
+    def _render_team_overview(self, ctx: AccessContext, segment: Segment) -> None:
+        analysts = self.access.visible_users(ctx, segment.id)
+        payload = self.dashboard.management_payload(ctx, [segment.id])
+        snapshot = _team_snapshot(payload.get("segment_summary") or [], len(analysts))
 
-            c1, c2, c3 = st.columns(3)
-            c1.metric("Analistas", len(analysts))
-            c2.metric("Indicadores", len(definitions))
-            c3.metric(
-                "Já acessaram",
-                sum(1 for row in last_access if row["last_access"]),
-            )
+        a, b, c, d = st.columns(4)
+        a.metric("Analistas da equipe", snapshot["analysts"])
+        b.metric("Indicadores com dados", snapshot["indicators"])
+        c.metric(
+            "Indicadores na meta",
+            f'{snapshot["met"]}/{snapshot["with_target"]}'
+            if snapshot["with_target"] else "—",
+        )
+        d.metric(
+            "Abaixo da meta",
+            snapshot["attention"] if snapshot["with_target"] else "—",
+        )
 
-            st.caption(
-                "Use a cobertura dos dados e os acessos recentes para validar se a leitura "
-                "da equipe está completa antes de aprofundar os indicadores."
-            )
-            col_fresh, col_access = st.columns([1.15, .85])
-            with col_fresh:
-                with st.expander("Cobertura dos indicadores", expanded=True):
-                    render_indicator_freshness(freshness, show_title=False)
-            with col_access:
-                with st.expander("Últimos acessos", expanded=True):
-                    st.dataframe(
-                        pd.DataFrame(last_access),
-                        use_container_width=True,
-                        hide_index=True,
+        st.markdown("### Resultados consolidados")
+        st.caption(
+            "Cada indicador utiliza sua própria competência mais recente. "
+            "A média considera os analistas do setor, sem incluir os líderes."
+        )
+        rows = snapshot["rows"]
+        if not rows:
+            st.info("Ainda não há indicadores processados para esta equipe.")
+            return
+
+        for start in range(0, len(rows), 3):
+            cols = st.columns(3)
+            for col, row in zip(cols, rows[start:start + 3]):
+                with col:
+                    value = _safe_number(row.get("value"))
+                    unit = row.get("unit")
+                    st.metric(
+                        str(row.get("name") or row.get("indicator_key") or "Indicador"),
+                        "—" if value is None else format_metric(value, unit),
+                    )
+                    target = _safe_number(row.get("target_value"))
+                    st.caption(
+                        (format_target(target, unit, row.get("direction"))
+                         if target is not None else "Sem meta configurada")
+                        + f" · {row.get('period') or 'Período não informado'}"
                     )
 
-        elif page == "Indicadores":
-            render_management_indicators(ctx, segments, self.dashboard)
+        st.markdown("### Resultado por analista")
+        options = {str(row["indicator_key"]): row for row in rows}
+        selected = st.selectbox(
+            "Indicador para comparar a equipe",
+            list(options),
+            format_func=lambda key: str(options[key].get("name") or key),
+            key=f"leader_team_ranking:{segment.id}",
+        )
+        table = _team_ranking(
+            rows, payload.get("analyst_summary") or [], selected
+        )
+        if table.empty:
+            st.info("Sem dados individuais disponíveis para a competência selecionada.")
+        else:
+            st.dataframe(table, use_container_width=True, hide_index=True)
 
-        elif page == "Analistas":
-            analysts = self.access.visible_users(ctx, segment.id)
-            if not analysts:
-                st.info("Nenhum analista cadastrado neste segmento.")
-                return
-            target = st.selectbox(
-                "Analista",
-                analysts,
-                format_func=lambda user: f"{user.display_name} · {user.login}",
-                key=f"subadmin_analyst:{segment.id}",
-            )
-            render_person_performance(ctx, segment.id, target, self.dashboard)
+    def _render_analysts(self, ctx: AccessContext, segment: Segment) -> None:
+        analysts = self.access.visible_users(ctx, segment.id)
+        if not analysts:
+            st.info("Nenhum analista ativo cadastrado neste setor.")
+            return
+
+        target = st.selectbox(
+            "Analista",
+            analysts,
+            format_func=lambda user: f"{user.display_name} · {user.login}",
+            key=f"leader_analyst:{segment.id}",
+        )
+        render_person_performance(ctx, segment.id, target, self.dashboard)

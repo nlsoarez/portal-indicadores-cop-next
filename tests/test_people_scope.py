@@ -4,18 +4,14 @@ import unittest
 from pathlib import Path
 
 
+from tests.isolated_database import isolate_sqlite_database
+
 class PeopleScopeTest(unittest.TestCase):
     def setUp(self):
-        self.tmp = tempfile.TemporaryDirectory()
-        os.environ["COP_PORTAL_DB"] = str(Path(self.tmp.name) / "portal.db")
-        from src.infrastructure import database
-        database.DB_PATH = Path(os.environ["COP_PORTAL_DB"])
-        from src.infrastructure.database import initialize_database
+        isolate_sqlite_database(self)
         from src.config.seed import seed_foundation
-        initialize_database(); seed_foundation()
+        seed_foundation()
 
-    def tearDown(self):
-        self.tmp.cleanup()
 
     def test_maristella_only_preventiva_and_marcelo_residential(self):
         from src.infrastructure.repositories import SegmentRepository, UserRepository

@@ -1,13 +1,10 @@
 import os, tempfile, unittest
 from pathlib import Path
+from tests.isolated_database import isolate_sqlite_database
+
 class NoScaleScopeTest(unittest.TestCase):
     def setUp(self):
-        self.tmp=tempfile.TemporaryDirectory(); os.environ["COP_PORTAL_DB"]=str(Path(self.tmp.name)/"portal.db")
-        from src.infrastructure import database
-        database.DB_PATH=Path(os.environ["COP_PORTAL_DB"])
-        from src.infrastructure.database import initialize_database
-        initialize_database()
-    def tearDown(self): self.tmp.cleanup()
+        isolate_sqlite_database(self)
     def test_database_has_no_scale_table(self):
         from src.infrastructure.database import connection
         with connection() as conn: row=conn.execute("SELECT name FROM sqlite_master WHERE type='table' AND name='scales'").fetchone()

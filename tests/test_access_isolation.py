@@ -92,6 +92,47 @@ class AccessIsolationTest(unittest.TestCase):
         with self.assertRaises(PermissionError):
             dashboard.analyst_payload(ctx, foreign.id, foreign_analyst.id)
 
+    def test_all_four_leaders_have_only_their_assigned_team(self):
+        from src.application.access_service import AccessService
+        from src.application.dashboard_service import DashboardService
+        from src.infrastructure.repositories import SegmentRepository, UserRepository
+
+        users = UserRepository()
+        segments = SegmentRepository()
+        access = AccessService(users)
+        dashboard = DashboardService(access=access)
+        assignments = {
+            "N6088107": "empresarial",  # Leandro
+            "N5619600": "empresarial",  # Bruno
+            "N5923221": "residencial",  # Kelly
+            "N0238475": "residencial",  # Marley
+        }
+        for login, own_slug in assignments.items():
+            with self.subTest(login=login):
+                leader = users.get_by_login(login)
+                ctx = access.context(leader.id)
+                own = segments.get_by_slug(own_slug)
+                access.assert_can_view_user(ctx, own.id, leader.id)
+                dashboard.management_payload(ctx, [own.id])
+                expected_logins = {
+                    user.login for user in users.list_for_segment(own.id)
+                }
+                actual_logins = {
+                    user.login for user in access.visible_users(ctx, own.id)
+                }
+                self.assertEqual(expected_logins, actual_logins)
+                self.assertNotIn(login, actual_logins)
+
+                other_slug = (
+                    "residencial" if own_slug == "empresarial"
+                    else "empresarial"
+                )
+                other = segments.get_by_slug(other_slug)
+                with self.assertRaises(PermissionError):
+                    access.visible_users(ctx, other.id)
+                with self.assertRaises(PermissionError):
+                    dashboard.management_payload(ctx, [other.id])
+
     def test_only_admin_can_list_leaders(self):
         from src.application.access_service import AccessService
         from src.infrastructure.repositories import UserRepository

@@ -50,6 +50,35 @@ cd /opt/portal-indicadores-cop-next
 ./deploy/hostinger/check.sh
 ```
 
+## Testes: isolamento obrigatório do banco
+
+**Nunca execute testes unitários contra a conexão PostgreSQL de produção.**
+Os testes antigos alteravam somente `COP_PORTAL_DB`, mas a aplicação utiliza
+`DATABASE_URL` prioritariamente. Isso podia executar `seed_foundation`, inserts
+e até redefinição de senha no banco real.
+
+Use sempre o runner seguro, que remove as variáveis PostgreSQL do processo de
+testes. Os testes que precisam do banco possuem adicionalmente uma fixture
+SQLite temporária, restaurada após cada caso:
+
+```bash
+cd /opt/portal-indicadores-cop-next
+bash deploy/hostinger/run-safe-tests.sh 'test_leader*.py'
+bash deploy/hostinger/run-safe-tests.sh 'test_analyst_summary_view.py'
+# Todos os testes:
+bash deploy/hostinger/run-safe-tests.sh 'test_*.py'
+```
+
+Antes de remover possíveis dados de testes antigos, faça backup e gere um
+relatório **somente leitura**:
+
+```bash
+docker exec portal-indicadores-cop python deploy/hostinger/audit-test-data.py
+```
+
+O relatório marca registros *suspeitos*, não confirma automaticamente que todos
+devem ser excluídos. Nenhuma exclusão é feita pelo script.
+
 ## Compose Hostinger
 
 O deploy prefere o arquivo local existente:

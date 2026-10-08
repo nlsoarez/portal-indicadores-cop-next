@@ -90,13 +90,14 @@ class AdminShell:
             "Indicadores": "▦",
             "Analista Certificado": "✓",
             "Analistas": "◎",
+            "Analistas Externos": "☾",
             "Líderes": "♛",
             "Uploads": "⇧",
             "Governança": "◇",
         }
         page = st.sidebar.radio(
             "Navegação",
-            ["Dashboard", "Indicadores", "Analista Certificado", "Analistas", "Líderes", "Uploads", "Governança"],
+            ["Dashboard", "Indicadores", "Analista Certificado", "Analistas", "Analistas Externos", "Líderes", "Uploads", "Governança"],
             format_func=lambda item: f"{nav_icons.get(item, '•')}  {item}",
             label_visibility="collapsed",
         )
@@ -143,6 +144,13 @@ class AdminShell:
                 title="Analistas",
                 subtitle="Aprofunde o desempenho individual sem perder a referência da equipe.",
                 eyebrow="Gestão de pessoas",
+                badge=segment_label,
+            )
+        elif page == "Analistas Externos":
+            render_page_header(
+                title="Analistas externos · Madrugada",
+                subtitle="Desempenho de analistas fora da equipe nos atendimentos de 22h00 a 05h59.",
+                eyebrow="Supervisão do horário de responsabilidade",
                 badge=segment_label,
             )
         elif page == "Líderes":
@@ -248,6 +256,11 @@ class AdminShell:
                     target,
                     self.dashboard,
                 )
+
+        elif page == "Analistas Externos":
+            from src.ui.admin.external_analysts import render_admin_external_analysts
+
+            render_admin_external_analysts(ctx, scope_segments, self.dashboard)
 
         elif page == "Líderes":
             render_leaders_overview(

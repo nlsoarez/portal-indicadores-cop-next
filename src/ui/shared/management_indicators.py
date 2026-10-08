@@ -205,6 +205,7 @@ def render_management_indicators(
                 source_label=source_label,
                 indicator_keys=keys,
                 ctx=ctx,
+                dashboard=dashboard,
                 segment_df=segment_df,
                 analyst_df=analyst_df,
                 analyst_metrics_df=analyst_metrics_df,
@@ -221,6 +222,7 @@ def _render_source(
     source_label: str,
     indicator_keys: tuple[str, ...],
     ctx: AccessContext,
+    dashboard: DashboardService,
     segment_df: pd.DataFrame,
     analyst_df: pd.DataFrame,
     analyst_metrics_df: pd.DataFrame,
@@ -267,6 +269,8 @@ def _render_source(
 
         render_admin_residential_overview(
             indicator_keys=tuple(visible_keys),
+            ctx=ctx,
+            dashboard=dashboard,
             segment_df=segment_df,
             analyst_df=analyst_df,
             analyst_breakdowns_df=analyst_breakdowns_df,

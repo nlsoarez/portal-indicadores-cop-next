@@ -72,21 +72,34 @@ class AnalystShell:
     def __init__(self):
         self.dashboard = DashboardService()
 
-    def render(self, ctx: AccessContext, segments: list[Segment]) -> None:
-        render_sidebar_brand(
-            role="analyst",
-            user_name=ctx.user.display_name,
-        )
-        if len(segments) == 1:
+    def render(
+        self,
+        ctx: AccessContext,
+        segments: list[Segment],
+        *,
+        embedded: bool = False,
+    ) -> None:
+        # Líderes reaproveitam todos os componentes individuais sem duplicar
+        # sidebar ou oferecer um segundo seletor de segmento.
+        if embedded:
+            if len(segments) != 1:
+                raise ValueError("Visão individual integrada exige segmento único")
             segment = segments[0]
-            st.sidebar.caption(f"Segmento: {segment.name}")
         else:
-            segment = st.sidebar.selectbox(
-                "Meu segmento",
-                segments,
-                format_func=lambda item: item.name,
-                key="analyst_segment_selector",
+            render_sidebar_brand(
+                role="analyst",
+                user_name=ctx.user.display_name,
             )
+            if len(segments) == 1:
+                segment = segments[0]
+                st.sidebar.caption(f"Segmento: {segment.name}")
+            else:
+                segment = st.sidebar.selectbox(
+                    "Meu segmento",
+                    segments,
+                    format_func=lambda item: item.name,
+                    key="analyst_segment_selector",
+                )
         switch_segment_state(st.session_state, segment.id)
 
         payload = self.dashboard.analyst_payload(ctx, segment.id)

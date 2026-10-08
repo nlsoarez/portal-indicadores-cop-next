@@ -122,7 +122,9 @@ def _detail_table(frame: pd.DataFrame) -> pd.DataFrame:
         _pct(success, total)
         for success, total in zip(detail["successes"], detail["volume"])
     ]
-    detail["Hora"] = detail["hour_label"].astype(str).str.zfill(2) + ":00–:59"
+    detail["Hora"] = detail["hour_label"].map(
+        lambda value: f"{int(value):02d}:00–{int(value):02d}:59"
+    )
     return detail.rename(columns={
         "segment_name": "Segmento", "name": "Indicador",
         "login": "Login", "analyst_name": "Nome", "day": "Data",
@@ -174,18 +176,16 @@ def render_admin_external_analysts(
         )
     else:
         total = int(confirmed["volume"].sum())
-        succeeded = int(confirmed["successes"].sum())
-        failed = int(confirmed["losses"].sum())
         columns = st.columns(5)
         columns[0].metric("Logins externos", confirmed["login"].nunique())
-        columns[1].metric("Volume da madrugada", f"{total:,}".replace(",", "."))
-        columns[2].metric("Aderentes / não canceladas", f"{succeeded:,}".replace(",", "."))
-        columns[3].metric("Não aderentes / canceladas", f"{failed:,}".replace(",", "."))
-        columns[4].metric("Aderência geral", _pct(succeeded, total))
+        columns[1].metric("Volume de registros", f"{total:,}".replace(",", "."))
+        columns[2].metric("Indicadores", confirmed["indicator_key"].nunique())
+        columns[3].metric("Dias com atendimentos", confirmed["day"].nunique())
+        columns[4].metric("Segmentos", confirmed["segment_slug"].nunique())
         st.caption(
-            "Os indicadores têm regras distintas. A aderência geral agrega "
-            "volumes heterogêneos e é apenas um resumo de ocorrências, "
-            "não uma meta única de desempenho."
+            "Volume de fontes diferentes não deve ser interpretado como "
+            "um índice único de produtividade ou aderência. Consulte "
+            "a taxa de cada indicador separadamente."
         )
 
         st.markdown("#### Volume por fonte e indicador")

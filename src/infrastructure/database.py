@@ -22,6 +22,14 @@ POSTGRES_POOL_MAX_SIZE = max(1, int(os.environ.get("DB_POOL_MAX_SIZE", "4")))
 SQLITE_SCHEMA = """
 PRAGMA foreign_keys = ON;
 
+
+CREATE TABLE IF NOT EXISTS auth_attempts (
+    bucket_key TEXT PRIMARY KEY,
+    window_start BIGINT NOT NULL,
+    attempts INTEGER NOT NULL
+);
+CREATE INDEX IF NOT EXISTS idx_auth_attempts_window ON auth_attempts(window_start);
+
 CREATE TABLE IF NOT EXISTS users (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
     login TEXT NOT NULL UNIQUE,
@@ -131,6 +139,14 @@ POSTGRES_SCHEMA = """
 CREATE SCHEMA IF NOT EXISTS cop_portal;
 SET search_path TO cop_portal, public;
 REVOKE ALL ON SCHEMA cop_portal FROM PUBLIC, anon, authenticated;
+
+
+CREATE TABLE IF NOT EXISTS auth_attempts (
+    bucket_key TEXT PRIMARY KEY,
+    window_start BIGINT NOT NULL,
+    attempts INTEGER NOT NULL
+);
+CREATE INDEX IF NOT EXISTS idx_auth_attempts_window ON auth_attempts(window_start);
 
 CREATE TABLE IF NOT EXISTS users (
     id BIGSERIAL PRIMARY KEY,

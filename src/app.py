@@ -88,9 +88,10 @@ def _login() -> None:
     if submitted:
         result = AuthService().authenticate(login, password)
         if not result:
-            st.error("Credenciais inválidas.")
+            st.error("Credenciais inválidas ou limite de tentativas atingido. Aguarde um minuto.")
             return
         st.session_state["user_id"] = result.user_id
+        st.session_state["credential_version"] = result.credential_version
         st.session_state["must_change_password"] = result.must_change_password
         st.rerun()
 
@@ -132,9 +133,8 @@ def _change_password(user_id: int) -> None:
         except ValueError as exc:
             st.error(str(exc))
             return
-        st.session_state["must_change_password"] = False
-        st.session_state.pop("_access_snapshot", None)
-        st.success("Senha alterada.")
+        st.session_state.clear()
+        st.success("Senha alterada. Entre novamente.")
         st.rerun()
 
 
@@ -147,7 +147,15 @@ def run() -> None:
     if not user_id:
         _login()
         return
-    if st.session_state.get("must_change_password"):
+    try:
+        must_change = AuthService().validate_session(
+            int(user_id), st.session_state.get("credential_version", "")
+        )
+    except PermissionError:
+        st.session_state.clear()
+        st.rerun()
+        return
+    if must_change:
         _change_password(int(user_id))
         return
 

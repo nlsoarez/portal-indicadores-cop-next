@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+import secrets
+
 from src.application.security import hash_password
 from src.config.leaders import LEADER_SUBADMINS
 from src.features.segments.catalog import SEGMENTS
@@ -8,7 +10,6 @@ from src.features.segments.preventiva import PREVENTIVA_ANALYSTS, PREVENTIVA_IND
 from src.features.segments.residencial import RESIDENTIAL_ANALYSTS, RESIDENTIAL_INDICATORS
 from src.infrastructure.database import insert_returning_id, transaction
 
-DEFAULT_PASSWORD = "claro123"
 RETIRED_ANALYST_LOGINS = ("F218860",)
 
 
@@ -34,16 +35,18 @@ def seed_foundation() -> None:
             for row in conn.execute("SELECT id FROM segments WHERE active=1").fetchall()
         ]
 
-        admin_id = _ensure_user(conn, "ADMIN", "Administrador", "Administrador")
-        _set_single_role(conn, admin_id, "admin")
-        _replace_access_segments(conn, admin_id, active_segment_ids)
-        _replace_performance_segments(conn, admin_id, [])
+        admin_id, created = _ensure_user(conn, "ADMIN", "Administrador", "Administrador")
+        if created:
+            _set_single_role(conn, admin_id, "admin")
+            _replace_access_segments(conn, admin_id, active_segment_ids)
+            _replace_performance_segments(conn, admin_id, [])
 
         for login, full_name, display_name, performance_slug in LEADER_SUBADMINS:
-            leader_id = _ensure_user(conn, login, full_name, display_name)
-            _set_single_role(conn, leader_id, "subadmin")
-            _replace_access_segments(conn, leader_id, active_segment_ids)
-            _replace_performance_segments(conn, leader_id, [segment_ids[performance_slug]])
+            leader_id, created = _ensure_user(conn, login, full_name, display_name)
+            if created:
+                _set_single_role(conn, leader_id, "subadmin")
+                _replace_access_segments(conn, leader_id, active_segment_ids)
+                _replace_performance_segments(conn, leader_id, [segment_ids[performance_slug]])
 
         _seed_analysts(conn, segment_ids["preventiva"], PREVENTIVA_ANALYSTS)
         _seed_analysts(conn, segment_ids["residencial"], RESIDENTIAL_ANALYSTS)
@@ -86,10 +89,11 @@ def seed_foundation() -> None:
 
 def _seed_analysts(conn, segment_id: int, people: tuple[tuple[str, str, str], ...]) -> None:
     for login, full_name, display_name in people:
-        user_id = _ensure_user(conn, login, full_name, display_name)
-        _set_single_role(conn, user_id, "analyst")
-        _replace_access_segments(conn, user_id, [segment_id])
-        _replace_performance_segments(conn, user_id, [segment_id])
+        user_id, created = _ensure_user(conn, login, full_name, display_name)
+        if created:
+            _set_single_role(conn, user_id, "analyst")
+            _replace_access_segments(conn, user_id, [segment_id])
+            _replace_performance_segments(conn, user_id, [segment_id])
 
 
 def _seed_indicators(conn, segment_id: int, indicators: tuple[dict, ...]) -> None:
@@ -132,23 +136,25 @@ def _seed_indicators(conn, segment_id: int, indicators: tuple[dict, ...]) -> Non
         )
 
 
-def _ensure_user(conn, login: str, full_name: str, display_name: str) -> int:
+def _ensure_user(conn, login: str, full_name: str, display_name: str) -> tuple[int, bool]:
     existing = conn.execute("SELECT id FROM users WHERE UPPER(login)=UPPER(?)", (login,)).fetchone()
     if existing:
         user_id = int(existing["id"])
         conn.execute(
-            "UPDATE users SET full_name=?, display_name=?, active=1 WHERE id=?",
+            "UPDATE users SET full_name=?, display_name=? WHERE id=?",
             (full_name, display_name, user_id),
         )
-        return user_id
+        return user_id, False
 
-    password_hash, salt = hash_password(DEFAULT_PASSWORD)
-    return insert_returning_id(
+    # Unknown random credential: provision individually through admin reset/CLI.
+    password_hash, salt = hash_password(secrets.token_urlsafe(32))
+    user_id = insert_returning_id(
         conn,
         "INSERT INTO users(login, full_name, display_name, password_hash, password_salt, must_change_password) "
         "VALUES (?, ?, ?, ?, ?, 1)",
         (login, full_name, display_name, password_hash, salt),
     )
+    return user_id, True
 
 
 def _set_single_role(conn, user_id: int, role_code: str) -> None:

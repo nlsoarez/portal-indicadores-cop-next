@@ -5,6 +5,29 @@ from src.infrastructure.database import connection, insert_returning_id, transac
 
 
 class UserRepository:
+    def session_credentials(self, user_id: int):
+        with connection() as conn:
+            return conn.execute(
+                "SELECT active, password_salt, must_change_password FROM users WHERE id=?",
+                (user_id,),
+            ).fetchone()
+
+    def reserve_login_attempt(self, bucket_key: str, window_start: int) -> bool:
+        # Atomic UPSERT serializes reservations across processes on both backends.
+        with transaction() as conn:
+            conn.execute(
+                "INSERT INTO auth_attempts(bucket_key, window_start, attempts) VALUES (?, ?, 1) "
+                "ON CONFLICT(bucket_key) DO UPDATE SET "
+                "attempts=CASE WHEN auth_attempts.window_start=excluded.window_start "
+                "THEN auth_attempts.attempts+1 ELSE 1 END, window_start=excluded.window_start",
+                (bucket_key, window_start),
+            )
+            row = conn.execute(
+                "SELECT attempts FROM auth_attempts WHERE bucket_key=?", (bucket_key,)
+            ).fetchone()
+            conn.execute("DELETE FROM auth_attempts WHERE window_start<?", (window_start - 120,))
+            return int(row["attempts"]) <= 5
+
     def get_by_login(self, login: str) -> User | None:
         with connection() as conn:
             row = conn.execute(

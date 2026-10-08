@@ -1072,13 +1072,19 @@ class AnalystShell:
                 _render_etit_kpi(label, value)
 
         if indicator_key == "emp_etit_event":
-            st.markdown("#### Aderentes e não aderentes — RAL e REC")
-            team_demand = _etit_team_demand_cards(team_details)
-            if team_demand:
-                cols = st.columns(len(team_demand))
-                for column, item in zip(cols, team_demand):
+            st.markdown("#### Meu desempenho por demanda — RAL e REC")
+            demand_cards = _enterprise_etit_demand_cards(details, team_details)
+            if demand_cards:
+                cols = st.columns(2, gap="large")
+                for column, item in zip(cols, demand_cards):
                     with column:
-                        _render_etit_team_card(item)
+                        _render_enterprise_etit_demand_card(item)
+                st.caption(
+                    "Cada percentual considera somente os eventos da respectiva demanda. "
+                    "A meta exibida no topo pertence ao ETIT consolidado."
+                )
+            else:
+                st.caption("Sem detalhamento por RAL/REC disponível no período.")
 
             left, right = st.columns(2, gap="large")
             with left:
@@ -2967,62 +2973,138 @@ def _render_etit_kpi(label: str, value: str) -> None:
     )
 
 
-def _etit_team_demand_cards(team_details: pd.DataFrame) -> list[dict]:
-    demand = _dimension_rows(team_details, "demand")
-    if demand.empty:
+def _enterprise_etit_demand_cards(
+    details: pd.DataFrame,
+    team_details: pd.DataFrame,
+) -> list[dict]:
+    """Resumo individual de RAL/REC com referências agregadas da equipe."""
+    mine = _dimension_rows(details, "demand")
+    if mine.empty or "dimension_value" not in mine.columns:
         return []
-
-    demand = demand.copy()
-    demand["dimension_value"] = (
-        demand["dimension_value"].astype(str).str.upper().str.strip()
+    mine["dimension_value"] = (
+        mine["dimension_value"].astype(str).str.upper().str.strip()
     )
+    team = _dimension_rows(team_details, "demand")
+    if not team.empty and "dimension_value" in team.columns:
+        team["dimension_value"] = (
+            team["dimension_value"].astype(str).str.upper().str.strip()
+        )
+
     cards: list[dict] = []
     for demand_name in ("RAL", "REC"):
-        part = demand[demand["dimension_value"] == demand_name]
+        part = mine[mine["dimension_value"] == demand_name]
+        team_part = (
+            team[team["dimension_value"] == demand_name]
+            if not team.empty and "dimension_value" in team.columns
+            else pd.DataFrame()
+        )
+
         if part.empty:
+            cards.append({"demand": demand_name, "has_data": False})
             continue
 
-        volume = float(
-            pd.to_numeric(part.get("team_volume"), errors="coerce").fillna(0).sum()
-        )
+        volume = float(pd.to_numeric(part["volume"], errors="coerce").fillna(0).sum())
         successes = float(
-            pd.to_numeric(part.get("team_successes"), errors="coerce").fillna(0).sum()
+            pd.to_numeric(part["successes"], errors="coerce").fillna(0).sum()
         )
-        losses = float(
-            pd.to_numeric(part.get("team_losses"), errors="coerce").fillna(0).sum()
-        )
-        analysts_series = pd.to_numeric(
-            part.get("team_analysts"),
-            errors="coerce",
-        ).fillna(0)
-        analysts = float(analysts_series.max()) if not analysts_series.empty else 0.0
-
+        losses = float(pd.to_numeric(part["losses"], errors="coerce").fillna(0).sum())
         adherence = None if volume <= 0 else successes / volume * 100
-        avg_losses = None if analysts <= 0 else losses / analysts
-        cards.extend(
-            [
-                {
-                    "label": f"% {demand_name} Ader. (média equipe)",
-                    "value": _pct(adherence),
-                    "tone": "good" if adherence is not None and adherence >= 90 else "neutral",
-                },
-                {
-                    "label": f"{demand_name} N. Ader. (média equipe)",
-                    "value": "—" if avg_losses is None else f"{avg_losses:.1f}".replace(".", ","),
-                    "tone": "attention" if avg_losses is not None and avg_losses > 0 else "neutral",
-                },
-            ]
+
+        # Referência agregada da equipe; não expor dados de outros analistas.
+        team_avg = _weighted_team_avg(team_part)
+        avg_team_losses = None
+        if not team_part.empty and {"team_losses", "team_analysts"}.issubset(team_part.columns):
+            team_losses = float(
+                pd.to_numeric(team_part["team_losses"], errors="coerce").fillna(0).sum()
+            )
+            analysts = pd.to_numeric(
+                team_part["team_analysts"], errors="coerce"
+            ).fillna(0)
+            analyst_count = float(analysts.max()) if not analysts.empty else 0.0
+            if analyst_count > 0:
+                avg_team_losses = team_losses / analyst_count
+
+        delta = None if adherence is None or team_avg is None else adherence - team_avg
+        comparison_tone = (
+            "neutral" if delta is None or abs(delta) < 0.05
+            else "good" if delta > 0 else "attention"
+        )
+        cards.append(
+            {
+                "demand": demand_name,
+                "has_data": True,
+                "volume": int(round(volume)),
+                "successes": int(round(successes)),
+                "losses": int(round(losses)),
+                "adherence": adherence,
+                "team_avg": team_avg,
+                "comparison": _comparison_label(
+                    adherence, team_avg, "higher_is_better", "percent"
+                ),
+                "comparison_tone": comparison_tone,
+                "tma_seconds": _weighted_breakdown_duration(part, "tma_seconds"),
+                "tmr_seconds": _weighted_breakdown_duration(part, "tmr_seconds"),
+                "avg_team_losses": avg_team_losses,
+            }
         )
     return cards
 
 
-def _render_etit_team_card(item: dict) -> None:
-    tone = str(item.get("tone") or "neutral")
+def _render_enterprise_etit_demand_card(item: dict) -> None:
+    demand = str(item.get("demand") or "")
+    if demand not in {"RAL", "REC"}:
+        return
+
+    if not item.get("has_data"):
+        st.markdown(
+            (
+                f"<article class='cop-etit-demand-panel cop-etit-demand-{demand.lower()}'>"
+                f"<header><span>DEMANDA</span><strong>{demand}</strong></header>"
+                "<p class='cop-etit-demand-empty'>Sem registros individuais para "
+                "esta demanda no período.</p>"
+                "</article>"
+            ),
+            unsafe_allow_html=True,
+        )
+        return
+
+    tone = str(item.get("comparison_tone") or "neutral")
+    if tone not in {"good", "attention", "neutral"}:
+        tone = "neutral"
+    avg_team_losses = _number(item.get("avg_team_losses"))
+    avg_losses_label = (
+        "—" if avg_team_losses is None
+        else f"{avg_team_losses:.1f}".replace(".", ",")
+    )
+    metrics = (
+        ("Média da equipe", _pct(_number(item.get("team_avg")))),
+        ("Eventos", str(item.get("volume", 0))),
+        ("Aderentes", str(item.get("successes", 0))),
+        ("Não aderentes", str(item.get("losses", 0))),
+        ("TMA médio", _format_duration(item.get("tma_seconds"))),
+        ("TMR médio", _format_duration(item.get("tmr_seconds"))),
+    )
+    tiles = "".join(
+        (
+            "<div class='cop-etit-demand-tile'>"
+            f"<span>{escape(label)}</span><strong>{escape(value)}</strong>"
+            "</div>"
+        )
+        for label, value in metrics
+    )
     st.markdown(
         (
-            f"<article class='cop-etit-team-card cop-etit-team-{escape(tone)}'>"
-            f"<span>{escape(str(item.get('label') or ''))}</span>"
-            f"<strong>{escape(str(item.get('value') or '—'))}</strong>"
+            f"<article class='cop-etit-demand-panel cop-etit-demand-{demand.lower()}'>"
+            f"<header><span>DEMANDA</span><strong>{demand}</strong></header>"
+            "<div class='cop-etit-demand-result'>"
+            "<div><span>Meu resultado</span>"
+            f"<strong>{escape(_pct(_number(item.get('adherence'))))}</strong></div>"
+            f"<em class='cop-etit-demand-comparison cop-etit-demand-{tone}'>"
+            f"{escape(str(item.get('comparison') or '—'))}</em>"
+            "</div>"
+            f"<div class='cop-etit-demand-grid'>{tiles}</div>"
+            "<footer>Média de não aderentes por analista na equipe: "
+            f"<strong>{escape(avg_losses_label)}</strong></footer>"
             "</article>"
         ),
         unsafe_allow_html=True,
@@ -4766,6 +4848,108 @@ def _inject_analyst_styles() -> None:
         }
         .cop-etit-team-attention strong {
             color:#ffc966;
+        }
+
+        /* ETIT Empresarial: leitura individual separada para RAL e REC */
+        .cop-etit-demand-panel {
+            min-height:388px;
+            padding:1.15rem;
+            margin-bottom:.9rem;
+            border:1px solid rgba(148,163,184,.20);
+            border-top:3px solid #38bdf8;
+            border-radius:18px;
+            background:linear-gradient(145deg, rgba(16,38,61,.96), rgba(7,19,33,.98));
+            box-shadow:0 18px 35px rgba(0,0,0,.16);
+        }
+        .cop-etit-demand-rec { border-top-color:#a78bfa; }
+        .cop-etit-demand-panel header {
+            display:flex;
+            justify-content:space-between;
+            align-items:center;
+            border-bottom:1px solid rgba(148,163,184,.13);
+            padding-bottom:.7rem;
+            margin-bottom:.85rem;
+        }
+        .cop-etit-demand-panel header span {
+            font-size:.64rem;
+            color:#9bacc0;
+            font-weight:800;
+            letter-spacing:.11em;
+        }
+        .cop-etit-demand-panel header strong {
+            font-size:1.1rem;
+            letter-spacing:.04em;
+            color:#f4f8ff;
+        }
+        .cop-etit-demand-result {
+            display:flex;
+            align-items:end;
+            justify-content:space-between;
+            gap:.7rem;
+            padding-bottom:1rem;
+        }
+        .cop-etit-demand-result div span,
+        .cop-etit-demand-tile span {
+            display:block;
+            font-size:.7rem;
+            color:#a8bbcf;
+            margin-bottom:.25rem;
+        }
+        .cop-etit-demand-result div strong {
+            display:block;
+            color:#f9fbff;
+            font-size:2.25rem;
+            line-height:1.05;
+            font-weight:900;
+            letter-spacing:-.04em;
+        }
+        .cop-etit-demand-comparison {
+            font-size:.72rem;
+            font-weight:800;
+            font-style:normal;
+            border-radius:999px;
+            padding:.4rem .65rem;
+            white-space:nowrap;
+            background:rgba(148,163,184,.15);
+            color:#d6e0ea;
+        }
+        .cop-etit-demand-good { color:#6ee7b7; background:rgba(49,213,138,.11); }
+        .cop-etit-demand-attention { color:#ffd179; background:rgba(247,184,75,.12); }
+        .cop-etit-demand-grid {
+            display:grid;
+            grid-template-columns:repeat(3,minmax(0,1fr));
+            gap:.55rem;
+        }
+        .cop-etit-demand-tile {
+            border:1px solid rgba(148,163,184,.14);
+            border-radius:12px;
+            background:rgba(7,17,31,.63);
+            min-width:0;
+            padding:.7rem .6rem;
+        }
+        .cop-etit-demand-tile strong {
+            color:#f5f8fd;
+            font-weight:850;
+            font-size:1.02rem;
+            line-height:1.2;
+            overflow-wrap:anywhere;
+        }
+        .cop-etit-demand-panel footer {
+            margin-top:.75rem;
+            padding-top:.7rem;
+            border-top:1px solid rgba(148,163,184,.13);
+            font-size:.71rem;
+            color:#b6c6d8;
+        }
+        .cop-etit-demand-panel footer strong { color:#f7fbff; }
+        .cop-etit-demand-empty {
+            margin:1rem 0;
+            color:#b6c6d8;
+            font-size:.82rem;
+        }
+        @media (max-width: 1200px) {
+            .cop-etit-demand-grid { grid-template-columns:repeat(2,minmax(0,1fr)); }
+            .cop-etit-demand-result { align-items:start; flex-direction:column; }
         }
 
         .cop-personal-kpi {

@@ -262,6 +262,13 @@ class SubadminShell:
             st.info("Não há competência identificada para as fontes monitoradas.")
             return
         st.caption(f"Competência analisada: {month}")
+        if report.get("sources_out_of_sync"):
+            ranges = ", ".join(report.get("source_months") or [])
+            st.warning(
+                "As fontes ETIT e Canceladas não estão sincronizadas por "
+                f"competência ({ranges}). As taxas dependem de dados do mesmo "
+                "mês; verifique a atualização das planilhas antes de concluir."
+            )
         cols = st.columns(4)
         cols[0].metric("Bases incompatíveis", report["incompatible"])
         cols[1].metric("Amostras ETIT reduzidas", report["small_samples"])

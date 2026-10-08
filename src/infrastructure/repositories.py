@@ -334,10 +334,13 @@ class IndicatorRepository:
         return [dict(row) for row in rows]
 
     def leader_peer_averages(self, segment_id: int, excluded_user_id: int) -> list[dict]:
-        """Média mensal dos OUTROS líderes do mesmo setor, sem misturar competências.
+        """Compara o líder com TODOS os demais líderes, de qualquer segmento.
 
-        Primeiro consolida cada líder individualmente; depois calcula a média
-        aritmética entre líderes. Evita que um líder com mais volume pese mais.
+        Para cada indicador compatível com o setor do líder autenticado, utiliza
+        a competência mais recente disponível de cada OUTRO líder, mesmo que
+        as competências sejam diferentes. Consolida primeiro os registros do
+        mês de cada pessoa; depois calcula uma média sem peso por pessoa.
+        Não retorna identidade nem resultados individuais dos comparados.
         """
         with connection() as conn:
             rows = conn.execute(
@@ -357,23 +360,41 @@ class IndicatorRepository:
                     JOIN roles role ON role.id=ur.role_id AND role.code='subadmin'
                     JOIN user_performance_segments ups
                       ON ups.user_id=u.id AND ups.segment_id=ir.segment_id
-                    WHERE ir.segment_id=?
-                      AND ir.user_id<>?
+                    WHERE ir.user_id<>?
                       AND ir.volume>0
                       AND d.active=1
+                      AND d.indicator_key IN (
+                          SELECT indicator_key
+                          FROM indicator_definitions
+                          WHERE segment_id=? AND active=1
+                      )
                     GROUP BY ir.data_month, d.indicator_key, ir.user_id
+                ),
+                latest_month AS (
+                    SELECT indicator_key, user_id, MAX(period) AS period
+                    FROM leader_month
+                    WHERE leader_avg IS NOT NULL
+                    GROUP BY indicator_key, user_id
+                ),
+                peer_latest AS (
+                    SELECT m.indicator_key, m.user_id, m.period, m.leader_avg
+                    FROM leader_month m
+                    JOIN latest_month recent
+                      ON recent.indicator_key=m.indicator_key
+                     AND recent.user_id=m.user_id
+                     AND recent.period=m.period
                 )
                 SELECT
-                    period,
                     indicator_key,
                     ROUND(AVG(leader_avg), 1) AS peer_avg,
-                    COUNT(*) AS peer_count
-                FROM leader_month
-                WHERE leader_avg IS NOT NULL
-                GROUP BY period, indicator_key
-                ORDER BY period DESC, indicator_key
+                    COUNT(*) AS peer_count,
+                    MIN(period) AS oldest_period,
+                    MAX(period) AS newest_period
+                FROM peer_latest
+                GROUP BY indicator_key
+                ORDER BY indicator_key
                 """,
-                (segment_id, excluded_user_id),
+                (excluded_user_id, segment_id),
             ).fetchall()
         return [dict(row) for row in rows]
 

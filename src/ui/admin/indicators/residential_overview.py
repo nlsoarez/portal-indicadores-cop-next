@@ -5,6 +5,13 @@ import math
 import pandas as pd
 import streamlit as st
 
+from src.application.dashboard_service import DashboardService
+from src.domain.entities import AccessContext
+from src.ui.admin.external_analysts import (
+    _as_frame, _indicator_summary, _partition_external_records,
+    _people_summary, _detail_table,
+)
+
 
 RESIDENTIAL_INDICATOR_ORDER = (
     "res_etit_fibra_hfc",
@@ -48,6 +55,8 @@ INDICATOR_META = {
 def render_admin_residential_overview(
     *,
     indicator_keys: tuple[str, ...] | list[str],
+    ctx: AccessContext,
+    dashboard: DashboardService,
     segment_df: pd.DataFrame,
     analyst_df: pd.DataFrame,
     analyst_breakdowns_df: pd.DataFrame,
@@ -80,71 +89,175 @@ def render_admin_residential_overview(
             hide_index=True,
         )
 
-    st.markdown("### Atuação fora da janela da equipe")
-    st.caption(
-        "Janela operacional considerada: 22:00–05:59. "
-        "Fora da janela: 06:00–21:59."
-    )
-
-    window = build_window_summary(breakdown_df, visible)
-    c1, c2, c3 = st.columns(3)
-    with c1:
-        _render_window_card(
-            "Dentro da janela · 22:00–05:59",
-            window["inside_volume"],
-            window["inside_rate"],
-            "#27ae60",
-        )
-    with c2:
-        _render_window_card(
-            "Fora da janela · 06:00–21:59",
-            window["outside_volume"],
-            window["outside_rate"],
-            "#e67e22",
-        )
-    with c3:
-        outside_share = window["outside_share"]
-        st.markdown(
-            (
-                "<div class='cop-window-card'>"
-                "<div class='cop-window-label'>PARTICIPAÇÃO FORA DA JANELA</div>"
-                f"<div class='cop-window-main'>{outside_share:.1f}%</div>"
-                "<div class='cop-window-sub'>do volume registrado</div>"
-                "</div>"
-            ),
-            unsafe_allow_html=True,
+    segment_matches = segment_df[
+        segment_df["indicator_key"].isin(RESIDENTIAL_INDICATOR_ORDER)
+        & segment_df["segment_slug"].eq("residencial")
+    ] if {"indicator_key", "segment_slug"}.issubset(segment_df.columns) else pd.DataFrame()
+    if not segment_matches.empty:
+        _render_external_residential_night(
+            ctx, dashboard, int(segment_matches.iloc[0]["segment_id"])
         )
 
-    outside_by_indicator = build_outside_indicator_table(breakdown_df, visible)
-    outside_by_analyst = build_outside_analyst_table(
-        analyst_breakdowns_df,
-        analyst_df,
-        visible,
-    )
-
-    left, right = st.columns(2)
-    with left:
-        st.markdown("#### Fora da janela por indicador")
-        if outside_by_indicator.empty:
-            st.caption("Nenhum registro da equipe entre 06:00 e 21:59.")
-        else:
-            st.dataframe(
-                _style_result_table(outside_by_indicator),
-                use_container_width=True,
-                hide_index=True,
+    with st.expander(
+        "Consulta secundária: atuação da minha própria equipe fora do horário",
+        expanded=False,
+    ):
+        st.markdown("#### Apenas minha equipe — comparação entre horários")
+        st.caption(
+            "Os logins aqui pertencem à equipe cadastrada e NÃO são externos. " 
+            "Janela operacional considerada: 22:00–05:59. "
+            "Fora da janela: 06:00–21:59."
+        )
+    
+        window = build_window_summary(breakdown_df, visible)
+        c1, c2, c3 = st.columns(3)
+        with c1:
+            _render_window_card(
+                "Dentro da janela · 22:00–05:59",
+                window["inside_volume"],
+                window["inside_rate"],
+                "#27ae60",
             )
-    with right:
-        st.markdown("#### Analistas atuando fora da janela")
-        if outside_by_analyst.empty:
-            st.caption("Nenhum analista da equipe com atuação entre 06:00 e 21:59.")
-        else:
-            st.dataframe(
-                _style_result_table(outside_by_analyst),
-                use_container_width=True,
-                hide_index=True,
+        with c2:
+            _render_window_card(
+                "Fora da janela · 06:00–21:59",
+                window["outside_volume"],
+                window["outside_rate"],
+                "#e67e22",
             )
+        with c3:
+            outside_share = window["outside_share"]
+            st.markdown(
+                (
+                    "<div class='cop-window-card'>"
+                    "<div class='cop-window-label'>PARTICIPAÇÃO FORA DA JANELA</div>"
+                    f"<div class='cop-window-main'>{outside_share:.1f}%</div>"
+                    "<div class='cop-window-sub'>do volume registrado</div>"
+                    "</div>"
+                ),
+                unsafe_allow_html=True,
+            )
+    
+        outside_by_indicator = build_outside_indicator_table(breakdown_df, visible)
+        outside_by_analyst = build_outside_analyst_table(
+            analyst_breakdowns_df,
+            analyst_df,
+            visible,
+        )
+    
+        left, right = st.columns(2)
+        with left:
+            st.markdown("#### Fora da janela por indicador")
+            if outside_by_indicator.empty:
+                st.caption("Nenhum registro da equipe entre 06:00 e 21:59.")
+            else:
+                st.dataframe(
+                    _style_result_table(outside_by_indicator),
+                    use_container_width=True,
+                    hide_index=True,
+                )
+        with right:
+            st.markdown("#### Meus analistas atuando fora da janela")
+            if outside_by_analyst.empty:
+                st.caption("Nenhum analista da equipe com atuação entre 06:00 e 21:59.")
+            else:
+                st.dataframe(
+                    _style_result_table(outside_by_analyst),
+                    use_container_width=True,
+                    hide_index=True,
+                )
+    
 
     st.divider()
+
+
+def _render_external_residential_night(
+    ctx: AccessContext,
+    dashboard: DashboardService,
+    residential_segment_id: int,
+) -> None:
+    """Outras equipes atendendo no horário do administrador, nunca sua equipe."""
+    st.markdown("### 🌙 Outras equipes trabalhando na minha janela")
+    st.caption(
+        "Analistas que NÃO pertencem à equipe cadastrada no portal, "
+        "mas registraram demandas entre 22h00 e 05h59. "
+        "Esta visão não inclui os meus próprios analistas, "
+        "nem eventos diurnos. É independente da consulta 'fora da janela' da equipe."
+    )
+    months = dashboard.external_night_months(ctx, [residential_segment_id])
+    if not months:
+        st.info(
+            "Nenhum analista de fora da equipe identificado nas fontes "
+            "residenciais disponíveis."
+        )
+        return
+    month = st.selectbox(
+        "Competência — analistas de outras equipes",
+        months,
+        key="admin_residential_external_month_v2",
+    )
+    records = dashboard.external_night_payload(
+        ctx, [residential_segment_id], month
+    )
+    verified = _partition_external_records(records)["confirmed"]
+    # Restringir aos indicadores técnicos Residenciais. Chat/TOA são
+    # analisados na área administrativa própria, não nesta tabela técnica.
+    frame = _as_frame([
+        item for item in verified
+        if item["indicator_key"] in RESIDENTIAL_INDICATOR_ORDER
+    ])
+    if frame.empty:
+        st.warning(
+            "Sem atendimentos externos confirmados no período entre 22h00 "
+            "e 05h59 para ETIT e Assertividade Residencial."
+        )
+        return
+
+    metrics = st.columns(4)
+    metrics[0].metric("Analistas de outras equipes", frame["login"].nunique())
+    metrics[1].metric("Atendimentos na minha janela", int(frame["volume"].sum()))
+    metrics[2].metric("Positivos", int(frame["successes"].sum()))
+    metrics[3].metric("Negativos", int(frame["losses"].sum()))
+
+    st.markdown("#### Por indicador — somente externos durante a madrugada")
+    summary = _indicator_summary(frame)
+    st.dataframe(summary, use_container_width=True, hide_index=True)
+
+    keys = [key for key in RESIDENTIAL_INDICATOR_ORDER
+            if key in set(frame["indicator_key"])]
+    selection = st.selectbox(
+        "Indicador dos analistas externos",
+        ["all", *keys],
+        format_func=lambda key: (
+            "Todos os indicadores"
+            if key == "all" else INDICATOR_META[key]["title"]
+        ),
+        key="admin_residential_external_indicator_v2",
+    )
+    scoped = frame if selection == "all" else frame[
+        frame["indicator_key"] == selection
+    ]
+
+    st.markdown("#### Analistas externos atendendo entre 22h00 e 05h59")
+    st.dataframe(
+        _people_summary(scoped),
+        use_container_width=True,
+        hide_index=True,
+    )
+    with st.expander("Detalhamento dos atendimentos externos por data e hora"):
+        detail = _detail_table(scoped)
+        st.dataframe(detail, use_container_width=True, hide_index=True)
+        st.download_button(
+            "Exportar atendimentos dos analistas externos (CSV)",
+            detail.to_csv(index=False).encode("utf-8-sig"),
+            file_name=f"outros_analistas_residencial_madrugada_{month}.csv",
+            mime="text/csv",
+        )
+    st.caption(
+        "Os registros externos são mantidos separados dos resultados da "
+        "equipe cadastrada. Se uma fonte não trouxer hora verificável, "
+        "seus dados não entram neste total."
+    )
 
 
 def indicator_summary(

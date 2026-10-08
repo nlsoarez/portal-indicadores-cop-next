@@ -12,12 +12,12 @@ from src.infrastructure.repositories import IndicatorRepository, SegmentReposito
 from src.ui.analyst.shell import _comparison_label
 
 
+from tests.isolated_database import isolate_sqlite_database
+
 class LeaderPeerComparisonTest(unittest.TestCase):
     def setUp(self):
-        self.tmp = tempfile.TemporaryDirectory()
-        os.environ["COP_PORTAL_DB"] = str(Path(self.tmp.name) / "portal.db")
-        database.DB_PATH = Path(os.environ["COP_PORTAL_DB"])
-        initialize_database()
+        isolate_sqlite_database(self)
+        from src.config.seed import seed_foundation
         seed_foundation()
         self.users = UserRepository()
         self.segments = SegmentRepository()
@@ -26,8 +26,6 @@ class LeaderPeerComparisonTest(unittest.TestCase):
         self.emp = self.segments.get_by_slug("empresarial")
         self.res = self.segments.get_by_slug("residencial")
 
-    def tearDown(self):
-        self.tmp.cleanup()
 
     def _insert_result(self, login, segment, key, month, day, value, volume):
         user = self.users.get_by_login(login)

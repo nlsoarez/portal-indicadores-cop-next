@@ -51,8 +51,14 @@ class PeopleScopeTest(unittest.TestCase):
         for login in expected:
             ctx = access.context(users.get_by_login(login).id)
             self.assertTrue(ctx.is_subadmin); self.assertFalse(ctx.is_admin); self.assertFalse(ctx.is_analyst)
+            expected_segment = {
+                "N5619600": "empresarial",
+                "N6088107": "empresarial",
+                "N5923221": "residencial",
+                "N0238475": "residencial",
+            }[login]
             self.assertEqual(
-                {"preventiva", "residencial", "empresarial"},
+                {expected_segment},
                 {s.slug for s in segments.list_for_user(ctx.user.id)},
             )
 

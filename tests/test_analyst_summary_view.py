@@ -130,14 +130,14 @@ class AnalystSummaryViewTest(unittest.TestCase):
             self.assertIn("referência limitada", markup)
             self.assertIn("Comparação com a equipe", markup)
             self.assertIn(
-                "Nenhum outro líder possui resultado disponível", markup
+                "Sem referência comparável dos outros líderes", markup
             )
             self.assertIn("Média dos outros líderes", markup)
         with patch("src.ui.analyst.shell.st.markdown") as markdown:
             _render_indicator_status_card(row, team)
             markup = markdown.call_args.args[0]
             self.assertNotIn("Base da equipe:", markup)
-            self.assertNotIn("Nenhum outro líder possui", markup)
+            self.assertNotIn("Sem referência comparável", markup)
 
     def test_target_direction_is_respected(self):
         self.assertTrue(_meets_target(92.0, 90.0, "higher_is_better"))

@@ -114,6 +114,38 @@ def _people_summary(frame: pd.DataFrame) -> pd.DataFrame:
     ].sort_values("Volume", ascending=False)
 
 
+def _unverified_summary(frame: pd.DataFrame) -> pd.DataFrame:
+    """No night claim for records without hour, especially DPA."""
+    if frame.empty:
+        return pd.DataFrame()
+    table = frame.groupby(
+        ["segment_name", "name", "indicator_key", "login", "analyst_name"],
+        as_index=False,
+    ).agg(
+        volume=("volume", "sum"),
+        successes=("successes", "sum"),
+        days=("day", "nunique"),
+    )
+    table["Resultado da fonte"] = [
+        _pct(success, total)
+        for success, total in zip(table["successes"], table["volume"])
+    ]
+    table["Base"] = [
+        (
+            f"{float(total) / 3600:.1f} h de jornada".replace(".", ",")
+            if key == "dpa_official" else f"{int(total):,} ocorrências".replace(",", ".")
+        )
+        for key, total in zip(table["indicator_key"], table["volume"])
+    ]
+    return table.rename(columns={
+        "segment_name": "Segmento", "name": "Indicador",
+        "login": "Login", "analyst_name": "Nome", "days": "Dias com dados",
+    })[
+        ["Segmento", "Indicador", "Login", "Nome", "Dias com dados",
+         "Base", "Resultado da fonte"]
+    ].sort_values(["Segmento", "Indicador", "Login"])
+
+
 def _detail_table(frame: pd.DataFrame) -> pd.DataFrame:
     if frame.empty:
         return pd.DataFrame()
@@ -281,7 +313,9 @@ def render_admin_external_analysts(
                 "sem afirmar que ocorreram entre 22h00 e 05h59."
             )
             st.dataframe(
-                _people_summary(missing), use_container_width=True, hide_index=True
+                _unverified_summary(missing),
+                use_container_width=True,
+                hide_index=True,
             )
 
     if groups["outside_window"]:

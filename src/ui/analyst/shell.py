@@ -4105,6 +4105,15 @@ def _render_indicator_status_card(
             "</div>"
         )
 
+    quality_sample_html = ""
+    if leader_view and key in ETIT_LEADER_KEYS and 0 < volume < 10:
+        quality_sample_html = (
+            "<div class='cop-quality-sample-warning'>"
+            f"Amostra reduzida: apenas {volume} evento(s) ETIT no mês. "
+            "Aderência válida, porém a comparação merece cautela."
+            "</div>"
+        )
+
     icon = _indicator_icon(key)
     leader_html = ""
     leader_context_html = ""
@@ -4165,6 +4174,7 @@ def _render_indicator_status_card(
             "</div>"
             f"{team_coverage_html}"
             f"{leader_context_html}"
+            f"{quality_sample_html}"
             "<div class='cop-personal-status-footer'>"
             f"<span>{escape(_target_text(row))}</span>"
             f"{volume_html}"
@@ -5243,6 +5253,16 @@ def _inject_analyst_styles() -> None:
         }
         .cop-leader-peer-unavailable {
             color:#c8a775;
+        }
+        .cop-quality-sample-warning {
+            color:#ffcf8d;
+            border-left:3px solid #f7b84b;
+            background:rgba(247,184,75,.07);
+            padding:.5rem .7rem;
+            border-radius:6px;
+            margin-top:.65rem;
+            font-size:.77rem;
+            line-height:1.45;
         }
         .cop-status-good { border-top-color:#31d58a; }
         .cop-status-attention { border-top-color:#f7b84b; }

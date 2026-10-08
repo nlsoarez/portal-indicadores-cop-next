@@ -7,22 +7,18 @@ from pathlib import Path
 import pandas as pd
 
 
+from tests.isolated_database import isolate_sqlite_database
+
 class SourceIngestionTest(unittest.TestCase):
     def setUp(self):
-        self.tmp = tempfile.TemporaryDirectory()
-        os.environ["COP_PORTAL_DB"] = str(Path(self.tmp.name) / "portal.db")
-        from src.infrastructure import database
-        database.DB_PATH = Path(os.environ["COP_PORTAL_DB"])
-        from src.infrastructure.database import initialize_database
+        isolate_sqlite_database(self)
         from src.config.seed import seed_foundation
-        initialize_database(); seed_foundation()
+        seed_foundation()
         from src.application.access_service import AccessService
         from src.infrastructure.repositories import SegmentRepository, UserRepository
         self.users = UserRepository(); self.segment = SegmentRepository().get_by_slug("preventiva")
         self.ctx = AccessService(self.users).context(self.users.get_by_login("ADMIN").id)
 
-    def tearDown(self):
-        self.tmp.cleanup()
 
     @staticmethod
     def _xlsx(df: pd.DataFrame, sheet: str, startrow: int = 0) -> bytes:

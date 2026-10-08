@@ -12,6 +12,49 @@ from src.ui.admin.indicators.residential_overview import (
 
 
 class ResidentialOverviewTest(unittest.TestCase):
+    def test_main_overview_prioritizes_real_external_analysts_and_hides_team_offhours(self):
+        from contextlib import nullcontext
+        from unittest.mock import Mock, patch
+
+        from src.ui.admin.indicators.residential_overview import (
+            render_admin_residential_overview,
+        )
+        segment = pd.DataFrame([{
+            "indicator_key": "res_etit_gpon",
+            "segment_slug": "residencial",
+            "segment_id": 1,
+            "value": 90.0,
+            "volume": 10,
+        }])
+        ctx = Mock()
+        dashboard = Mock()
+        prefix = "src.ui.admin.indicators.residential_overview"
+        with (
+            patch(f"{prefix}._render_external_residential_night") as external,
+            patch(f"{prefix}._inject_styles"),
+            patch(f"{prefix}._render_summary_card"),
+            patch(f"{prefix}._render_window_card"),
+            patch(f"{prefix}.st.markdown"),
+            patch(f"{prefix}.st.caption"),
+            patch(f"{prefix}.st.columns", side_effect=lambda amount: [
+                nullcontext() for _ in range(amount)
+            ]),
+            patch(f"{prefix}.st.expander", return_value=nullcontext()) as hidden,
+        ):
+            render_admin_residential_overview(
+                indicator_keys=("res_etit_gpon",),
+                ctx=ctx,
+                dashboard=dashboard,
+                segment_df=segment,
+                analyst_df=pd.DataFrame(),
+                analyst_breakdowns_df=pd.DataFrame(),
+                breakdown_df=pd.DataFrame(),
+            )
+        external.assert_called_once_with(ctx, dashboard, 1)
+        hidden.assert_called_once()
+        self.assertFalse(hidden.call_args.kwargs.get("expanded", True))
+        self.assertIn("minha própria equipe", hidden.call_args.args[0])
+
     def test_indicator_summary_uses_overall_breakdown(self):
         segment = pd.DataFrame(
             {

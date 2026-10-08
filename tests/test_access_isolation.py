@@ -47,16 +47,50 @@ class AccessIsolationTest(unittest.TestCase):
             {u.login for u in visible},
         )
 
-    def test_subadmin_can_view_analyst_but_not_other_leader(self):
+    def test_subadmin_can_view_self_and_own_analysts_but_not_other_leader(self):
         from src.application.access_service import AccessService
+        from src.application.dashboard_service import DashboardService
         from src.infrastructure.repositories import SegmentRepository, UserRepository
         users = UserRepository(); access = AccessService(users)
         leader = users.get_by_login("N0238475"); other = users.get_by_login("N5923221")
-        daniel = users.get_by_login("N5604148"); segment = SegmentRepository().get_by_slug("preventiva")
+        analyst = users.get_by_login("N5772086")
+        segment = SegmentRepository().get_by_slug("residencial")
         ctx = access.context(leader.id)
-        access.assert_can_view_user(ctx, segment.id, daniel.id)
+        access.assert_can_view_user(ctx, segment.id, leader.id)
+        access.assert_can_view_user(ctx, segment.id, analyst.id)
         with self.assertRaises(PermissionError):
             access.assert_can_view_user(ctx, segment.id, other.id)
+        # The personal leader payload uses the same access control path.
+        payload = DashboardService(access=access).analyst_payload(ctx, segment.id, leader.id)
+        self.assertIn("summary", payload)
+
+    def test_leader_cannot_fetch_other_segment_even_with_legacy_access(self):
+        from src.application.access_service import AccessService
+        from src.application.dashboard_service import DashboardService
+        from src.infrastructure.database import transaction
+        from src.infrastructure.repositories import SegmentRepository, UserRepository
+        users = UserRepository(); access = AccessService(users)
+        leader = users.get_by_login("N5619600")
+        foreign = SegmentRepository().get_by_slug("residencial")
+        foreign_analyst = users.get_by_login("N5772086")
+        # Simulates pre-migration DB grants; the runtime guard must still work.
+        with transaction() as conn:
+            conn.execute(
+                "INSERT INTO user_segments(user_id, segment_id) VALUES (?, ?) "
+                "ON CONFLICT(user_id, segment_id) DO NOTHING",
+                (leader.id, foreign.id),
+            )
+        ctx = access.context(leader.id)
+        self.assertIn(foreign.id, ctx.segment_ids)
+        with self.assertRaises(PermissionError):
+            access.visible_users(ctx, foreign.id)
+        with self.assertRaises(PermissionError):
+            access.assert_can_view_user(ctx, foreign.id, foreign_analyst.id)
+        dashboard = DashboardService(access=access)
+        with self.assertRaises(PermissionError):
+            dashboard.management_payload(ctx, [foreign.id])
+        with self.assertRaises(PermissionError):
+            dashboard.analyst_payload(ctx, foreign.id, foreign_analyst.id)
 
     def test_only_admin_can_list_leaders(self):
         from src.application.access_service import AccessService

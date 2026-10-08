@@ -59,7 +59,7 @@ def _team_snapshot(summary_rows: list[dict], analyst_count: int) -> dict:
         assessed += 1
         direction = str(row.get("direction") or "higher_is_better")
         passed = value <= target if direction == "lower_is_better" else value >= target
-        row["status"] = "Dentro da meta" if passed else "Abaixo da meta"
+        row["status"] = "Dentro da meta" if passed else "Fora da meta"
         met += int(passed)
 
     return {
@@ -80,6 +80,15 @@ def _safe_number(value) -> float | None:
         return parsed if pd.notna(parsed) else None
     except (ValueError, TypeError):
         return None
+
+
+def _format_team_value(value: float | None, unit: str | None) -> str:
+    if value is None:
+        return "—"
+    formatted = format_metric(value, unit)
+    if (unit or "percent").lower() == "percent":
+        return formatted.replace(".", ",")
+    return formatted
 
 
 def _team_ranking(summary_rows: list[dict], analyst_rows: list[dict], indicator_key: str) -> pd.DataFrame:
@@ -110,12 +119,7 @@ def _team_ranking(summary_rows: list[dict], analyst_rows: list[dict], indicator_
             {
                 "Analista": row["display_name"],
                 "Login": row["login"],
-                "Resultado": (
-                    "—" if pd.isna(row["value"])
-                    else format_metric(float(row["value"]), unit).replace(".", ",")
-                    if (unit or "percent").lower() == "percent"
-                    else format_metric(float(row["value"]), unit)
-                ),
+                "Resultado": _format_team_value(_safe_number(row["value"]), unit),
                 "Base": int(row.get("volume") or 0),
             }
             for _, row in ranking.iterrows()
@@ -196,7 +200,7 @@ class SubadminShell:
             if snapshot["with_target"] else "—",
         )
         d.metric(
-            "Abaixo da meta",
+            "Fora da meta",
             snapshot["attention"] if snapshot["with_target"] else "—",
         )
 
@@ -218,11 +222,11 @@ class SubadminShell:
                     unit = row.get("unit")
                     st.metric(
                         str(row.get("name") or row.get("indicator_key") or "Indicador"),
-                        "—" if value is None else format_metric(value, unit),
+                        _format_team_value(value, unit),
                     )
                     target = _safe_number(row.get("target_value"))
                     st.caption(
-                        (format_target(target, unit, row.get("direction"))
+                        (format_target(target, unit, row.get("direction")).replace(".", ",")
                          if target is not None else "Sem meta configurada")
                         + f" · {row.get('period') or 'Período não informado'}"
                     )

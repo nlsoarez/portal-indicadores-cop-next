@@ -139,6 +139,34 @@ class AnalystSummaryViewTest(unittest.TestCase):
             self.assertNotIn("Base da equipe:", markup)
             self.assertNotIn("Sem referência comparável", markup)
 
+    def test_leader_etit_small_sample_is_visible_without_changing_meta(self):
+        from unittest.mock import patch
+
+        row = {
+            "indicator_key": "emp_etit_event",
+            "name": "ETIT por Evento",
+            "value": 100.0,
+            "target_value": 90.0,
+            "direction": "higher_is_better",
+            "unit": "percent",
+            "volume": 1,
+        }
+        team = {"team_avg": 91.9, "team_volume": 665,
+                "analysts_with_data": 9}
+        with patch("src.ui.analyst.shell.st.markdown") as markdown:
+            _render_indicator_status_card(row, team, leader_view=True)
+            html = markdown.call_args.args[0]
+            self.assertIn("Dentro da meta", html)
+            self.assertIn("100,0%", html)
+            self.assertIn("Amostra reduzida", html)
+            self.assertIn("apenas 1 evento(s) ETIT", html)
+            self.assertIn("Aderência válida", html)
+        with patch("src.ui.analyst.shell.st.markdown") as markdown:
+            _render_indicator_status_card(row, team)
+            self.assertNotIn(
+                "Amostra reduzida", markdown.call_args.args[0]
+            )
+
     def test_target_direction_is_respected(self):
         self.assertTrue(_meets_target(92.0, 90.0, "higher_is_better"))
         self.assertFalse(_meets_target(81.0, 90.0, "higher_is_better"))

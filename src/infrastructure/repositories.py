@@ -274,6 +274,69 @@ class SegmentRepository:
         return _segment(row) if row else None
 
 
+def _cancellation_etit_stats(conn, segment_ids: list[int] | None = None) -> dict:
+    """Numerador de cancelamentos e denominador ETIT da MESMA competência.
+
+    Registros da fonte de canceladas informam o percentual dentro da própria
+    fonte (não dentro do ETIT); multiplicamos valor pela quantidade e
+    arredondamos para recuperar a contagem. A base ETIT é restrita a:
+    Empresarial = Evento, Residencial = HFC+GPON.
+    Não usa competências antigas nem setores diferentes como substitutos.
+    """
+    predicate = ""
+    params: tuple = ()
+    if segment_ids is not None:
+        if not segment_ids:
+            return {}
+        predicate = " AND ir.segment_id IN (" + ",".join("?" for _ in segment_ids) + ")"
+        params = tuple(int(x) for x in segment_ids)
+    rows = conn.execute(
+        """
+        SELECT ir.segment_id, ir.user_id, ir.data_month AS period,
+               SUM(CASE WHEN d.indicator_key='toa_cancellation_rate'
+                   THEN CAST(ir.value * ir.volume AS NUMERIC) / 100.0
+                   ELSE 0 END) AS cancellations,
+               SUM(CASE WHEN (
+                   s.slug='empresarial' AND d.indicator_key='emp_etit_event'
+                 ) OR (
+                   s.slug='residencial' AND d.indicator_key IN
+                   ('res_etit_fibra_hfc','res_etit_gpon')
+                 ) THEN ir.volume ELSE 0 END) AS etit_volume,
+               SUM(CASE WHEN d.indicator_key='toa_cancellation_rate'
+                   THEN ir.volume ELSE 0 END) AS source_volume
+        FROM indicator_results ir
+        JOIN indicator_definitions d ON d.id=ir.indicator_definition_id AND d.active=1
+        JOIN segments s ON s.id=ir.segment_id
+        WHERE d.indicator_key IN (
+            'toa_cancellation_rate','emp_etit_event',
+            'res_etit_fibra_hfc','res_etit_gpon'
+        )
+        """ + predicate + """
+        GROUP BY ir.segment_id, ir.user_id, ir.data_month
+        """,
+        params,
+    ).fetchall()
+    result = {}
+    for row in rows:
+        result[
+            (int(row["segment_id"]), int(row["user_id"]), str(row["period"]))
+        ] = {
+            "cancelled": int(round(float(row["cancellations"] or 0))),
+            "etit_volume": int(row["etit_volume"] or 0),
+            "source_volume": int(row["source_volume"] or 0),
+        }
+    return result
+
+
+def _valid_cancellation_rate(stats: dict | None) -> float | None:
+    if not stats or stats["etit_volume"] <= 0:
+        return None
+    if stats["cancelled"] > stats["etit_volume"]:
+        # As fontes não têm bases compatíveis: jamais exibir >100% de canceladas.
+        return None
+    return round(100 * stats["cancelled"] / stats["etit_volume"], 1)
+
+
 class IndicatorRepository:
     def definitions(self, segment_id: int) -> list[dict]:
         with connection() as conn:

@@ -45,33 +45,81 @@ class LeaderPeerComparisonTest(unittest.TestCase):
                 (segment.id, user.id, int(definition["id"]), day, month, value, volume),
             )
 
-    def test_only_same_sector_other_leader_same_month_is_returned(self):
-        # Leandro: próprio valor não pode contaminar a média.
+    def test_non_etit_compares_three_other_leaders_across_segments_and_months(self):
+        # O próprio resultado do Leandro nunca entra na referência.
         self._insert_result("N6088107", self.emp, "dpa_official",
                             "2026-09", "2026-09-03", 45, 100)
-        # Bruno: consolidação ponderada de seu mês = (70*10 + 100*90) / 100 = 97.
+        # Bruno: utiliza a sua ÚLTIMA competência (setembro),
+        # consolidando os dois lançamentos por volume: 97.
         self._insert_result("N5619600", self.emp, "dpa_official",
                             "2026-09", "2026-09-04", 70, 10)
         self._insert_result("N5619600", self.emp, "dpa_official",
                             "2026-09", "2026-09-05", 100, 90)
         self._insert_result("N5619600", self.emp, "dpa_official",
                             "2026-08", "2026-08-03", 10, 30)
-        # Líder do Residencial não entra na média Empresarial.
+        # Kelly (outro segmento): setembro, 20.
         self._insert_result("N5923221", self.res, "dpa_official",
                             "2026-09", "2026-09-03", 20, 100)
+        # Marley (outro segmento): último dado em agosto, 75.
+        self._insert_result("N0238475", self.res, "dpa_official",
+                            "2026-08", "2026-08-03", 75, 100)
 
         ctx = self.access.context(self.users.get_by_login("N6088107").id)
         rows = self.dashboard.leader_peer_averages(ctx, self.emp.id)
-        values = {(row["period"], row["indicator_key"]): row for row in rows}
-        self.assertEqual(97.0, values[("2026-09", "dpa_official")]["peer_avg"])
-        self.assertEqual(1, values[("2026-09", "dpa_official")]["peer_count"])
-        self.assertEqual(10.0, values[("2026-08", "dpa_official")]["peer_avg"])
-        self.assertNotIn("login", values[("2026-09", "dpa_official")])
-        self.assertNotIn("user_id", values[("2026-09", "dpa_official")])
+        by_key = {row["indicator_key"]: row for row in rows}
+        benchmark = by_key["dpa_official"]
+        self.assertAlmostEqual(64.0, benchmark["peer_avg"])
+        self.assertEqual(3, benchmark["peer_count"])
+        self.assertEqual("2026-08", benchmark["oldest_period"])
+        self.assertEqual("2026-09", benchmark["newest_period"])
+        self.assertNotIn("login", benchmark)
+        self.assertNotIn("user_id", benchmark)
+        self.assertNotIn("period", benchmark)
         self.assertEqual(
-            "52,0 pp pior",
-            _comparison_label(45, 97, "higher_is_better", "percent"),
+            "19,0 pp pior",
+            _comparison_label(45, 64, "higher_is_better", "percent"),
         )
+
+    def test_etit_only_compares_leaders_from_same_segment(self):
+        self._insert_result("N6088107", self.emp, "emp_etit_event",
+                            "2026-09", "2026-09-02", 75, 100)
+        self._insert_result("N5619600", self.emp, "emp_etit_event",
+                            "2026-08", "2026-08-02", 90, 100)
+
+        # Proteção contra futuras duplicações de chaves ETIT entre setores:
+        # mesmo que o indicador exista em outro setor, deve ser ignorado.
+        with transaction() as conn:
+            conn.execute(
+                "INSERT INTO indicator_definitions("
+                "segment_id,indicator_key,name,target_value,direction,unit,active"
+                ") VALUES (?,?,?,?,?,?,1)",
+                (self.res.id, "emp_etit_event", "ETIT espelho",
+                 90.0, "higher_is_better", "percent"),
+            )
+        self._insert_result("N5923221", self.res, "emp_etit_event",
+                            "2026-10", "2026-10-02", 10, 100)
+
+        ctx = self.access.context(self.users.get_by_login("N6088107").id)
+        rows = self.dashboard.leader_peer_averages(ctx, self.emp.id)
+        benchmark = next(row for row in rows
+                         if row["indicator_key"] == "emp_etit_event")
+        self.assertEqual(1, benchmark["peer_count"])
+        self.assertEqual(90.0, benchmark["peer_avg"])
+        self.assertEqual("2026-08", benchmark["newest_period"])
+
+        # ETIT HFC e GPON seguem a mesma restrição no Residencial.
+        self._insert_result("N5923221", self.res, "res_etit_fibra_hfc",
+                            "2026-09", "2026-09-02", 91, 100)
+        self._insert_result("N0238475", self.res, "res_etit_fibra_hfc",
+                            "2026-08", "2026-08-02", 85, 100)
+        kelly_ctx = self.access.context(self.users.get_by_login("N5923221").id)
+        residential = self.dashboard.leader_peer_averages(
+            kelly_ctx, self.res.id
+        )
+        hfc = next(row for row in residential
+                   if row["indicator_key"] == "res_etit_fibra_hfc")
+        self.assertEqual(85.0, hfc["peer_avg"])
+        self.assertEqual(1, hfc["peer_count"])
 
     def test_lower_is_better_and_no_data_do_not_invent_benchmark(self):
         self.assertEqual(

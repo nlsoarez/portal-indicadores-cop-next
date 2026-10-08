@@ -4,19 +4,14 @@ import unittest
 from pathlib import Path
 
 
+from tests.isolated_database import isolate_sqlite_database
+
 class PreventivaSeedTest(unittest.TestCase):
     def setUp(self):
-        self.tmp = tempfile.TemporaryDirectory()
-        os.environ["COP_PORTAL_DB"] = str(Path(self.tmp.name) / "portal.db")
-        from src.infrastructure import database
-        database.DB_PATH = Path(os.environ["COP_PORTAL_DB"])
-        from src.infrastructure.database import initialize_database
+        isolate_sqlite_database(self)
         from src.config.seed import seed_foundation
-        initialize_database()
         seed_foundation()
 
-    def tearDown(self):
-        self.tmp.cleanup()
 
     def test_preventiva_has_four_analysts_with_short_names(self):
         from src.infrastructure.repositories import SegmentRepository, UserRepository

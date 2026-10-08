@@ -107,6 +107,46 @@ class ExternalAnalystsNightTest(unittest.TestCase):
         self.assertEqual([], groups["confirmed"])
         self.assertEqual(1, len(groups["unknown_hour"]))
 
+    def test_registered_own_team_is_excluded_even_if_source_mislabeled_external(self):
+        # Importações legadas podem conter b.scope='external' incorreto.
+        # Nenhum membro da equipe de Nelson deve ser listado como "outra equipe".
+        self.add_rows(
+            self.res, "res_etit_gpon",
+            [
+                ("N5972428", "2026-10-06", "22", 10, 8),  # Cristiane: equipe
+                ("N4014011", "2026-10-06", "22", 8, 7),   # Alan: equipe
+                ("F106664", "2026-10-06", "23", 7, 7),    # Raissa: equipe
+                ("N0239871", "2026-10-06", "0", 6, 6),    # Leonardo: equipe
+                ("N5772086", "2026-10-06", "3", 4, 3),    # Thiago: equipe
+                ("F104752", "2026-10-06", "5", 2, 2),     # Marcelo: equipe
+                ("OTHERTEAM", "2026-10-06", "22", 5, 4), # outro analista
+            ],
+        )
+        records = self.service.external_night_payload(
+            self.admin, [self.res.id], "2026-10"
+        )
+        self.assertEqual({"OTHERTEAM"}, {r["login"] for r in records})
+        self.assertEqual(5, sum(r["volume"] for r in records))
+        self.assertIn(
+            "2026-10", self.service.external_night_months(
+                self.admin, [self.res.id]
+            )
+        )
+
+    def test_month_with_only_own_team_members_has_no_external_records(self):
+        self.add_rows(
+            self.res, "res_assert_gpon",
+            [("N5972428", "2026-10-06", "22", 2, 2)],
+        )
+        self.assertEqual(
+            [], self.service.external_night_months(self.admin, [self.res.id])
+        )
+        self.assertEqual(
+            [], self.service.external_night_payload(
+                self.admin, [self.res.id], "2026-10"
+            )
+        )
+
     def test_admin_scope_and_permission_boundaries(self):
         self.add_rows(
             self.emp, "emp_etit_event",

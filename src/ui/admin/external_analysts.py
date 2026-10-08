@@ -182,7 +182,9 @@ def render_admin_external_analysts(
     st.caption(
         "Pessoas fora da equipe cadastrada para cada segmento na importação, "
         "mas com atendimento registrado na regional Leste durante a madrugada. "
-        "Os volumes externos NÃO entram nos resultados da equipe."
+        "Os volumes externos NÃO entram nos resultados da equipe. "
+        "Nas fontes globais (TOA, Chat e DPA), o segmento mostra onde o dado "
+        "foi armazenado; não comprova a equipe de origem do analista externo."
     )
     if not months:
         st.info(

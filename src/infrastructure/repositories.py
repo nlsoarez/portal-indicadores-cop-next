@@ -395,6 +395,15 @@ class IndicatorRepository:
                 WHERE b.scope='external' AND b.dimension='external_hour'
                   AND b.volume>0 AND d.active=1
                   AND b.segment_id IN ({placeholders})
+                  AND NOT EXISTS (
+                      SELECT 1
+                      FROM users own_user
+                      JOIN user_roles own_ur ON own_ur.user_id=own_user.id
+                      JOIN roles own_role ON own_role.id=own_ur.role_id
+                      WHERE UPPER(own_user.login)=UPPER(b.login)
+                        AND own_user.active=1
+                        AND own_role.code IN ('admin','subadmin','analyst')
+                  )
                 ORDER BY month DESC
                 """,
                 tuple(segment_ids),
@@ -433,6 +442,15 @@ class IndicatorRepository:
                 WHERE b.scope='external' AND b.dimension='external_hour'
                   AND b.volume>0 AND d.active=1
                   AND b.data_month=? AND b.segment_id IN ({placeholders})
+                  AND NOT EXISTS (
+                      SELECT 1
+                      FROM users own_user
+                      JOIN user_roles own_ur ON own_ur.user_id=own_user.id
+                      JOIN roles own_role ON own_role.id=own_ur.role_id
+                      WHERE UPPER(own_user.login)=UPPER(b.login)
+                        AND own_user.active=1
+                        AND own_role.code IN ('admin','subadmin','analyst')
+                  )
                 GROUP BY b.data_month, b.period, b.segment_id, s.name, s.slug,
                          d.indicator_key, d.name, d.direction, d.target_value,
                          d.unit, UPPER(b.login), b.dimension_value

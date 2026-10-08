@@ -25,6 +25,14 @@ class DashboardService:
             include_external=ctx.is_admin,
         )
 
+    def leader_peer_averages(self, ctx: AccessContext, segment_id: int) -> list[dict]:
+        """Referências agregadas dos outros líderes do mesmo setor do usuário."""
+        if not ctx.is_subadmin or ctx.is_admin:
+            raise PermissionError("Comparação entre líderes exige perfil de líder")
+        self.access.assert_segment_access(ctx, segment_id)
+        # O ID excluído é SEMPRE o usuário autenticado, nunca um ID da UI.
+        return self.indicators.leader_peer_averages(segment_id, ctx.user.id)
+
     def analyst_payload(
         self,
         ctx: AccessContext,

@@ -338,6 +338,11 @@ def _valid_cancellation_rate(stats: dict | None) -> float | None:
 
 
 class IndicatorRepository:
+    def cancellation_etit_stats(self, segment_ids: list[int] | None = None) -> dict:
+        """Read monthly cancellation counts and matching ETIT volume only."""
+        with connection() as conn:
+            return _cancellation_etit_stats(conn, segment_ids)
+
     def definitions(self, segment_id: int) -> list[dict]:
         with connection() as conn:
             rows = conn.execute(

@@ -104,6 +104,41 @@ class AnalystSummaryViewTest(unittest.TestCase):
             self.assertIn("Comparação vs líderes", rendered)
             self.assertIn(">—</strong>", rendered)
 
+    def test_leader_cards_disclose_small_team_base_and_missing_peers(self):
+        from unittest.mock import patch
+
+        row = {
+            "indicator_key": "toa_cancellation_rate",
+            "name": "Tarefas Canceladas",
+            "value": 48.1,
+            "target_value": 15.0,
+            "direction": "lower_is_better",
+            "unit": "percent",
+            "volume": 27,
+        }
+        team = {
+            "team_avg": 100.0,
+            "team_volume": 1,
+            "analysts_with_data": 1,
+        }
+        with patch("src.ui.analyst.shell.st.markdown") as markdown:
+            _render_indicator_status_card(
+                row, team, peer=None, leader_view=True
+            )
+            markup = markdown.call_args.args[0]
+            self.assertIn("Base da equipe: 1 analista · volume 1", markup)
+            self.assertIn("referência limitada", markup)
+            self.assertIn("Comparação com a equipe", markup)
+            self.assertIn(
+                "Nenhum outro líder possui resultado disponível", markup
+            )
+            self.assertIn("Média dos outros líderes", markup)
+        with patch("src.ui.analyst.shell.st.markdown") as markdown:
+            _render_indicator_status_card(row, team)
+            markup = markdown.call_args.args[0]
+            self.assertNotIn("Base da equipe:", markup)
+            self.assertNotIn("Nenhum outro líder possui", markup)
+
     def test_target_direction_is_respected(self):
         self.assertTrue(_meets_target(92.0, 90.0, "higher_is_better"))
         self.assertFalse(_meets_target(81.0, 90.0, "higher_is_better"))

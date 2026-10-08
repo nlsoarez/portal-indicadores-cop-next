@@ -381,6 +381,67 @@ class IndicatorRepository:
             ).fetchall()
         return {(int(row["id"]), int(row["segment_id"])) for row in rows}
 
+    def external_night_months(self, segment_ids: list[int]) -> list[str]:
+        """Competências externas, independentes dos resultados da equipe."""
+        if not segment_ids:
+            return []
+        placeholders = ",".join("?" for _ in segment_ids)
+        with connection() as conn:
+            rows = conn.execute(
+                f"""
+                SELECT DISTINCT b.data_month AS month
+                FROM indicator_breakdowns b
+                JOIN indicator_definitions d ON d.id=b.indicator_definition_id
+                WHERE b.scope='external' AND b.dimension='external_hour'
+                  AND b.volume>0 AND d.active=1
+                  AND b.segment_id IN ({placeholders})
+                ORDER BY month DESC
+                """,
+                tuple(segment_ids),
+            ).fetchall()
+        return [str(row["month"]) for row in rows]
+
+    def external_night_records(self, segment_ids: list[int], month: str) -> list[dict]:
+        """Observações externas preservadas com dia/hora; sem join com a equipe.
+
+        O recorte 22:00-05:59 é aplicado posteriormente apenas às horas
+        confirmadas. Fontes sem hora são devolvidas separadamente.
+        """
+        if not segment_ids or not month:
+            return []
+        placeholders = ",".join("?" for _ in segment_ids)
+        with connection() as conn:
+            rows = conn.execute(
+                f"""
+                SELECT b.data_month AS month, b.period AS day,
+                       b.segment_id, s.name AS segment_name,
+                       s.slug AS segment_slug, d.indicator_key, d.name,
+                       d.direction, d.target_value, d.unit,
+                       UPPER(b.login) AS login,
+                       COALESCE(NULLIF(MAX(u.display_name), ''), UPPER(b.login)) AS analyst_name,
+                       b.dimension_value AS hour_label,
+                       SUM(b.volume) AS volume, SUM(b.successes) AS successes,
+                       SUM(b.losses) AS losses,
+                       SUM(b.tma_seconds_sum) AS tma_sum,
+                       SUM(b.tma_count) AS tma_count,
+                       SUM(b.tmr_seconds_sum) AS tmr_sum,
+                       SUM(b.tmr_count) AS tmr_count
+                FROM indicator_breakdowns b
+                JOIN indicator_definitions d ON d.id=b.indicator_definition_id
+                JOIN segments s ON s.id=b.segment_id
+                LEFT JOIN users u ON UPPER(u.login)=UPPER(b.login)
+                WHERE b.scope='external' AND b.dimension='external_hour'
+                  AND b.volume>0 AND d.active=1
+                  AND b.data_month=? AND b.segment_id IN ({placeholders})
+                GROUP BY b.data_month, b.period, b.segment_id, s.name, s.slug,
+                         d.indicator_key, d.name, d.direction, d.target_value,
+                         d.unit, UPPER(b.login), b.dimension_value
+                ORDER BY s.name, d.name, UPPER(b.login), b.period, b.dimension_value
+                """,
+                (month, *segment_ids),
+            ).fetchall()
+        return [dict(row) for row in rows]
+
     def definitions(self, segment_id: int) -> list[dict]:
         with connection() as conn:
             rows = conn.execute(

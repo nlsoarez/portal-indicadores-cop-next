@@ -1086,41 +1086,23 @@ class AnalystShell:
             else:
                 st.caption("Sem detalhamento por RAL/REC disponível no período.")
 
-            left, right = st.columns(2, gap="large")
-            with left:
-                st.markdown("#### Por Demanda (RAL/REC)")
-                demand_table = _etit_dimension_table(
-                    details,
-                    team_details,
-                    "demand",
-                    "Demanda",
-                    include_duration=True,
+            # RAL/REC já estão detalhados nos painéis acima.
+            # A tabela por demanda repetia exatamente os mesmos indicadores.
+            st.markdown("#### Por Tipo")
+            type_table = _etit_dimension_table(
+                details,
+                team_details,
+                "type",
+                "Tipo",
+            )
+            if type_table.empty:
+                st.caption("Sem dados por tipo no período.")
+            else:
+                st.dataframe(
+                    type_table,
+                    use_container_width=True,
+                    hide_index=True,
                 )
-                if demand_table.empty:
-                    st.caption("Sem dados de RAL/REC no período.")
-                else:
-                    st.dataframe(
-                        demand_table,
-                        use_container_width=True,
-                        hide_index=True,
-                    )
-
-            with right:
-                st.markdown("#### Por Tipo")
-                type_table = _etit_dimension_table(
-                    details,
-                    team_details,
-                    "type",
-                    "Tipo",
-                )
-                if type_table.empty:
-                    st.caption("Sem dados por tipo no período.")
-                else:
-                    st.dataframe(
-                        type_table,
-                        use_container_width=True,
-                        hide_index=True,
-                    )
         else:
             service_title = (
                 "#### Por Serviço — Brownfield / Greenfield"

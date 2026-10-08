@@ -42,7 +42,8 @@ def seed_foundation() -> None:
         for login, full_name, display_name, performance_slug in LEADER_SUBADMINS:
             leader_id = _ensure_user(conn, login, full_name, display_name)
             _set_single_role(conn, leader_id, "subadmin")
-            _replace_access_segments(conn, leader_id, active_segment_ids)
+            # A visão de equipe deve ser limitada ao setor do próprio líder.
+            _replace_access_segments(conn, leader_id, [segment_ids[performance_slug]])
             _replace_performance_segments(conn, leader_id, [segment_ids[performance_slug]])
 
         _seed_analysts(conn, segment_ids["preventiva"], PREVENTIVA_ANALYSTS)

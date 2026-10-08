@@ -70,13 +70,17 @@ class AnalystSummaryViewTest(unittest.TestCase):
                 "losses": [1, 1, 2, 0],
             }
         )
+        # O payload real do repositório retorna agregados team_* (não
+        # os campos individuais volume/successes/losses) para a equipe.
         team = pd.DataFrame(
             {
                 "dimension": ["group", "group", "demand", "demand"],
                 "dimension_value": ["Rio e ES", "Norte", "RAL", "REC"],
-                "volume": [100, 20, 80, 40],
-                "successes": [95, 16, 72, 38],
-                "losses": [5, 4, 8, 2],
+                "team_avg": [95.0, 80.0, 90.0, 95.0],
+                "team_volume": [100, 20, 80, 40],
+                "team_successes": [95, 16, 72, 38],
+                "team_losses": [5, 4, 8, 2],
+                "team_analysts": [5, 4, 5, 3],
             }
         )
 

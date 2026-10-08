@@ -472,6 +472,9 @@ class IndicatorRepository:
                     FROM indicator_breakdowns b
                     JOIN indicator_definitions d ON d.id=b.indicator_definition_id
                     JOIN segments s ON s.id=b.segment_id
+                    JOIN users u ON UPPER(u.login)=UPPER(b.login) AND u.active=1
+                    JOIN user_roles ur ON ur.user_id=u.id
+                    JOIN roles r ON r.id=ur.role_id AND r.code='analyst'
                     WHERE b.segment_id IN ({placeholders})
                       AND b.scope='team'
                 ),
@@ -507,6 +510,8 @@ class IndicatorRepository:
                     JOIN indicator_definitions d ON d.id=b.indicator_definition_id
                     JOIN segments s ON s.id=b.segment_id
                     JOIN users u ON UPPER(u.login)=UPPER(b.login) AND u.active=1
+                    JOIN user_roles ur ON ur.user_id=u.id
+                    JOIN roles r ON r.id=ur.role_id AND r.code='analyst'
                     WHERE b.segment_id IN ({placeholders})
                       AND b.scope='team' AND b.dimension='overall'
                 ),
@@ -540,6 +545,9 @@ class IndicatorRepository:
                     FROM indicator_breakdowns b
                     JOIN indicator_definitions d ON d.id=b.indicator_definition_id
                     JOIN segments s ON s.id=b.segment_id
+                    JOIN users u ON UPPER(u.login)=UPPER(b.login) AND u.active=1
+                    JOIN user_roles ur ON ur.user_id=u.id
+                    JOIN roles r ON r.id=ur.role_id AND r.code='analyst'
                     WHERE b.segment_id IN ({placeholders})
                       AND b.scope='team'
                       AND b.dimension IN (
@@ -964,6 +972,9 @@ class IndicatorRepository:
                     COUNT(DISTINCT b.login) AS team_analysts
                 FROM indicator_breakdowns b
                 JOIN indicator_definitions d ON d.id=b.indicator_definition_id
+                JOIN users u ON UPPER(u.login)=UPPER(b.login) AND u.active=1
+                JOIN user_roles ur ON ur.user_id=u.id
+                JOIN roles r ON r.id=ur.role_id AND r.code='analyst'
                 WHERE b.segment_id=? AND b.scope='team' AND d.active=1
                   AND b.dimension IN (
                     'overall', 'group', 'service', 'demand', 'cause', 'cause_toa', 'cause_sir',

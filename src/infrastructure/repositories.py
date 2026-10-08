@@ -333,6 +333,50 @@ class IndicatorRepository:
             ).fetchall()
         return [dict(row) for row in rows]
 
+    def leader_peer_averages(self, segment_id: int, excluded_user_id: int) -> list[dict]:
+        """Média mensal dos OUTROS líderes do mesmo setor, sem misturar competências.
+
+        Primeiro consolida cada líder individualmente; depois calcula a média
+        aritmética entre líderes. Evita que um líder com mais volume pese mais.
+        """
+        with connection() as conn:
+            rows = conn.execute(
+                """
+                WITH leader_month AS (
+                    SELECT
+                        ir.data_month AS period,
+                        d.indicator_key,
+                        ir.user_id,
+                        CAST(SUM(ir.value * ir.volume) AS NUMERIC)
+                            / NULLIF(SUM(ir.volume), 0) AS leader_avg
+                    FROM indicator_results ir
+                    JOIN indicator_definitions d
+                      ON d.id=ir.indicator_definition_id
+                    JOIN users u ON u.id=ir.user_id AND u.active=1
+                    JOIN user_roles ur ON ur.user_id=u.id
+                    JOIN roles role ON role.id=ur.role_id AND role.code='subadmin'
+                    JOIN user_performance_segments ups
+                      ON ups.user_id=u.id AND ups.segment_id=ir.segment_id
+                    WHERE ir.segment_id=?
+                      AND ir.user_id<>?
+                      AND ir.volume>0
+                      AND d.active=1
+                    GROUP BY ir.data_month, d.indicator_key, ir.user_id
+                )
+                SELECT
+                    period,
+                    indicator_key,
+                    ROUND(AVG(leader_avg), 1) AS peer_avg,
+                    COUNT(*) AS peer_count
+                FROM leader_month
+                WHERE leader_avg IS NOT NULL
+                GROUP BY period, indicator_key
+                ORDER BY period DESC, indicator_key
+                """,
+                (segment_id, excluded_user_id),
+            ).fetchall()
+        return [dict(row) for row in rows]
+
     def team_monthly_summary(self, segment_id: int) -> list[dict]:
         with connection() as conn:
             rows = conn.execute(

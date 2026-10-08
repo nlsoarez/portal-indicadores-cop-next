@@ -83,6 +83,29 @@ class DashboardService:
     def _analyst_ids(self, segment_id: int) -> set[int]:
         return {user.id for user in UserRepository().list_for_segment(segment_id)}
 
+    def external_night_months(self, ctx: AccessContext, segment_ids: list[int]) -> list[str]:
+        """Administrator-only view of persisted out-of-team source periods."""
+        if not ctx.is_admin:
+            raise PermissionError("Analistas externos disponíveis apenas ao administrador")
+        ids = sorted({int(value) for value in segment_ids})
+        for segment_id in ids:
+            self.access.assert_segment_access(ctx, segment_id)
+        return self.indicators.external_night_months(ids)
+
+    def external_night_payload(
+        self, ctx: AccessContext, segment_ids: list[int], month: str
+    ) -> list[dict]:
+        """Never allow a leader or analyst to read named external records."""
+        if not ctx.is_admin:
+            raise PermissionError("Analistas externos disponíveis apenas ao administrador")
+        ids = sorted({int(value) for value in segment_ids})
+        for segment_id in ids:
+            self.access.assert_segment_access(ctx, segment_id)
+        available = self.indicators.external_night_months(ids)
+        if month not in available:
+            return []
+        return self.indicators.external_night_records(ids, month)
+
     def leader_quality_report(self, ctx: AccessContext, segment_id: int) -> dict:
         """Read-only quality check: own leader + analysts of the assigned team.
 

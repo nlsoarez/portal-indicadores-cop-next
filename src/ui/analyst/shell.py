@@ -878,9 +878,28 @@ class AnalystShell:
         summary = _cancelled_tasks_user_summary(
             details,
             team_details,
-            etit_volume=etit_base["volume"],
+            etit_volume=_number(row.get("etit_volume")),
             target_pct=_number(row.get("target_value")) or 15.0,
         )
+        if row.get("cancelled_count") is not None:
+            summary["cancelled"] = float(row["cancelled_count"])
+            summary["analyst_pct"] = _number(row.get("value"))
+
+        if row.get("missing_etit_base"):
+            st.warning(
+                "Sem base ETIT na mesma competência: o percentual de cancelamento "
+                "não pode ser calculado. O volume de cancelamentos permanece visível."
+            )
+        elif row.get("incompatible_etit_base"):
+            st.warning(
+                "Base ETIT inconsistente: há mais cancelamentos registrados do que "
+                "eventos ETIT. Percentual e comparação suspensos até a revisão da origem."
+            )
+        if team.get("team_unmatched_cancelled"):
+            st.caption(
+                "Média da equipe indisponível: existem cancelamentos de analistas "
+                "sem base ETIT correspondente no mesmo mês."
+            )
 
         cards = [
             (
@@ -3625,13 +3644,10 @@ def _indicator_volume_for_period(
         for row in candidates
         if str(row.get("period") or "") == str(period or "")
     ]
-    selected = exact if exact else candidates
-    selected = sorted(
-        selected,
-        key=lambda row: str(row.get("period") or ""),
-        reverse=True,
-    )
-    return _number(selected[0].get("volume"))
+    # Sem base do mesmo mês, não usar ETIT de outra competência.
+    if not exact:
+        return None
+    return _number(exact[0].get("volume"))
 
 
 def _cancellation_etit_base_for_period(
@@ -4035,7 +4051,14 @@ def _render_indicator_status_card(
     direction = str(row.get("direction") or "higher_is_better")
     unit = row.get("unit")
 
-    if target is None or value is None:
+    if key == "toa_cancellation_rate" and value is None:
+        status = (
+            "Base incompatível"
+            if row.get("incompatible_etit_base")
+            else "Sem base ETIT"
+        )
+        status_class = "neutral"
+    elif target is None or value is None:
         status = "Sem meta"
         status_class = "neutral"
     elif _meets_target(value, target, direction):
@@ -4066,7 +4089,13 @@ def _render_indicator_status_card(
     volume_html = (
         ""
         if key == "dpa_official"
-        else f"<span>Volume <b>{volume:,}</b></span>".replace(",", ".")
+        else (
+            f"<span>{int(row['cancelled_count']):,} canceladas"
+            f" · {volume:,} registros</span>".replace(",", ".")
+            if key == "toa_cancellation_rate"
+            and row.get("cancelled_count") is not None
+            else f"<span>Volume <b>{volume:,}</b></span>".replace(",", ".")
+        )
     )
 
     icon = _indicator_icon(key)

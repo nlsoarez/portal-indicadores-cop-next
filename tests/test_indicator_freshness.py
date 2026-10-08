@@ -34,7 +34,13 @@ class IndicatorFreshnessTest(unittest.TestCase):
         from src.infrastructure.repositories import SegmentRepository, UserRepository
         users=UserRepository(); segment=SegmentRepository().get_by_slug("preventiva")
         ctx=AccessService(users).context(users.get_by_login("N5604148").id); service=IndicatorFreshnessService()
-        self.assertEqual(6,len(service.freshness(ctx,segment.id)))
+        from src.features.segments.preventiva import PREVENTIVA_INDICATORS
+
+        # A cobertura deve listar todos os indicadores ATIVOS definidos
+        # para a Preventiva, sem depender de uma contagem histórica fixa.
+        expected = {row["indicator_key"] for row in PREVENTIVA_INDICATORS}
+        observed = {row["indicator_key"] for row in service.freshness(ctx, segment.id)}
+        self.assertEqual(expected, observed)
         with self.assertRaises(PermissionError):
             service.record_indicator_data_through(ctx,segment.id,"chat_10m","29/09/2026","chat_toa")
 

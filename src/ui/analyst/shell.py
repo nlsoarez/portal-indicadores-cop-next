@@ -4098,6 +4098,13 @@ def _render_indicator_status_card(
         )
     )
 
+    if key == "toa_cancellation_rate" and team.get("team_unmatched_cancelled"):
+        team_coverage_html += (
+            "<div class='cop-leader-peer-context cop-leader-peer-unavailable'>"
+            "Taxa da equipe suspensa: há cancelamentos sem base ETIT compatível."
+            "</div>"
+        )
+
     icon = _indicator_icon(key)
     leader_html = ""
     leader_context_html = ""
@@ -4127,7 +4134,7 @@ def _render_indicator_status_card(
         if count == 0:
             leader_context_html = (
                 "<div class='cop-leader-peer-context cop-leader-peer-unavailable'>"
-                "Nenhum outro líder possui resultado disponível para este indicador."
+                "Sem referência comparável dos outros líderes para este indicador."
                 "</div>"
             )
         else:

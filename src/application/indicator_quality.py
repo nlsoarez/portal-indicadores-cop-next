@@ -105,10 +105,16 @@ def build_leader_quality_report(
             row["name"].casefold(),
         )
     )
+    source_months = sorted({
+        str(source["data_through"])[:7]
+        for source in source_rows if source.get("data_through")
+    })
     return {
         "period": month,
         "people": result,
         "sources": source_rows,
+        "source_months": source_months,
+        "sources_out_of_sync": len(source_months) > 1,
         "incompatible": sum(x["severity"] == "critical" for x in result),
         "small_samples": sum(x["severity"] == "warning" for x in result),
         "without_etit": sum(x["severity"] == "info" for x in result),

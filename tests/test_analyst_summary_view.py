@@ -59,10 +59,23 @@ class AnalystSummaryViewTest(unittest.TestCase):
             rendered = markdown.call_args.args[0]
             self.assertIn("Média da equipe", rendered)
             self.assertIn("86,0%", rendered)
-            self.assertIn("Outro líder do setor", rendered)
+            self.assertIn("Outro líder", rendered)
             self.assertIn("91,2%", rendered)
             self.assertIn("Comparação vs líderes", rendered)
             self.assertIn("29,4 pp pior", rendered)
+            self.assertIn("todos os segmentos", rendered)
+
+        etit_row = dict(row, indicator_key="emp_etit_event", name="ETIT por Evento")
+        with patch("src.ui.analyst.shell.st.markdown") as markdown:
+            _render_indicator_status_card(
+                etit_row,
+                team,
+                peer={"peer_avg": 91.2, "peer_count": 1, "newest_period": "2026-08"},
+                leader_view=True,
+            )
+            etit_rendered = markdown.call_args.args[0]
+            self.assertIn("Outro líder do segmento", etit_rendered)
+            self.assertIn("mesmo segmento", etit_rendered)
 
         with patch("src.ui.analyst.shell.st.markdown") as markdown:
             _render_indicator_status_card(row, team)

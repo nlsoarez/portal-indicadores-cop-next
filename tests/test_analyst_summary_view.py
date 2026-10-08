@@ -17,6 +17,7 @@ from src.ui.analyst.shell import (
     _dpa_recent_chart_rows,
     _etit_dimension_table,
     _etit_operational_summary,
+    _render_indicator_status_card,
     _enterprise_etit_demand_cards,
     _indicator_recent_rows,
     _indicator_volume_for_period,
@@ -37,6 +38,58 @@ from src.ui.analyst.shell import (
 class AnalystSummaryViewTest(unittest.TestCase):
     def test_period_label_formats_yyyymm_in_portuguese(self):
         self.assertEqual("Setembro 2026", _period_label("202609"))
+
+    def test_leader_summary_cards_show_team_peer_and_both_comparisons(self):
+        from unittest.mock import patch
+
+        row = {
+            "indicator_key": "dpa_official",
+            "name": "DPA Oficial",
+            "value": 61.8,
+            "target_value": 90.0,
+            "direction": "higher_is_better",
+            "unit": "percent",
+            "volume": 1,
+        }
+        team = {"team_avg": 86.0}
+        peer = {"peer_avg": 91.2, "peer_count": 1}
+
+        with patch("src.ui.analyst.shell.st.markdown") as markdown:
+            _render_indicator_status_card(row, team, peer=peer, leader_view=True)
+            rendered = markdown.call_args.args[0]
+            self.assertIn("Média da equipe", rendered)
+            self.assertIn("86,0%", rendered)
+            self.assertIn("Outro líder do setor", rendered)
+            self.assertIn("91,2%", rendered)
+            self.assertIn("Comparação vs líderes", rendered)
+            self.assertIn("29,4 pp pior", rendered)
+
+        with patch("src.ui.analyst.shell.st.markdown") as markdown:
+            _render_indicator_status_card(row, team)
+            rendered = markdown.call_args.args[0]
+            self.assertNotIn("Outro líder do setor", rendered)
+            self.assertNotIn("Comparação vs líderes", rendered)
+
+    def test_leader_summary_with_no_peer_data_does_not_invent_zero(self):
+        from unittest.mock import patch
+
+        row = {
+            "indicator_key": "chat_10m",
+            "name": "Chat 10 min",
+            "value": 80.0,
+            "target_value": 75.0,
+            "direction": "higher_is_better",
+            "unit": "percent",
+            "volume": 15,
+        }
+        with patch("src.ui.analyst.shell.st.markdown") as markdown:
+            _render_indicator_status_card(
+                row, {"team_avg": 70}, peer=None, leader_view=True
+            )
+            rendered = markdown.call_args.args[0]
+            self.assertIn("Média dos outros líderes", rendered)
+            self.assertIn("Comparação vs líderes", rendered)
+            self.assertIn(">—</strong>", rendered)
 
     def test_target_direction_is_respected(self):
         self.assertTrue(_meets_target(92.0, 90.0, "higher_is_better"))

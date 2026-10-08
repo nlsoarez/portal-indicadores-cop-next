@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from src.application.access_service import AccessService
+from src.application.indicator_quality import build_leader_quality_report
 from src.domain.entities import AccessContext
 from src.infrastructure.repositories import IndicatorRepository, UserRepository
 
@@ -81,6 +82,46 @@ class DashboardService:
 
     def _analyst_ids(self, segment_id: int) -> set[int]:
         return {user.id for user in UserRepository().list_for_segment(segment_id)}
+
+    def leader_quality_report(self, ctx: AccessContext, segment_id: int) -> dict:
+        """Read-only quality check: own leader + analysts of the assigned team.
+
+        Never return another leader's individual data and never cross sectors.
+        """
+        if not ctx.is_subadmin or ctx.is_admin:
+            raise PermissionError("Qualidade da equipe disponível apenas ao líder")
+        self.access.assert_segment_access(ctx, segment_id)
+        sources = self.indicators.quality_sources_for_segment(segment_id)
+        stats = self.indicators.cancellation_etit_stats([segment_id])
+
+        # Preferred reference is the latest month with an imported source.
+        # If both ETIT and cancelled imports are absent, use latest observed
+        # month to avoid treating historical records as current.
+        months = [
+            str(row["data_through"])[:7]
+            for row in sources if row.get("data_through")
+        ]
+        if not months:
+            months = [
+                month for sid, _, month in stats if sid == segment_id
+            ]
+        month = max(months, default="")
+        users = UserRepository().list_for_segment(segment_id)
+        return build_leader_quality_report(
+            segment_id=segment_id,
+            month=month,
+            current_leader={
+                "id": ctx.user.id,
+                "login": ctx.user.login,
+                "name": ctx.user.display_name,
+            },
+            analysts=[
+                {"id": person.id, "login": person.login, "name": person.display_name}
+                for person in users
+            ],
+            stats=stats,
+            source_rows=sources,
+        )
 
     def management_payload(self, ctx: AccessContext, segment_ids: list[int]) -> dict:
         if not (ctx.is_admin or ctx.is_subadmin):

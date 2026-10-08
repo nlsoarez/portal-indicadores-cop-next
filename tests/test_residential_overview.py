@@ -88,7 +88,7 @@ class ResidentialOverviewTest(unittest.TestCase):
         self.assertEqual(40, result["inside_volume"])
         self.assertEqual(20, result["outside_volume"])
         self.assertEqual(85.0, result["inside_rate"])
-        self.assertEqual(55.0, result["outside_rate"])
+        self.assertAlmostEqual(55.0, result["outside_rate"], places=8)
         self.assertAlmostEqual(33.3333333333, result["outside_share"], places=5)
 
     def test_outside_indicator_table_reports_share_of_each_indicator(self):

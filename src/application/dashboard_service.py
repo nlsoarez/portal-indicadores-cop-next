@@ -26,7 +26,11 @@ class DashboardService:
         )
 
     def leader_peer_averages(self, ctx: AccessContext, segment_id: int) -> list[dict]:
-        """Referências agregadas dos outros líderes do mesmo setor do usuário."""
+        """Referências agregadas de todos os demais líderes, em qualquer setor.
+
+        A autorização limita os indicadores aos existentes no setor do líder
+        autenticado; a consulta de pares retorna apenas médias consolidadas.
+        """
         if not ctx.is_subadmin or ctx.is_admin:
             raise PermissionError("Comparação entre líderes exige perfil de líder")
         self.access.assert_segment_access(ctx, segment_id)

@@ -173,7 +173,7 @@ class SubadminShell:
         )
         section = st.radio(
             "Explorar equipe",
-            ["Visão geral", "Indicadores", "Analistas"],
+            ["Visão geral", "Indicadores", "Analistas", "Qualidade dos dados"],
             horizontal=True,
             label_visibility="collapsed",
             key="leader_team_section_v2",
@@ -183,6 +183,8 @@ class SubadminShell:
             render_management_indicators(ctx, [segment], self.dashboard)
         elif section == "Analistas":
             self._render_analysts(ctx, segment)
+        elif section == "Qualidade dos dados":
+            self._render_quality(ctx, segment)
         else:
             self._render_team_overview(ctx, segment)
 
@@ -246,6 +248,81 @@ class SubadminShell:
             st.info("Sem dados individuais disponíveis para a competência selecionada.")
         else:
             st.dataframe(table, use_container_width=True, hide_index=True)
+
+    def _render_quality(self, ctx: AccessContext, segment: Segment) -> None:
+        report = self.dashboard.leader_quality_report(ctx, segment.id)
+        st.markdown("### Confiabilidade dos dados de ETIT e Canceladas")
+        st.caption(
+            "Auditoria informativa: identifica falta de base e volumes reduzidos. "
+            "Não modifica cargas, metas nem indicadores. "
+            "Outros líderes não aparecem individualmente nesta visão."
+        )
+        month = report["period"]
+        if not month:
+            st.info("Não há competência identificada para as fontes monitoradas.")
+            return
+        st.caption(f"Competência analisada: {month}")
+        cols = st.columns(4)
+        cols[0].metric("Bases incompatíveis", report["incompatible"])
+        cols[1].metric("Amostras ETIT reduzidas", report["small_samples"])
+        cols[2].metric("Sem eventos ETIT", report["without_etit"])
+        cols[3].metric("Sem alerta", report["no_alert"])
+
+        st.markdown("#### Pendências e cobertura por pessoa")
+        data = pd.DataFrame(report["people"])
+        if not data.empty:
+            view = data.rename(
+                columns={
+                    "name": "Nome",
+                    "login": "Login",
+                    "role": "Perfil",
+                    "month": "Competência",
+                    "cancelled": "Canceladas",
+                    "cancelled_records": "Registros na fonte",
+                    "etit_volume": "Eventos ETIT",
+                    "status": "Situação",
+                    "reason": "Diagnóstico",
+                    "action": "Ação sugerida",
+                }
+            )
+            cols_to_show = [
+                "Nome", "Login", "Perfil", "Competência", "Eventos ETIT",
+                "Canceladas", "Registros na fonte", "Situação",
+                "Diagnóstico", "Ação sugerida",
+            ]
+            st.dataframe(
+                view[cols_to_show],
+                use_container_width=True,
+                hide_index=True,
+            )
+
+        st.markdown("#### Origem e atualização das informações")
+        provenance = pd.DataFrame(report["sources"])
+        if provenance.empty:
+            st.warning("Nenhuma fonte ETIT ou Canceladas cadastrada para o setor.")
+        else:
+            fields = {
+                "name": "Indicador",
+                "data_through": "Dados até",
+                "filename": "Arquivo recebido",
+                "uploaded_at": "Carregado em",
+            }
+            for col in fields:
+                if col not in provenance.columns:
+                    provenance[col] = None
+            st.dataframe(
+                provenance[list(fields)].rename(columns=fields),
+                use_container_width=True,
+                hide_index=True,
+            )
+
+        st.info(
+            "Critério informativo de amostra reduzida: menos de 10 eventos ETIT "
+            "no mês. Não é meta de desempenho. Ausência de ETIT pode ser normal "
+            "para quem não atuou nesse fluxo e exige conferência da escala. "
+            "A taxa de Canceladas só é calculada com denominador ETIT "
+            "compatível na mesma competência."
+        )
 
     def _render_analysts(self, ctx: AccessContext, segment: Segment) -> None:
         analysts = self.access.visible_users(ctx, segment.id)

@@ -4047,6 +4047,21 @@ def _render_indicator_status_card(
 
     comparison = _comparison_label(value, team_avg, direction, unit)
     team_text = "—" if team_avg is None else _format_ptbr_metric(team_avg, unit)
+    team_count = int(team.get("analysts_with_data") or 0)
+    team_base = int(team.get("team_volume") or 0)
+    team_coverage_html = ""
+    if leader_view and team_count:
+        analyst_label = "analista" if team_count == 1 else "analistas"
+        team_coverage_html = (
+            "<div class='cop-leader-team-context'>"
+            f"Base da equipe: {team_count} {analyst_label}"
+            f" · volume {team_base:,}".replace(",", ".")
+            + (
+                " · referência limitada"
+                if team_count == 1 else ""
+            )
+            + "</div>"
+        )
     volume = int(row.get("volume") or 0)
     volume_html = (
         ""
@@ -4080,12 +4095,19 @@ def _render_indicator_status_card(
             "<div><small>Comparação vs líderes</small>"
             f"<strong>{escape(peer_diff)}</strong></div>"
         )
-        leader_context_html = (
-            "<div class='cop-leader-peer-context'>"
-            f"{count} outro(s) líder(es) ({escape(scope)}) · "
-            f"competência(s): {escape(periods)}"
-            "</div>"
-        )
+        if count == 0:
+            leader_context_html = (
+                "<div class='cop-leader-peer-context cop-leader-peer-unavailable'>"
+                "Nenhum outro líder possui resultado disponível para este indicador."
+                "</div>"
+            )
+        else:
+            leader_context_html = (
+                "<div class='cop-leader-peer-context'>"
+                f"Referência: {count} outro(s) líder(es) ({escape(scope)})"
+                f" · competência(s): {escape(periods)}"
+                "</div>"
+            )
 
     st.markdown(
         (
@@ -4101,10 +4123,11 @@ def _render_indicator_status_card(
             "<div class='cop-personal-status-grid'>"
             "<div><small>Média da equipe</small>"
             f"<strong>{escape(team_text)}</strong></div>"
-            "<div><small>Comparação</small>"
+            "<div><small>Comparação com a equipe</small>"
             f"<strong>{escape(comparison)}</strong></div>"
             f"{leader_html}"
             "</div>"
+            f"{team_coverage_html}"
             f"{leader_context_html}"
             "<div class='cop-personal-status-footer'>"
             f"<span>{escape(_target_text(row))}</span>"
@@ -5173,12 +5196,17 @@ def _inject_analyst_styles() -> None:
             background:linear-gradient(180deg, rgba(16,38,61,.90), rgba(8,21,36,.97));
             box-shadow:0 14px 30px rgba(0,0,0,.13);
         }
-        .cop-leader-status-card { min-height:316px; }
+        .cop-leader-status-card { min-height:338px; }
+        .cop-leader-team-context,
         .cop-leader-peer-context {
-            color:#94abc1;
-            font-size:.68rem;
+            color:#afc4d9;
+            font-size:.75rem;
+            line-height:1.45;
             margin-top:.55rem;
-            padding:.1rem .15rem;
+            padding:.15rem .15rem;
+        }
+        .cop-leader-peer-unavailable {
+            color:#c8a775;
         }
         .cop-status-good { border-top-color:#31d58a; }
         .cop-status-attention { border-top-color:#f7b84b; }
@@ -5250,16 +5278,19 @@ def _inject_analyst_styles() -> None:
         }
         .cop-personal-status-grid small {
             display:block;
-            color:#73859a;
-            font-size:.60rem;
+            color:#9cb2ca;
+            font-size:.70rem;
+            font-weight:650;
             text-transform:uppercase;
-            letter-spacing:.06em;
+            letter-spacing:.045em;
+            line-height:1.3;
         }
         .cop-personal-status-grid strong {
             display:block;
-            margin-top:.22rem;
-            color:#dfe9f4;
-            font-size:.75rem;
+            margin-top:.28rem;
+            color:#f0f6fc;
+            font-size:.90rem;
+            line-height:1.3;
         }
         .cop-personal-status-footer {
             display:flex;
@@ -5269,10 +5300,10 @@ def _inject_analyst_styles() -> None:
             margin-top:.75rem;
             padding-top:.65rem;
             border-top:1px solid rgba(148,163,184,.10);
-            color:#8294aa;
-            font-size:.67rem;
+            color:#a4b7cb;
+            font-size:.75rem;
         }
-        .cop-personal-status-footer b { color:#b9c8d7; }
+        .cop-personal-status-footer b { color:#e0eaf5; }
 
         @media (max-width: 900px) {
             .cop-analyst-identity {

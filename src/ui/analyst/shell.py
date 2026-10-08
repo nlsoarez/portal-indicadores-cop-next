@@ -53,6 +53,13 @@ DETAIL_DIMENSIONS = {
 }
 
 
+ETIT_LEADER_KEYS = frozenset({
+    "emp_etit_event",
+    "res_etit_fibra_hfc",
+    "res_etit_gpon",
+})
+
+
 INDICATOR_TAB_LABELS = {
     "res_assert_fibra_hfc": "📡 Assert. HFC",
     "res_assert_gpon": "📶 Assert. GPON",
@@ -467,9 +474,9 @@ class AnalystShell:
         )
         if self._peer_leader_index is not None:
             st.caption(
-                "Referência: resultados mais recentes dos outros líderes, "
-                "independentemente do setor ou mês. Apenas indicadores equivalentes "
-                "são comparados; veja a cobertura e as competências de cada indicador."
+                "ETIT: comparação apenas com os líderes do mesmo segmento. "
+                "Demais indicadores: comparação com todos os outros líderes. "
+                "Utiliza o último mês disponível de cada pessoa e mostra a cobertura."
 
             )
         for start in range(0, len(latest), 3):
@@ -3975,6 +3982,14 @@ def _leader_peer_period_label(peer: dict) -> str:
     return f"{oldest} a {newest}"
 
 
+def _leader_peer_scope(indicator_key: str) -> str:
+    return (
+        "mesmo segmento"
+        if indicator_key in ETIT_LEADER_KEYS
+        else "todos os segmentos"
+    )
+
+
 def _render_leader_benchmark(row: dict, team: dict, peer: dict) -> None:
     """Apresenta pares de qualquer setor e competência, no mesmo indicador."""
     unit = row.get("unit")
@@ -3983,7 +3998,14 @@ def _render_leader_benchmark(row: dict, team: dict, peer: dict) -> None:
     team_value = _number(team.get("team_avg"))
     peer_value = _number(peer.get("peer_avg"))
     count = int(peer.get("peer_count") or 0)
-    label = "Outro líder" if count == 1 else "Média dos outros líderes"
+    scope = _leader_peer_scope(str(row.get("indicator_key") or ""))
+    label = (
+        "Outro líder do segmento"
+        if count == 1 and scope == "mesmo segmento"
+        else "Outro líder"
+        if count == 1
+        else "Média dos outros líderes"
+    )
     cols = st.columns(4)
     cols[0].metric("Meu resultado", _format_ptbr_metric(own, unit))
     cols[1].metric("Média da equipe", _format_ptbr_metric(team_value, unit))
@@ -3994,7 +4016,7 @@ def _render_leader_benchmark(row: dict, team: dict, peer: dict) -> None:
     )
     periods = _leader_peer_period_label(peer)
     st.caption(
-        f"Comparação com {count} outro(s) líder(es) de qualquer setor · "
+        f"Comparação com {count} outro(s) líder(es) ({scope}) · "
         f"Dados de referência: {periods} · "
         f"Seu mês: {row.get('period') or '—'}. "
         "Quando os meses diferirem, a comparação é apenas referencial."
@@ -4043,7 +4065,14 @@ def _render_indicator_status_card(
         peer = peer or {}
         peer_avg = _number(peer.get("peer_avg"))
         count = int(peer.get("peer_count") or 0)
-        peer_label = "Outro líder" if count == 1 else "Média dos outros líderes"
+        scope = _leader_peer_scope(key)
+        peer_label = (
+            "Outro líder do segmento"
+            if count == 1 and scope == "mesmo segmento"
+            else "Outro líder"
+            if count == 1
+            else "Média dos outros líderes"
+        )
         peer_text = _format_ptbr_metric(peer_avg, unit)
         peer_diff = _comparison_label(value, peer_avg, direction, unit)
         leader_class = " cop-leader-status-card"
@@ -4056,7 +4085,7 @@ def _render_indicator_status_card(
         )
         leader_context_html = (
             "<div class='cop-leader-peer-context'>"
-            f"{count} outro(s) líder(es) · "
+            f"{count} outro(s) líder(es) ({escape(scope)}) · "
             f"competência(s): {escape(periods)}"
             "</div>"
         )

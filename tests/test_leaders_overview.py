@@ -17,9 +17,9 @@ from src.ui.admin.leaders_overview import (
 class LeadersOverviewTest(unittest.TestCase):
     def test_build_leader_performance_uses_exact_total_components_and_latest_dpa(self):
         leader = SimpleNamespace(
-            login="N1",
+            login="N5923221",
             display_name="Kelly",
-            full_name="Kelly Lira da Silva",
+            full_name="KELLY PINHEIRO LIRA",
         )
         segment = SimpleNamespace(name="Residencial")
         payload = {

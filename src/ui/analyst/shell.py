@@ -71,7 +71,7 @@ INDICATOR_TAB_LABELS = {
 class AnalystShell:
     def __init__(self):
         self.dashboard = DashboardService()
-        self._peer_leader_index: dict[tuple[str, str], dict] | None = None
+        self._peer_leader_index: dict[str, dict] | None = None
 
     def render(
         self,
@@ -105,10 +105,11 @@ class AnalystShell:
 
         payload = self.dashboard.analyst_payload(ctx, segment.id)
         latest = _latest_by_indicator(payload.get("summary") or [])
-        # Somente dados agregados dos pares, no segmento permitido.
+        # Referência global agregada: o resultado mais recente de cada outro
+        # líder por indicador compatível, sem limitar mês ou setor.
         if embedded and ctx.is_subadmin:
             self._peer_leader_index = {
-                (str(item["period"]), str(item["indicator_key"])): item
+                str(item["indicator_key"]): item
                 for item in self.dashboard.leader_peer_averages(ctx, segment.id)
             }
         else:
@@ -460,14 +461,16 @@ class AnalystShell:
 
         st.markdown("### Minha situação")
         st.caption(
-            "Compare seus resultados com as metas, a equipe e os outros líderes do setor."
+            "Compare seus resultados com as metas, sua equipe e os demais líderes do COP Rede."
             if self._peer_leader_index is not None
             else "Veja rapidamente onde você está dentro da meta, como se compara com a equipe e onde concentrar atenção."
         )
         if self._peer_leader_index is not None:
             st.caption(
-                "Comparação com outros líderes: mesmo setor, indicador e mês. "
-                "Seu próprio resultado não entra na média."
+                "Referência: resultados mais recentes dos outros líderes, "
+                "independentemente do setor ou mês. Apenas indicadores equivalentes "
+                "são comparados; veja a cobertura e as competências de cada indicador."
+
             )
         for start in range(0, len(latest), 3):
             cols = st.columns(3)
@@ -477,7 +480,7 @@ class AnalystShell:
                 team = team_index.get((period, key), {})
                 with column:
                     peer = (
-                        self._peer_leader_index.get((period, key))
+                        self._peer_leader_index.get(key)
                         if self._peer_leader_index is not None else None
                     )
                     _render_indicator_status_card(
@@ -519,10 +522,7 @@ class AnalystShell:
         st.markdown(f"### {indicator_name}")
 
         if self._peer_leader_index is not None:
-            peer = self._peer_leader_index.get(
-                (str(row.get("period")), indicator_key),
-                {},
-            )
+            peer = self._peer_leader_index.get(indicator_key, {})
             _render_leader_benchmark(row, team, peer)
 
         details = _latest_indicator_rows(
@@ -3965,15 +3965,25 @@ def _render_summary_insight(
     )
 
 
+def _leader_peer_period_label(peer: dict) -> str:
+    oldest = str(peer.get("oldest_period") or "").strip()
+    newest = str(peer.get("newest_period") or "").strip()
+    if not oldest and not newest:
+        return "sem dados equivalentes"
+    if oldest == newest or not oldest or not newest:
+        return oldest or newest
+    return f"{oldest} a {newest}"
+
+
 def _render_leader_benchmark(row: dict, team: dict, peer: dict) -> None:
-    """Apresenta referências do mesmo indicador e competência mensal."""
+    """Apresenta pares de qualquer setor e competência, no mesmo indicador."""
     unit = row.get("unit")
     direction = str(row.get("direction") or "higher_is_better")
     own = _number(row.get("value"))
     team_value = _number(team.get("team_avg"))
     peer_value = _number(peer.get("peer_avg"))
     count = int(peer.get("peer_count") or 0)
-    label = "Outro líder do setor" if count == 1 else "Média dos outros líderes"
+    label = "Outro líder" if count == 1 else "Média dos outros líderes"
     cols = st.columns(4)
     cols[0].metric("Meu resultado", _format_ptbr_metric(own, unit))
     cols[1].metric("Média da equipe", _format_ptbr_metric(team_value, unit))
@@ -3982,10 +3992,12 @@ def _render_leader_benchmark(row: dict, team: dict, peer: dict) -> None:
         "Comparação vs líderes",
         _comparison_label(own, peer_value, direction, unit),
     )
+    periods = _leader_peer_period_label(peer)
     st.caption(
-        "Mesmo indicador e competência mensal · "
-        f"{count} outro(s) líder(es) com dados · "
-        "resultados individuais de terceiros não são exibidos."
+        f"Comparação com {count} outro(s) líder(es) de qualquer setor · "
+        f"Dados de referência: {periods} · "
+        f"Seu mês: {row.get('period') or '—'}. "
+        "Quando os meses diferirem, a comparação é apenas referencial."
     )
 
 
@@ -4025,20 +4037,28 @@ def _render_indicator_status_card(
 
     icon = _indicator_icon(key)
     leader_html = ""
+    leader_context_html = ""
     leader_class = ""
     if leader_view:
         peer = peer or {}
         peer_avg = _number(peer.get("peer_avg"))
         count = int(peer.get("peer_count") or 0)
-        peer_label = "Outro líder do setor" if count == 1 else "Média dos outros líderes"
+        peer_label = "Outro líder" if count == 1 else "Média dos outros líderes"
         peer_text = _format_ptbr_metric(peer_avg, unit)
         peer_diff = _comparison_label(value, peer_avg, direction, unit)
         leader_class = " cop-leader-status-card"
+        periods = _leader_peer_period_label(peer)
         leader_html = (
             f"<div><small>{escape(peer_label)}</small>"
             f"<strong>{escape(peer_text)}</strong></div>"
             "<div><small>Comparação vs líderes</small>"
             f"<strong>{escape(peer_diff)}</strong></div>"
+        )
+        leader_context_html = (
+            "<div class='cop-leader-peer-context'>"
+            f"{count} outro(s) líder(es) · "
+            f"competência(s): {escape(periods)}"
+            "</div>"
         )
 
     st.markdown(
@@ -4059,6 +4079,7 @@ def _render_indicator_status_card(
             f"<strong>{escape(comparison)}</strong></div>"
             f"{leader_html}"
             "</div>"
+            f"{leader_context_html}"
             "<div class='cop-personal-status-footer'>"
             f"<span>{escape(_target_text(row))}</span>"
             f"{volume_html}"
@@ -5126,7 +5147,13 @@ def _inject_analyst_styles() -> None:
             background:linear-gradient(180deg, rgba(16,38,61,.90), rgba(8,21,36,.97));
             box-shadow:0 14px 30px rgba(0,0,0,.13);
         }
-        .cop-leader-status-card { min-height:296px; }
+        .cop-leader-status-card { min-height:316px; }
+        .cop-leader-peer-context {
+            color:#94abc1;
+            font-size:.68rem;
+            margin-top:.55rem;
+            padding:.1rem .15rem;
+        }
         .cop-status-good { border-top-color:#31d58a; }
         .cop-status-attention { border-top-color:#f7b84b; }
         .cop-personal-status-head {

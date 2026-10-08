@@ -670,6 +670,36 @@ class AnalystSummaryViewTest(unittest.TestCase):
         )
 
         self.assertEqual(137.0, volume)
+        self.assertIsNone(
+            _indicator_volume_for_period(rows, "emp_etit_event", "2026-10")
+        )
+
+    def test_missing_etit_card_preserves_cancelled_count_and_blocks_percent(self):
+        from unittest.mock import patch
+
+        row = {
+            "indicator_key": "toa_cancellation_rate",
+            "name": "Tarefas Canceladas",
+            "value": None,
+            "target_value": 15.0,
+            "direction": "lower_is_better",
+            "unit": "percent",
+            "volume": 27,
+            "cancelled_count": 13,
+            "missing_etit_base": True,
+        }
+        with patch("src.ui.analyst.shell.st.markdown") as markdown:
+            _render_indicator_status_card(
+                row, {"team_avg": 0.6, "team_volume": 179,
+                      "analysts_with_data": 6},
+                peer=None, leader_view=True,
+            )
+            markup = markdown.call_args.args[0]
+            self.assertIn("Sem base ETIT", markup)
+            self.assertIn("13 canceladas", markup)
+            self.assertIn("27 registros", markup)
+            self.assertNotIn("48,1%", markup)
+            self.assertIn("0,6%", markup)
 
     def test_chat_group_table_exposes_group_volume_adherence_and_team_reference(self):
         details = pd.DataFrame(

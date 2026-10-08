@@ -343,6 +343,29 @@ class IndicatorRepository:
         with connection() as conn:
             return _cancellation_etit_stats(conn, segment_ids)
 
+    def quality_sources_for_segment(self, segment_id: int) -> list[dict]:
+        """Read provenance for the ETIT and cancelled-task sources; no writes."""
+        with connection() as conn:
+            rows = conn.execute(
+                """
+                SELECT d.indicator_key, d.name,
+                       f.data_through, f.source_key, f.refreshed_at,
+                       up.filename, up.created_at AS uploaded_at
+                FROM indicator_definitions d
+                LEFT JOIN indicator_freshness f
+                  ON f.indicator_definition_id=d.id AND f.segment_id=d.segment_id
+                LEFT JOIN uploads up ON up.id=f.upload_id
+                WHERE d.segment_id=? AND d.active=1
+                  AND d.indicator_key IN (
+                    'emp_etit_event', 'res_etit_fibra_hfc',
+                    'res_etit_gpon', 'toa_cancellation_rate'
+                  )
+                ORDER BY d.indicator_key
+                """,
+                (segment_id,),
+            ).fetchall()
+        return [dict(row) for row in rows]
+
     def leader_performance_pairs(self) -> set[tuple[int, int]]:
         """Active leader ID and their own performance segment (no sensitive data)."""
         with connection() as conn:

@@ -3991,11 +3991,10 @@ def _leader_peer_scope(indicator_key: str) -> str:
 
 
 def _render_leader_benchmark(row: dict, team: dict, peer: dict) -> None:
-    """Apresenta pares de qualquer setor e competência, no mesmo indicador."""
+    """Referência adicional sem duplicar os cards individuais do indicador."""
     unit = row.get("unit")
     direction = str(row.get("direction") or "higher_is_better")
     own = _number(row.get("value"))
-    team_value = _number(team.get("team_avg"))
     peer_value = _number(peer.get("peer_avg"))
     count = int(peer.get("peer_count") or 0)
     scope = _leader_peer_scope(str(row.get("indicator_key") or ""))
@@ -4006,11 +4005,9 @@ def _render_leader_benchmark(row: dict, team: dict, peer: dict) -> None:
         if count == 1
         else "Média dos outros líderes"
     )
-    cols = st.columns(4)
-    cols[0].metric("Meu resultado", _format_ptbr_metric(own, unit))
-    cols[1].metric("Média da equipe", _format_ptbr_metric(team_value, unit))
-    cols[2].metric(label, _format_ptbr_metric(peer_value, unit))
-    cols[3].metric(
+    cols = st.columns(2)
+    cols[0].metric(label, _format_ptbr_metric(peer_value, unit))
+    cols[1].metric(
         "Comparação vs líderes",
         _comparison_label(own, peer_value, direction, unit),
     )

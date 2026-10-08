@@ -17,7 +17,7 @@ from src.ui.analyst.shell import (
     _dpa_recent_chart_rows,
     _etit_dimension_table,
     _etit_operational_summary,
-    _etit_team_demand_cards,
+    _enterprise_etit_demand_cards,
     _indicator_recent_rows,
     _indicator_volume_for_period,
     _meets_target,
@@ -291,26 +291,78 @@ class AnalystSummaryViewTest(unittest.TestCase):
         self.assertEqual("00:01:00", brownfield["TMA"])
         self.assertEqual("50,0%", greenfield["Aderência %"])
 
-    def test_etit_enterprise_team_demand_cards_show_ral_rec(self):
+    def test_enterprise_etit_demand_cards_separate_my_results_from_team(self):
+        details = pd.DataFrame(
+            {
+                "dimension": ["overall", "demand", "demand", "type"],
+                "dimension_value": ["Total", " RAL ", "rec", "ACESSO CLIENTE"],
+                "volume": [137, 107, 30, 38],
+                "successes": [124, 95, 29, 36],
+                "losses": [13, 12, 1, 2],
+                "tma_seconds": [150.0, 183.0, 30.0, 120.0],
+                "tmr_seconds": [1300.0, 1226.0, 1563.0, 1000.0],
+            }
+        )
         team = pd.DataFrame(
             {
                 "dimension": ["demand", "demand"],
                 "dimension_value": ["RAL", "REC"],
-                "team_avg": [92.2, 94.6],
-                "team_volume": [100, 50],
-                "team_successes": [92.2, 47.3],
-                "team_losses": [7.8, 2.7],
-                "team_analysts": [2, 2],
+                "team_avg": [91.1, 95.6],
+                "team_volume": [500, 300],
+                "team_successes": [455.5, 286.8],
+                "team_losses": [27, 4],
+                "team_analysts": [5, 8],
             }
         )
 
-        cards = _etit_team_demand_cards(team)
-        labels = [item["label"] for item in cards]
+        cards = _enterprise_etit_demand_cards(details, team)
+        self.assertEqual(["RAL", "REC"], [card["demand"] for card in cards])
+        ral, rec = cards
 
-        self.assertIn("% RAL Ader. (média equipe)", labels)
-        self.assertIn("RAL N. Ader. (média equipe)", labels)
-        self.assertIn("% REC Ader. (média equipe)", labels)
-        self.assertIn("REC N. Ader. (média equipe)", labels)
+        self.assertEqual((107, 95, 12), (
+            ral["volume"], ral["successes"], ral["losses"]
+        ))
+        self.assertAlmostEqual(95 / 107 * 100, ral["adherence"])
+        self.assertEqual(91.1, ral["team_avg"])
+        self.assertEqual("2,3 pp pior", ral["comparison"])
+        self.assertEqual("attention", ral["comparison_tone"])
+        self.assertEqual(183.0, ral["tma_seconds"])
+        self.assertEqual(1226.0, ral["tmr_seconds"])
+        self.assertAlmostEqual(5.4, ral["avg_team_losses"])
+
+        self.assertEqual((30, 29, 1), (
+            rec["volume"], rec["successes"], rec["losses"]
+        ))
+        self.assertAlmostEqual(29 / 30 * 100, rec["adherence"])
+        self.assertEqual(95.6, rec["team_avg"])
+        self.assertEqual("1,1 pp melhor", rec["comparison"])
+        self.assertEqual("good", rec["comparison_tone"])
+        self.assertEqual(30.0, rec["tma_seconds"])
+        self.assertEqual(1563.0, rec["tmr_seconds"])
+        self.assertAlmostEqual(0.5, rec["avg_team_losses"])
+
+        # Somente a dimensão demand; outras dimensões repetem os eventos.
+        self.assertEqual(137, ral["volume"] + rec["volume"])
+        self.assertEqual(124, ral["successes"] + rec["successes"])
+        self.assertEqual(13, ral["losses"] + rec["losses"])
+
+    def test_enterprise_etit_missing_demand_is_not_reported_as_zero(self):
+        details = pd.DataFrame(
+            {
+                "dimension": ["demand"],
+                "dimension_value": ["RAL"],
+                "volume": [9],
+                "successes": [9],
+                "losses": [0],
+            }
+        )
+        cards = _enterprise_etit_demand_cards(details, pd.DataFrame())
+        self.assertTrue(cards[0]["has_data"])
+        self.assertEqual("RAL", cards[0]["demand"])
+        self.assertIsNone(cards[0]["team_avg"])
+        self.assertEqual("—", cards[0]["comparison"])
+        self.assertFalse(cards[1]["has_data"])
+        self.assertEqual("REC", cards[1]["demand"])
 
     def test_dpa_recent_chart_rows_include_all_available_days_without_team(self):
         payload = {

@@ -118,6 +118,20 @@ class LeaderDataQualityTest(unittest.TestCase):
                 and x["data_through"]=="2026-09-28" for x in report["sources"])
         )
 
+    def test_monthly_source_mismatch_is_reported_not_silently_reconciled(self):
+        leader = {"id": 4, "login": "LEADER", "name": "Leader"}
+        report = build_leader_quality_report(
+            segment_id=2, month="2026-10",
+            current_leader=leader, analysts=[], stats={},
+            source_rows=[
+                {"indicator_key": "res_etit_gpon", "data_through": "2026-10-05"},
+                {"indicator_key": "toa_cancellation_rate", "data_through": "2026-09-28"},
+            ],
+        )
+        self.assertTrue(report["sources_out_of_sync"])
+        self.assertEqual(["2026-09", "2026-10"], report["source_months"])
+        self.assertEqual("Sem ETIT", report["people"][0]["status"])
+
     def test_quality_report_is_pure_and_only_contains_permitted_people(self):
         subject = {"id": 4, "login": "LEADER", "name": "Leader"}
         analysts = [{"id": 5, "login": "A1", "name": "Analyst"}]

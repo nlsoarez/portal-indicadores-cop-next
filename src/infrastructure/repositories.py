@@ -334,13 +334,13 @@ class IndicatorRepository:
         return [dict(row) for row in rows]
 
     def leader_peer_averages(self, segment_id: int, excluded_user_id: int) -> list[dict]:
-        """Compara o líder com TODOS os demais líderes, de qualquer segmento.
+        """Referência global de líderes, com exceção dos indicadores ETIT.
 
-        Para cada indicador compatível com o setor do líder autenticado, utiliza
-        a competência mais recente disponível de cada OUTRO líder, mesmo que
-        as competências sejam diferentes. Consolida primeiro os registros do
-        mês de cada pessoa; depois calcula uma média sem peso por pessoa.
-        Não retorna identidade nem resultados individuais dos comparados.
+        ETIT considera apenas líderes do mesmo segmento. Os demais indicadores
+        comparam todos os outros líderes de qualquer segmento. Para cada pessoa
+        utiliza a competência mais recente disponível do mesmo indicador, sem
+        impor coincidência de mês. Consolida o mês por líder e calcula a média
+        aritmética entre líderes, sem retornar dados individuais dos pares.
         """
         with connection() as conn:
             rows = conn.execute(
@@ -368,6 +368,14 @@ class IndicatorRepository:
                           FROM indicator_definitions
                           WHERE segment_id=? AND active=1
                       )
+                      AND (
+                          d.indicator_key NOT IN (
+                              'emp_etit_event',
+                              'res_etit_fibra_hfc',
+                              'res_etit_gpon'
+                          )
+                          OR ir.segment_id=?
+                      )
                     GROUP BY ir.data_month, d.indicator_key, ir.user_id
                 ),
                 latest_month AS (
@@ -394,7 +402,7 @@ class IndicatorRepository:
                 GROUP BY indicator_key
                 ORDER BY indicator_key
                 """,
-                (excluded_user_id, segment_id),
+                (excluded_user_id, segment_id, segment_id),
             ).fetchall()
         return [dict(row) for row in rows]
 

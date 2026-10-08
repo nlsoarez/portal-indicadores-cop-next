@@ -6,6 +6,7 @@ import pandas as pd
 import streamlit as st
 
 from src.application.dashboard_service import DashboardService
+from src.application.indicator_quality import ETIT_SMALL_SAMPLE_THRESHOLD
 from src.application.segment_context import switch_segment_state
 from src.domain.entities import AccessContext, Segment
 from src.ui.shared.chrome import render_sidebar_brand
@@ -4106,7 +4107,7 @@ def _render_indicator_status_card(
         )
 
     quality_sample_html = ""
-    if leader_view and key in ETIT_LEADER_KEYS and 0 < volume < 10:
+    if leader_view and key in ETIT_LEADER_KEYS and 0 < volume < ETIT_SMALL_SAMPLE_THRESHOLD:
         quality_sample_html = (
             "<div class='cop-quality-sample-warning'>"
             f"Amostra reduzida: apenas {volume} evento(s) ETIT no mês. "

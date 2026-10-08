@@ -343,6 +343,21 @@ class IndicatorRepository:
         with connection() as conn:
             return _cancellation_etit_stats(conn, segment_ids)
 
+    def leader_performance_pairs(self) -> set[tuple[int, int]]:
+        """Active leader ID and their own performance segment (no sensitive data)."""
+        with connection() as conn:
+            rows = conn.execute(
+                """
+                SELECT DISTINCT u.id, ups.segment_id
+                FROM users u
+                JOIN user_roles ur ON ur.user_id=u.id
+                JOIN roles r ON r.id=ur.role_id AND r.code='subadmin'
+                JOIN user_performance_segments ups ON ups.user_id=u.id
+                WHERE u.active=1
+                """
+            ).fetchall()
+        return {(int(row["id"]), int(row["segment_id"])) for row in rows}
+
     def definitions(self, segment_id: int) -> list[dict]:
         with connection() as conn:
             rows = conn.execute(

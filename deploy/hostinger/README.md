@@ -73,7 +73,7 @@ Antes de remover possíveis dados de testes antigos, faça backup e gere um
 relatório **somente leitura**:
 
 ```bash
-docker exec portal-indicadores-cop python deploy/hostinger/audit-test-data.py
+docker exec -e PYTHONPATH=/app portal-indicadores-cop python deploy/hostinger/audit-test-data.py
 ```
 
 O relatório marca registros *suspeitos*, não confirma automaticamente que todos

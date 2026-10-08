@@ -25,8 +25,11 @@ class UserRepository:
             row = conn.execute(
                 "SELECT attempts FROM auth_attempts WHERE bucket_key=?", (bucket_key,)
             ).fetchone()
+            allowed = int(row["attempts"]) <= 5
+        # Release the bucket lock before pruning other buckets to avoid lock inversion.
+        with transaction() as conn:
             conn.execute("DELETE FROM auth_attempts WHERE window_start<?", (window_start - 120,))
-            return int(row["attempts"]) <= 5
+        return allowed
 
     def get_by_login(self, login: str) -> User | None:
         with connection() as conn:

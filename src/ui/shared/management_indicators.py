@@ -247,6 +247,30 @@ def _render_source(
             external_df=external_df,
             freshness_index=freshness_index,
         )
+        # ETIT Empresarial possui uma única aba, portanto não passa pelo
+        # fluxo multi-indicador usado pelo Residencial. A visão de outros
+        # analistas deve ser renderizada após os resultados da própria equipe.
+        if ctx.is_admin and source_label == "ETIT Empresarial":
+            from src.ui.admin.external_analysts import (
+                render_external_monthly_by_indicator,
+            )
+
+            available = segment_df[
+                (segment_df["indicator_key"] == "emp_etit_event")
+                & (segment_df["segment_slug"] == "empresarial")
+            ] if {"indicator_key", "segment_slug", "segment_id"}.issubset(
+                segment_df.columns
+            ) else pd.DataFrame()
+            if not available.empty:
+                st.divider()
+                render_external_monthly_by_indicator(
+                    ctx,
+                    dashboard,
+                    int(available.iloc[0]["segment_id"]),
+                    {"emp_etit_event": "ETIT por Evento — Empresarial"},
+                    widget_prefix="admin_emp_external",
+                    title="🌙 Outros analistas no meu horário — Empresarial",
+                )
         return
 
     indicator_names = []

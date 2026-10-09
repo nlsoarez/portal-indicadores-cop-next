@@ -53,6 +53,98 @@ class AllSourceAdaptersTest(unittest.TestCase):
         self.assertEqual(["emp_etit_event"],[r.indicator_key for _,r in results])
         self.assertEqual(3,results[0][1].total_volume)
 
+    def test_enterprise_etit_legacy_jefferson_alias_merges_daily_and_ral_rec(self):
+        from src.application.upload_service import UploadProcessingService
+        from src.infrastructure.repositories import IndicatorRepository
+
+        df = pd.DataFrame({
+            "INDICADOR_NOME": ["ETIT POR EVENTO"] * 4,
+            "LOGIN_ACIONAMENTO": [
+                "N6105010", "N6105010", "N6173055", "OTHERTEAM",
+            ],
+            "VOLUME": [2, 1, 2, 4],
+            "INDICADOR": [1, 0, 1, 1],
+            "IN_REGIONAL": ["Leste"] * 4,
+            "DT_INICIO": ["2026-10-06"] * 4,
+            "DT_ACIONAMENTO": ["2026-10-06 22:30:00"] * 4,
+            "ANOMES": [202610] * 4,
+            "DEMANDA": ["RAL", "RAL", "REC", "RAL"],
+        })
+        content = self.xlsx(df, "Empresarial")
+        upload = UploadProcessingService()
+
+        for cycle in range(2):  # Reimportar NÃO duplica eventos.
+            results = upload.process_global_source(
+                self.ctx, "enterprise_indicators", "emp.xlsx", content
+            )
+            self.assertEqual(1, len(results))
+            self.assertEqual(1, results[0][1].analyst_count)
+            self.assertEqual(5, results[0][1].total_volume)
+
+            repo = IndicatorRepository()
+            jefferson = self.users.get_by_login("N6173055")
+            my_rows = [
+                row for row in repo.results_for_user(
+                    self.enterprise.id, jefferson.id
+                )
+                if row["indicator_key"] == "emp_etit_event"
+                and row["data_month"] == "2026-10"
+            ]
+            self.assertEqual(1, len(my_rows))
+            self.assertEqual(5, my_rows[0]["volume"])
+            self.assertEqual(80.0, my_rows[0]["value"])
+
+            payload = repo.dashboard_payload(self.enterprise.id, jefferson.id)
+            demands = [
+                row for row in payload["breakdowns"]
+                if row["indicator_key"] == "emp_etit_event"
+                and row["dimension"] == "demand"
+            ]
+            by_demand = {row["dimension_value"]: row for row in demands}
+            self.assertEqual({"RAL", "REC"}, set(by_demand))
+            self.assertEqual(3, by_demand["RAL"]["volume"])
+            self.assertEqual(2, by_demand["RAL"]["successes"])
+            self.assertEqual(1, by_demand["RAL"]["losses"])
+            self.assertEqual(2, by_demand["REC"]["volume"])
+            self.assertEqual(2, by_demand["REC"]["successes"])
+
+            externals = repo.external_night_records(
+                [self.enterprise.id], "2026-10"
+            )
+            self.assertEqual({"OTHERTEAM"}, {r["login"] for r in externals})
+            self.assertEqual(4, sum(r["volume"] for r in externals))
+
+    def test_enterprise_etit_parser_normalizes_jefferson_alias_before_scope(self):
+        from src.features.ingestion.enterprise_indicators import (
+            parse_enterprise_indicators,
+        )
+
+        df = pd.DataFrame({
+            "INDICADOR_NOME": ["ETIT POR EVENTO"] * 2,
+            "LOGIN_ACIONAMENTO": ["n6105010", "N6173055"],
+            "VOLUME": [3, 2],
+            "INDICADOR": [1, 0],
+            "IN_REGIONAL": ["Leste", "Leste"],
+            "DT_INICIO": ["2026-09-06", "2026-09-06"],
+            "DT_ACIONAMENTO": [
+                "2026-09-06 22:00:00", "2026-09-06 23:00:00",
+            ],
+            "ANOMES": [202609, 202609],
+            "DEMANDA": ["RAL", "REC"],
+        })
+        batches = parse_enterprise_indicators(
+            self.xlsx(df, "Empresarial"), {"N6173055"}
+        )
+        self.assertEqual(1, len(batches))
+        self.assertEqual(("2026-09",), batches[0].months)
+        self.assertEqual(1, len(batches[0].rows))
+        self.assertEqual("N6173055", batches[0].rows[0]["login"])
+        self.assertEqual(5, batches[0].rows[0]["volume"])
+        self.assertEqual(60.0, batches[0].rows[0]["value"])
+        self.assertFalse(
+            any(r["scope"] == "external" for r in batches[0].breakdowns)
+        )
+
     def test_chat_parser_preserves_in_group_breakdown_for_analyst(self):
         from src.application.upload_service import UploadProcessingService
         from src.infrastructure.repositories import IndicatorRepository

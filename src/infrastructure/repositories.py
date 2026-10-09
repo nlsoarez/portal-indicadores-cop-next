@@ -410,6 +410,51 @@ class IndicatorRepository:
             ).fetchall()
         return [str(row["month"]) for row in rows]
 
+    def external_night_coverage(
+        self, segment_ids: list[int], indicator_keys: list[str]
+    ) -> list[dict]:
+        """Only strictly timed external work; distinct month for each KPI."""
+        if not segment_ids or not indicator_keys:
+            return []
+        seg_placeholders = ",".join("?" for _ in segment_ids)
+        key_placeholders = ",".join("?" for _ in indicator_keys)
+        with connection() as conn:
+            rows = conn.execute(
+                f"""
+                SELECT b.segment_id, s.slug AS segment_slug,
+                       d.indicator_key, d.name, b.data_month AS month,
+                       SUM(b.volume) AS volume,
+                       SUM(b.successes) AS successes,
+                       SUM(b.losses) AS losses,
+                       COUNT(DISTINCT UPPER(b.login)) AS external_logins
+                FROM indicator_breakdowns b
+                JOIN indicator_definitions d ON d.id=b.indicator_definition_id
+                JOIN segments s ON s.id=b.segment_id
+                WHERE b.scope='external' AND b.dimension='external_hour'
+                  AND b.volume>0 AND d.active=1
+                  AND b.segment_id IN ({seg_placeholders})
+                  AND d.indicator_key IN ({key_placeholders})
+                  AND b.dimension_value IN (
+                      '22','23','0','00','1','01','2','02',
+                      '3','03','4','04','5','05'
+                  )
+                  AND NOT EXISTS (
+                      SELECT 1
+                      FROM users own_user
+                      JOIN user_roles own_ur ON own_ur.user_id=own_user.id
+                      JOIN roles own_role ON own_role.id=own_ur.role_id
+                      WHERE UPPER(own_user.login)=UPPER(b.login)
+                        AND own_user.active=1
+                        AND own_role.code IN ('admin','subadmin','analyst')
+                  )
+                GROUP BY b.segment_id, s.slug, d.indicator_key, d.name,
+                         b.data_month
+                ORDER BY b.data_month DESC, s.slug, d.indicator_key
+                """,
+                (*segment_ids, *indicator_keys),
+            ).fetchall()
+        return [dict(row) for row in rows]
+
     def external_night_records(self, segment_ids: list[int], month: str) -> list[dict]:
         """Observações externas preservadas com dia/hora; sem join com a equipe.
 

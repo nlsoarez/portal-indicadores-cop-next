@@ -166,6 +166,10 @@ class JeffersonLegacyEtitRecoveryTest(unittest.TestCase):
         jefferson = rank[rank["Nome"] == "Jefferson"].iloc[0]
         self.assertEqual("—", jefferson["RAL"])
         self.assertEqual("—", jefferson["REC"])
+        # A base de eventos pode não fornecer durações. Não quebrar o
+        # ranking nem exibir TMA/TMR iguais a zero sem evidências.
+        self.assertEqual("—", jefferson["TMA"])
+        self.assertEqual("—", jefferson["TMR"])
         detail = build_demand_analyst_table(people, breakdowns)
         jefferson_detail = detail[detail["Analista"] == "Jefferson"].iloc[0]
         self.assertTrue(math.isnan(jefferson_detail["RAL Ader."]))

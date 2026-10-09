@@ -400,7 +400,12 @@ class IndicatorRepository:
                       FROM users own_user
                       JOIN user_roles own_ur ON own_ur.user_id=own_user.id
                       JOIN roles own_role ON own_role.id=own_ur.role_id
-                      WHERE UPPER(own_user.login)=UPPER(b.login)
+                      WHERE UPPER(own_user.login)=(
+                          CASE UPPER(b.login)
+                              WHEN 'N6105010' THEN 'N6173055'
+                              ELSE UPPER(b.login)
+                          END
+                      )
                         AND own_user.active=1
                         AND own_role.code IN ('admin','subadmin','analyst')
                   )
@@ -443,7 +448,12 @@ class IndicatorRepository:
                       FROM users own_user
                       JOIN user_roles own_ur ON own_ur.user_id=own_user.id
                       JOIN roles own_role ON own_role.id=own_ur.role_id
-                      WHERE UPPER(own_user.login)=UPPER(b.login)
+                      WHERE UPPER(own_user.login)=(
+                          CASE UPPER(b.login)
+                              WHEN 'N6105010' THEN 'N6173055'
+                              ELSE UPPER(b.login)
+                          END
+                      )
                         AND own_user.active=1
                         AND own_role.code IN ('admin','subadmin','analyst')
                   )
@@ -492,7 +502,12 @@ class IndicatorRepository:
                       FROM users own_user
                       JOIN user_roles own_ur ON own_ur.user_id=own_user.id
                       JOIN roles own_role ON own_role.id=own_ur.role_id
-                      WHERE UPPER(own_user.login)=UPPER(b.login)
+                      WHERE UPPER(own_user.login)=(
+                          CASE UPPER(b.login)
+                              WHEN 'N6105010' THEN 'N6173055'
+                              ELSE UPPER(b.login)
+                          END
+                      )
                         AND own_user.active=1
                         AND own_role.code IN ('admin','subadmin','analyst')
                   )

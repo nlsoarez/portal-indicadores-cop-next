@@ -87,6 +87,76 @@ def _indicator_summary(frame: pd.DataFrame) -> pd.DataFrame:
     ].sort_values(["Segmento", "Indicador"])
 
 
+def _monthly_indicator_summary(frame: pd.DataFrame) -> pd.DataFrame:
+    """Full-month weighted performance, separately for each indicator/segment.
+
+    Every day's positive and total counts are added BEFORE calculating the
+    percentage, preventing an average of daily percentages or double counting.
+    """
+    if frame.empty:
+        return pd.DataFrame()
+    table = frame.groupby(
+        ["month", "segment_name", "indicator_key", "name"], as_index=False
+    ).agg(
+        external_logins=("login", "nunique"),
+        monthly_volume=("volume", "sum"),
+        monthly_success=("successes", "sum"),
+        monthly_losses=("losses", "sum"),
+    )
+    table["Resultado mensal (%)"] = [
+        _pct(success, total)
+        for success, total in zip(table["monthly_success"], table["monthly_volume"])
+    ]
+    return table.rename(columns={
+        "month": "Competência",
+        "segment_name": "Segmento",
+        "name": "Indicador",
+        "external_logins": "Analistas externos",
+        "monthly_volume": "Volume no mês",
+        "monthly_success": "Positivos no mês",
+        "monthly_losses": "Negativos no mês",
+    })[
+        ["Competência", "Segmento", "Indicador", "Analistas externos",
+         "Volume no mês", "Positivos no mês", "Negativos no mês",
+         "Resultado mensal (%)"]
+    ].sort_values(["Segmento", "Indicador"]).reset_index(drop=True)
+
+
+def _monthly_external_people(frame: pd.DataFrame) -> pd.DataFrame:
+    """One monthly row per analyst and indicator; daily data only in drilldown."""
+    if frame.empty:
+        return pd.DataFrame()
+    table = frame.groupby(
+        ["month", "segment_name", "indicator_key", "name", "login", "analyst_name"],
+        as_index=False,
+    ).agg(
+        monthly_volume=("volume", "sum"),
+        monthly_success=("successes", "sum"),
+        monthly_losses=("losses", "sum"),
+    )
+    table["Resultado mensal (%)"] = [
+        _pct(success, total)
+        for success, total in zip(table["monthly_success"], table["monthly_volume"])
+    ]
+    return table.rename(columns={
+        "month": "Competência",
+        "segment_name": "Segmento",
+        "name": "Indicador",
+        "login": "Login",
+        "analyst_name": "Nome",
+        "monthly_volume": "Volume no mês",
+        "monthly_success": "Positivos no mês",
+        "monthly_losses": "Negativos no mês",
+    })[
+        ["Competência", "Segmento", "Indicador", "Login", "Nome",
+         "Volume no mês", "Positivos no mês", "Negativos no mês",
+         "Resultado mensal (%)"]
+    ].sort_values(
+        ["Volume no mês", "Indicador", "Login"],
+        ascending=[False, True, True],
+    ).reset_index(drop=True)
+
+
 def _people_summary(frame: pd.DataFrame) -> pd.DataFrame:
     if frame.empty:
         return pd.DataFrame()
@@ -222,9 +292,15 @@ def render_admin_external_analysts(
             "a taxa de cada indicador separadamente."
         )
 
-        st.markdown("#### Volume por fonte e indicador")
+        st.markdown(f"#### Percentual mensal por indicador — {month}")
+        st.caption(
+            "Somatório de todos os dias da competência entre 22h00 e 05h59. "
+            "Percentual mensal = total positivo ÷ volume total do indicador."
+        )
         st.dataframe(
-            _indicator_summary(confirmed), use_container_width=True, hide_index=True
+            _monthly_indicator_summary(confirmed),
+            use_container_width=True,
+            hide_index=True,
         )
 
         choices = (
@@ -260,9 +336,11 @@ def render_admin_external_analysts(
                 | scoped["analyst_name"].astype(str).str.contains(search, case=False, regex=False)
             ]
 
-        st.markdown("#### Desempenho por analista externo")
+        st.markdown(f"#### Resultado do mês inteiro por analista externo — {month}")
         st.dataframe(
-            _people_summary(scoped), use_container_width=True, hide_index=True
+            _monthly_external_people(scoped),
+            use_container_width=True,
+            hide_index=True,
         )
         with st.expander("Abrir ocorrências por dia e hora", expanded=False):
             detail = _detail_table(scoped)

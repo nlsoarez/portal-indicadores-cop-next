@@ -7,8 +7,6 @@ The complete original XLSX is still required to recover those dimensions.
 from __future__ import annotations
 
 from collections import defaultdict
-from contextlib import nullcontext
-
 from src.infrastructure.database import connection, transaction
 
 ALIAS_LOGIN = "N6105010"

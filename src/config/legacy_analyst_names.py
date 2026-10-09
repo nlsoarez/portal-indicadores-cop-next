@@ -109,11 +109,19 @@ LEGACY_LOGIN_ALIASES: dict[str, str] = {
 }
 
 
+def canonical_login(login: object) -> str:
+    """Resolve the legacy login aliases documented in the former portal.
+
+    Used before classifying ETIT events as team or external, so both
+    historical and current logins contribute to the same analyst.
+    """
+    normalized = str(login or "").strip().upper()
+    return LEGACY_LOGIN_ALIASES.get(normalized, normalized)
+
+
 def legacy_name_for_login(login: str) -> str | None:
     """Return only explicitly documented names; unknown IDs have no match."""
-    normalized = str(login or "").strip().upper()
+    normalized = canonical_login(login)
     if not normalized:
         return None
-    return LEGACY_ANALYST_NAMES.get(
-        LEGACY_LOGIN_ALIASES.get(normalized, normalized)
-    )
+    return LEGACY_ANALYST_NAMES.get(normalized)

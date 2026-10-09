@@ -242,6 +242,12 @@ def build_ranking_table(
     if not demand_pivot.empty:
         totals = totals.merge(demand_pivot, on="login", how="left")
 
+    # Alguns analíticos históricos preservam contagem e aderência, mas não
+    # TMA/TMR. Nesses casos a duração é indisponível (—), nunca zero.
+    for column in ("tma_seconds", "tmr_seconds"):
+        if column not in totals.columns:
+            totals[column] = None
+
     for column in ("volume", "successes", "losses", "RAL", "REC"):
         if column not in totals.columns:
             totals[column] = 0

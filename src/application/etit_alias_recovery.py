@@ -105,6 +105,7 @@ def recover_jefferson_etit(*, apply: bool = False) -> dict:
 
         by_month = defaultdict(lambda: [0, 0, 0])
         per_day = defaultdict(lambda: [0, 0, 0, 0.0, 0, 0.0, 0])
+        events_with_date_outside_competence = 0
         for row in rows:
             month = str(row["data_month"])
             hour = str(row["dimension_value"])
@@ -117,6 +118,8 @@ def recover_jefferson_etit(*, apply: bool = False) -> dict:
                 raise EtitRecoveryGuardError("Bucket com horário não noturno")
             if volume <= 0 or positives < 0 or negatives < 0 or positives + negatives != volume:
                 raise EtitRecoveryGuardError("Volume/aderência inconsistente no histórico")
+            if not str(row["period"]).startswith(month):
+                events_with_date_outside_competence += volume
             by_month[month][0] += volume
             by_month[month][1] += positives
             by_month[month][2] += negatives
@@ -149,6 +152,7 @@ def recover_jefferson_etit(*, apply: bool = False) -> dict:
             },
             "source_buckets": len(rows),
             "days": len(per_day),
+            "events_with_date_outside_competence": events_with_date_outside_competence,
             "ral_rec": "NÃO DISPONÍVEL nesta fonte; exige reimportação completa",
         }
         if not apply:

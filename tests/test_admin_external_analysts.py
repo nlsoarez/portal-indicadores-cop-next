@@ -277,6 +277,168 @@ class ExternalAnalystsNightTest(unittest.TestCase):
         self.assertEqual(10, month.iloc[0]["Volume no mês"])
         self.assertEqual("90,0%", month.iloc[0]["Resultado mensal (%)"])
 
+    def test_separate_external_months_for_residential_gpon_and_hfc(self):
+        self.add_rows(
+            self.res, "res_etit_gpon",
+            [("GPON_OUTSIDE", "2026-09-16", "22", 11, 10)],
+            month="2026-09",
+        )
+        self.add_rows(
+            self.res, "res_etit_fibra_hfc",
+            [("HFC_OUTSIDE", "2026-10-06", "23", 9, 6)],
+            month="2026-10",
+        )
+        coverage = self.service.external_night_coverage(
+            self.admin, [self.res.id],
+            ["res_etit_gpon", "res_etit_fibra_hfc",
+             "res_assert_fibra_hfc", "res_assert_gpon"],
+        )
+        index = {(r["indicator_key"], r["month"]): r for r in coverage}
+        self.assertEqual(
+            11, index[("res_etit_gpon", "2026-09")]["volume"]
+        )
+        self.assertEqual(
+            9, index[("res_etit_fibra_hfc", "2026-10")]["volume"]
+        )
+        self.assertNotIn(("res_etit_gpon", "2026-10"), index)
+        self.assertEqual(
+            {"2026-09"}, {
+                row["month"] for row in coverage
+                if row["indicator_key"] == "res_etit_gpon"
+            },
+        )
+
+    def test_enterprise_external_coverage_is_separate_from_residential(self):
+        self.add_rows(
+            self.emp, "emp_etit_event",
+            [("EMPOUT", "2026-10-06", "22", 33, 20)],
+            month="2026-10",
+        )
+        self.add_rows(
+            self.res, "res_etit_gpon",
+            [("RESOUT", "2026-09-06", "22", 11, 10)],
+            month="2026-09",
+        )
+        enterprise = self.service.external_night_coverage(
+            self.admin, [self.emp.id], ["emp_etit_event"]
+        )
+        self.assertEqual(1, len(enterprise))
+        self.assertEqual("emp_etit_event", enterprise[0]["indicator_key"])
+        self.assertEqual("2026-10", enterprise[0]["month"])
+        self.assertEqual(33, enterprise[0]["volume"])
+        residential = self.service.external_night_coverage(
+            self.admin, [self.res.id], ["res_etit_gpon"]
+        )
+        self.assertEqual(11, residential[0]["volume"])
+        leader = self.service.access.context(
+            self.users.get_by_login("N5619600").id
+        )
+        with self.assertRaises(PermissionError):
+            self.service.external_night_coverage(
+                leader, [self.emp.id], ["emp_etit_event"]
+            )
+
+    def test_render_shows_each_indicator_with_independent_latest_month(self):
+        from contextlib import nullcontext
+        from unittest.mock import patch
+        from src.ui.admin.external_analysts import (
+            render_external_monthly_by_indicator,
+        )
+
+        self.add_rows(
+            self.res, "res_etit_gpon",
+            [("GPON_OUT", "2026-09-07", "22", 11, 10)],
+            month="2026-09",
+        )
+        self.add_rows(
+            self.res, "res_etit_fibra_hfc",
+            [("HFC_OUT", "2026-10-07", "23", 9, 6)],
+            month="2026-10",
+        )
+        module = "src.ui.admin.external_analysts"
+        chosen = {}
+        def choose(label, options, **kwargs):
+            chosen[label] = list(options)
+            return options[0]
+
+        with (
+            patch(f"{module}.st.markdown"),
+            patch(f"{module}.st.caption"),
+            patch(f"{module}.st.warning") as warning,
+            patch(f"{module}.st.info"),
+            patch(f"{module}.st.tabs", side_effect=lambda labels: [
+                nullcontext() for _ in labels
+            ]),
+            patch(f"{module}.st.selectbox", side_effect=choose),
+            patch(f"{module}.st.columns", side_effect=lambda count: [
+                type("Col", (), {"metric": lambda *args, **kw: None})()
+                for _ in range(count)
+            ]),
+            patch(f"{module}.st.dataframe"),
+            patch(f"{module}.st.download_button"),
+            patch(f"{module}.st.expander", return_value=nullcontext()),
+        ):
+            render_external_monthly_by_indicator(
+                self.admin, self.service, self.res.id,
+                {
+                    "res_etit_fibra_hfc": "ETIT HFC",
+                    "res_etit_gpon": "ETIT GPON",
+                },
+                widget_prefix="test_separated_periods",
+                title="Analistas externos",
+            )
+        self.assertEqual(
+            ["2026-10"], chosen["Competência — ETIT HFC"]
+        )
+        self.assertEqual(
+            ["2026-09"], chosen["Competência — ETIT GPON"]
+        )
+        self.assertTrue(warning.called)
+        self.assertIn(
+            "ETIT GPON", warning.call_args_list[0].args[0]
+        )
+
+    def test_enterprise_source_appends_external_section_after_own_dashboard(self):
+        from unittest.mock import patch
+        from types import SimpleNamespace
+        import pandas as pd
+        from src.ui.shared.management_indicators import _render_source
+
+        scope = pd.DataFrame([{
+            "segment_slug": "empresarial",
+            "segment_id": self.emp.id,
+            "indicator_key": "emp_etit_event",
+        }])
+        order = []
+        with (
+            patch("src.ui.shared.management_indicators.st.markdown"),
+            patch("src.ui.shared.management_indicators.st.divider"),
+            patch("src.ui.shared.management_indicators._render_indicator",
+                  side_effect=lambda *a, **k: order.append("own")),
+            patch("src.ui.admin.external_analysts."
+                  "render_external_monthly_by_indicator",
+                  side_effect=lambda *a, **k: order.append("external")) as view,
+        ):
+            _render_source(
+                source_label="ETIT Empresarial",
+                indicator_keys=("emp_etit_event",),
+                ctx=SimpleNamespace(is_admin=True),
+                dashboard=self.service,
+                segment_df=scope,
+                analyst_df=pd.DataFrame(),
+                analyst_metrics_df=pd.DataFrame(),
+                analyst_breakdowns_df=pd.DataFrame(),
+                daily_df=pd.DataFrame(),
+                breakdown_df=pd.DataFrame(),
+                external_df=pd.DataFrame(),
+                freshness_index={},
+            )
+        self.assertEqual(["own", "external"], order)
+        self.assertEqual(self.emp.id, view.call_args.args[2])
+        self.assertEqual(
+            ["emp_etit_event"], list(view.call_args.args[3])
+        )
+
     def test_only_integer_hour_labels_can_prove_night_window(self):
         self.assertEqual(8, len(NIGHT_HOURS))
         for raw in ("22", "23", "0", "05"):

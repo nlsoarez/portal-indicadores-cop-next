@@ -35,6 +35,13 @@ def render_admin_enterprise_etit(
     if ranking.empty:
         st.info("Nenhum analista com resultado para a competência atual.")
     else:
+        if ranking[["RAL", "REC"]].isin(["—"]).any().any():
+            st.warning(
+                "Um ou mais analistas têm ETIT recuperado de registros por horário. "
+                "Os volumes e aderência são comprovados, mas RAL/REC ainda não "
+                "estão disponíveis. Reimporte o analítico completo para obter "
+                "o detalhamento dessas demandas."
+            )
         st.dataframe(
             style_ranking_table(ranking),
             use_container_width=True,
@@ -225,6 +232,11 @@ def build_ranking_table(
 
     demand = _dimension_rows(analyst_breakdowns, "demand")
     demand_pivot = _analyst_demand_volume_pivot(demand)
+    unknown_demands = (
+        set(totals["login"].astype(str)) -
+        set(demand["login"].astype(str))
+        if not demand.empty else set(totals["login"].astype(str))
+    )
 
     totals = totals.merge(identity, on="login", how="left")
     if not demand_pivot.empty:
@@ -255,8 +267,14 @@ def build_ranking_table(
             "Eventos": totals["volume"].round().astype(int),
             "Aderentes": totals["successes"].round().astype(int),
             "Aderência %": totals["Aderência %"],
-            "RAL": totals["RAL"].round().astype(int),
-            "REC": totals["REC"].round().astype(int),
+            "RAL": totals["RAL"].round().astype(int).astype(object).mask(
+                totals["login"].isin(unknown_demands) & (totals["volume"] > 0),
+                "—",
+            ),
+            "REC": totals["REC"].round().astype(int).astype(object).mask(
+                totals["login"].isin(unknown_demands) & (totals["volume"] > 0),
+                "—",
+            ),
             "TMA": totals["tma_seconds"].apply(_duration),
             "TMR": totals["tmr_seconds"].apply(_duration),
         }
@@ -279,6 +297,12 @@ def demand_team_averages(
     if not universe or rows.empty:
         return result
 
+    # Um usuário com histórico recuperado apenas por horário não tem RAL/REC:
+    # incluí-lo com zeros reduziria artificialmente a média da equipe.
+    known_login = set(rows["login"].astype(str))
+    eligible = [login for login in universe if login in known_login]
+    if not eligible:
+        return result
     for demand, prefix in (("RAL", "ral"), ("REC", "rec")):
         part = rows[rows["dimension_value"].astype(str).str.upper() == demand].copy()
         if part.empty:
@@ -288,7 +312,7 @@ def demand_team_averages(
         grouped = (
             part.groupby("login", dropna=False)
             .agg(successes=("successes", "sum"), losses=("losses", "sum"))
-            .reindex(universe, fill_value=0)
+            .reindex(eligible, fill_value=0)
         )
         result[f"{prefix}_adherents"] = float(grouped["successes"].mean())
         result[f"{prefix}_non_adherents"] = float(grouped["losses"].mean())
@@ -314,8 +338,19 @@ def build_demand_analyst_table(
     )
 
     output = []
+    known_login = set(rows["login"].astype(str))
     for login in universe:
         item = {"login": login, "Analista": identities.get(login, login)}
+        if login not in known_login:
+            # Fonte recuperada não contém DEMANDA: jamais representar
+            # classificação não disponível como 0 aderentes RAL/REC.
+            for demand in ("RAL", "REC"):
+                item[f"{demand} Ader."] = math.nan
+                item[f"{demand} N. Ader."] = math.nan
+                item[f"% {demand} Ader."] = math.nan
+                item[f"% {demand} N. Ader."] = math.nan
+            output.append(item)
+            continue
         for demand in ("RAL", "REC"):
             part = rows[
                 (rows["login"].astype(str) == str(login))
@@ -336,7 +371,7 @@ def build_demand_analyst_table(
         + table["REC Ader."]
         + table["RAL N. Ader."]
         + table["REC N. Ader."]
-    )
+    ).fillna(-1)
     table = table.sort_values(
         ["_total", "Analista"],
         ascending=[False, True],

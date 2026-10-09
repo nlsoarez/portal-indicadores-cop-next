@@ -2,6 +2,7 @@ from __future__ import annotations
 
 from collections import defaultdict
 
+from src.config.legacy_analyst_names import canonical_login
 from src.features.ingestion.breakdowns import (
     add_ratio,
     decimal_hours_to_seconds,
@@ -41,7 +42,11 @@ def parse_enterprise_indicators(raw_bytes: bytes, allowed_logins: set[str]) -> t
         region = str(row.get("IN_REGIONAL") or "").strip()
         if region.upper() != "LESTE":
             continue
-        login = normalize_login(row.get("LOGIN_ACIONAMENTO"))
+        # A mesma pessoa pode usar diferentes logins no arquivo.
+        # Ex.: N6105010 é a matrícula alternativa de Jefferson (N6173055).
+        # Canonicalizar ANTES de decidir se o registro é da equipe ou externo,
+        # e ANTES de agregar valores/dimensões (RAL, REC, TMA, TMR).
+        login = canonical_login(normalize_login(row.get("LOGIN_ACIONAMENTO")))
         if not login:
             continue
         anomes = as_int(row.get("ANOMES"))

@@ -8,8 +8,8 @@ import streamlit as st
 from src.application.dashboard_service import DashboardService
 from src.domain.entities import AccessContext
 from src.ui.admin.external_analysts import (
-    _as_frame, _indicator_summary, _partition_external_records,
-    _people_summary, _detail_table,
+    _as_frame, _partition_external_records, _monthly_indicator_summary,
+    _monthly_external_people, _detail_table,
 )
 
 
@@ -89,20 +89,13 @@ def render_admin_residential_overview(
             hide_index=True,
         )
 
-    segment_matches = segment_df[
-        segment_df["indicator_key"].isin(RESIDENTIAL_INDICATOR_ORDER)
-        & segment_df["segment_slug"].eq("residencial")
-    ] if {"indicator_key", "segment_slug"}.issubset(segment_df.columns) else pd.DataFrame()
-    if not segment_matches.empty:
-        _render_external_residential_night(
-            ctx, dashboard, int(segment_matches.iloc[0]["segment_id"])
-        )
-
+    # Primeiro: indicadores e comportamento da PRÓPRIA equipe.
+    # A visão de outras equipes é renderizada só depois das abas detalhadas.
     with st.expander(
-        "Consulta secundária: atuação da minha própria equipe fora do horário",
-        expanded=False,
+        "Atuação da minha equipe — dentro e fora da janela",
+        expanded=True,
     ):
-        st.markdown("#### Apenas minha equipe — comparação entre horários")
+        st.markdown("#### Minha equipe — 22h00–05h59 × 06h00–21h59")
         st.caption(
             "Os logins aqui pertencem à equipe cadastrada e NÃO são externos. " 
             "Janela operacional considerada: 22:00–05:59. "
@@ -213,50 +206,77 @@ def _render_external_residential_night(
         )
         return
 
-    metrics = st.columns(4)
-    metrics[0].metric("Analistas de outras equipes", frame["login"].nunique())
-    metrics[1].metric("Atendimentos na minha janela", int(frame["volume"].sum()))
-    metrics[2].metric("Positivos", int(frame["successes"].sum()))
-    metrics[3].metric("Negativos", int(frame["losses"].sum()))
+    metrics = st.columns(3)
+    metrics[0].metric("Analistas externos no mês", frame["login"].nunique())
+    metrics[1].metric("Atendimentos externos no mês", int(frame["volume"].sum()))
+    metrics[2].metric("Indicadores com atendimentos", frame["indicator_key"].nunique())
 
-    st.markdown("#### Por indicador — somente externos durante a madrugada")
-    summary = _indicator_summary(frame)
+    st.markdown(f"#### Resultado mensal por indicador — {month}")
+    st.caption(
+        "Consolidado do mês inteiro, exclusivamente entre 22h00 e 05h59. "
+        "Resultado mensal = total de positivos no mês ÷ total de eventos "
+        "do mesmo indicador. Não é a média simples dos percentuais diários."
+    )
+    summary = _monthly_indicator_summary(frame)
     st.dataframe(summary, use_container_width=True, hide_index=True)
 
-    keys = [key for key in RESIDENTIAL_INDICATOR_ORDER
-            if key in set(frame["indicator_key"])]
-    selection = st.selectbox(
-        "Indicador dos analistas externos",
-        ["all", *keys],
-        format_func=lambda key: (
-            "Todos os indicadores"
-            if key == "all" else INDICATOR_META[key]["title"]
-        ),
-        key="admin_residential_external_indicator_v2",
-    )
-    scoped = frame if selection == "all" else frame[
-        frame["indicator_key"] == selection
+    keys = [
+        key for key in RESIDENTIAL_INDICATOR_ORDER
+        if key in set(frame["indicator_key"])
     ]
+    selection = st.selectbox(
+        "Indicador para detalhamento mensal dos analistas externos",
+        keys,
+        format_func=lambda key: INDICATOR_META[key]["title"],
+        key="admin_residential_external_indicator_monthly_v3",
+    )
+    scoped = frame[frame["indicator_key"] == selection]
+    volume = int(scoped["volume"].sum())
+    positives = int(scoped["successes"].sum())
+    negatives = int(scoped["losses"].sum())
+    monthly_result = positives * 100 / volume if volume else 0.0
 
-    st.markdown("#### Analistas externos atendendo entre 22h00 e 05h59")
+    st.markdown(
+        f"#### {INDICATOR_META[selection]['title']} — consolidado de {month}"
+    )
+    cards = st.columns(4)
+    cards[0].metric("Aderência/Assertividade no mês", f"{monthly_result:.1f}%".replace(".", ","))
+    cards[1].metric("Volume mensal", volume)
+    cards[2].metric("Positivos no mês", positives)
+    cards[3].metric("Negativos no mês", negatives)
+
+    monthly_people = _monthly_external_people(scoped)
+    st.markdown("##### Resultado mensal por analista externo")
     st.dataframe(
-        _people_summary(scoped),
+        monthly_people,
         use_container_width=True,
         hide_index=True,
     )
-    with st.expander("Detalhamento dos atendimentos externos por data e hora"):
+    st.download_button(
+        "Exportar consolidado mensal dos externos (CSV)",
+        data=monthly_people.to_csv(index=False).encode("utf-8-sig"),
+        file_name=f"externos_{selection}_{month}_mensal.csv",
+        mime="text/csv",
+        key="admin_residential_external_monthly_export_v3",
+    )
+    with st.expander("Consultar dias e horários que compõem o mês", expanded=False):
+        st.caption(
+            "Esta tabela contém o detalhamento diário usado no consolidado "
+            "acima. Os dias não são tratados como resultados mensais separados."
+        )
         detail = _detail_table(scoped)
         st.dataframe(detail, use_container_width=True, hide_index=True)
         st.download_button(
-            "Exportar atendimentos dos analistas externos (CSV)",
+            "Exportar ocorrências por dia e hora (CSV)",
             detail.to_csv(index=False).encode("utf-8-sig"),
-            file_name=f"outros_analistas_residencial_madrugada_{month}.csv",
+            file_name=f"externos_{selection}_{month}_ocorrencias.csv",
             mime="text/csv",
+            key="admin_residential_external_detail_export_v3",
         )
     st.caption(
-        "Os registros externos são mantidos separados dos resultados da "
-        "equipe cadastrada. Se uma fonte não trouxer hora verificável, "
-        "seus dados não entram neste total."
+        "Os atendimentos de outras equipes não entram nos indicadores da "
+        "minha equipe. Apenas horários confirmados entre 22h00 e 05h59 "
+        "compõem os totais mensais."
     )
 
 

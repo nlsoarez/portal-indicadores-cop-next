@@ -16,6 +16,8 @@ from src.ui.admin.external_analysts import (
     _people_summary,
     _monthly_indicator_summary,
     _monthly_external_people,
+    _monthly_external_adherence_table,
+    _external_name,
     _detail_table,
 )
 from tests.isolated_database import isolate_sqlite_database
@@ -121,6 +123,7 @@ class ExternalAnalystsNightTest(unittest.TestCase):
                 ("N0239871", "2026-10-06", "0", 6, 6),    # Leonardo: equipe
                 ("N5772086", "2026-10-06", "3", 4, 3),    # Thiago: equipe
                 ("F104752", "2026-10-06", "5", 2, 2),     # Marcelo: equipe
+                ("N6105010", "2026-10-06", "22", 8, 6),  # Jefferson: alias legado
                 ("OTHERTEAM", "2026-10-06", "22", 5, 4), # outro analista
             ],
         )
@@ -358,7 +361,7 @@ class ExternalAnalystsNightTest(unittest.TestCase):
         module = "src.ui.admin.external_analysts"
         chosen = {}
         def choose(label, options, **kwargs):
-            chosen[label] = list(options)
+            chosen[kwargs["key"]] = list(options)
             return options[0]
 
         with (
@@ -388,15 +391,14 @@ class ExternalAnalystsNightTest(unittest.TestCase):
                 title="Analistas externos",
             )
         self.assertEqual(
-            ["2026-10"], chosen["Competência — ETIT HFC"]
+            ["2026-10"],
+            chosen["test_separated_periods_month_res_etit_fibra_hfc_v5"],
         )
         self.assertEqual(
-            ["2026-09"], chosen["Competência — ETIT GPON"]
+            ["2026-09"],
+            chosen["test_separated_periods_month_res_etit_gpon_v5"],
         )
-        self.assertTrue(warning.called)
-        self.assertIn(
-            "ETIT GPON", warning.call_args_list[0].args[0]
-        )
+        self.assertFalse(warning.called)
 
     def test_enterprise_source_appends_external_section_after_own_dashboard(self):
         from unittest.mock import patch
@@ -438,6 +440,121 @@ class ExternalAnalystsNightTest(unittest.TestCase):
         self.assertEqual(
             ["emp_etit_event"], list(view.call_args.args[3])
         )
+
+    def test_names_come_from_legacy_portal_without_guessing_unknown_logins(self):
+        self.assertEqual(
+            "TIAGO ALMEIDA TIBURCIO DE SOUZA",
+            _external_name("N5963881", "N5963881"),
+        )
+        self.assertEqual(
+            "JOAO GABRIEL DE ALMEIDA FERREIRA",
+            _external_name("F282772", "F282772"),
+        )
+        self.assertEqual(
+            "JEFFERSON LUIS GONÇALVES COITINHO",
+            _external_name("N6105010", "N6105010"),
+        )
+        self.assertEqual(
+            "Nome não localizado no portal antigo",
+            _external_name("F282187", "F282187"),
+        )
+        self.assertEqual(
+            "NOME INFORMADO NA ORIGEM",
+            _external_name("F282187", "NOME INFORMADO NA ORIGEM"),
+        )
+
+    def test_adherent_and_nonadherent_monthly_columns_are_volume_weighted(self):
+        rows = [
+            {
+                "login": "N5963881", "analyst_name": "N5963881",
+                "month": "2026-10", "segment_name": "Empresarial",
+                "indicator_key": "emp_etit_event",
+                "name": "ETIT Empresarial",
+                "volume": 1, "successes": 0, "losses": 1,
+                "day": "2026-10-02",
+            },
+            {
+                "login": "N5963881", "analyst_name": "N5963881",
+                "month": "2026-10", "segment_name": "Empresarial",
+                "indicator_key": "emp_etit_event",
+                "name": "ETIT Empresarial",
+                "volume": 9, "successes": 9, "losses": 0,
+                "day": "2026-10-05",
+            },
+            {
+                "login": "F282187", "analyst_name": "F282187",
+                "month": "2026-10", "segment_name": "Empresarial",
+                "indicator_key": "emp_etit_event",
+                "name": "ETIT Empresarial",
+                "volume": 2, "successes": 1, "losses": 1,
+                "day": "2026-10-06",
+            },
+        ]
+        table = _monthly_external_adherence_table(_as_frame(rows))
+        self.assertEqual(2, len(table))
+        tiago = table[table["Login"] == "N5963881"].iloc[0]
+        self.assertEqual(
+            "TIAGO ALMEIDA TIBURCIO DE SOUZA", tiago["Nome"]
+        )
+        self.assertEqual(10, tiago["Volume no mês"])
+        self.assertEqual(9, tiago["Aderentes"])
+        self.assertEqual(1, tiago["Não aderentes"])
+        self.assertEqual("90,0%", tiago["% aderente"])
+        self.assertEqual("10,0%", tiago["% não aderente"])
+        unknown = table[table["Login"] == "F282187"].iloc[0]
+        self.assertEqual("Nome não localizado no portal antigo", unknown["Nome"])
+        self.assertEqual(
+            ["Nome", "Login", "Volume no mês", "Aderentes",
+             "Não aderentes", "% aderente", "% não aderente"],
+            list(table.columns),
+        )
+
+    def test_simple_external_view_has_exactly_two_percent_cards_and_one_table(self):
+        from contextlib import nullcontext
+        from unittest.mock import patch
+        from src.ui.admin.external_analysts import (
+            render_external_monthly_by_indicator,
+        )
+
+        self.add_rows(
+            self.emp, "emp_etit_event",
+            [("N5963881", "2026-10-06", "22", 4, 3)],
+        )
+        prefix = "src.ui.admin.external_analysts"
+        metrics = []
+        tables = []
+        with (
+            patch(f"{prefix}.st.markdown"),
+            patch(f"{prefix}.st.caption"),
+            patch(f"{prefix}.st.warning"),
+            patch(f"{prefix}.st.info"),
+            patch(f"{prefix}.st.selectbox", return_value="2026-10"),
+            patch(f"{prefix}.st.tabs", return_value=[nullcontext()]),
+            patch(f"{prefix}.st.columns",
+                  side_effect=lambda n: [
+                      type("Col", (), {
+                          "metric": lambda self, label, value:
+                              metrics.append((label, value))
+                      })() for _ in range(n)
+                  ]),
+            patch(f"{prefix}.st.dataframe",
+                  side_effect=lambda data, **kwargs: tables.append(data)),
+            patch(f"{prefix}.st.download_button"),
+            patch(f"{prefix}.st.expander", return_value=nullcontext()),
+        ):
+            render_external_monthly_by_indicator(
+                self.admin, self.service, self.emp.id,
+                {"emp_etit_event": "ETIT Empresarial"},
+                widget_prefix="test_minimal", title="Outros analistas",
+            )
+        self.assertEqual([
+            ("% aderente — mês", "75,0%"),
+            ("% não aderente — mês", "25,0%"),
+        ], metrics)
+        # Monthly table and optional daily detail, but NO coverage table.
+        self.assertEqual(2, len(tables))
+        self.assertEqual(1, len(tables[0]))
+        self.assertEqual("N5963881", tables[0].iloc[0]["Login"])
 
     def test_only_integer_hour_labels_can_prove_night_window(self):
         self.assertEqual(8, len(NIGHT_HOURS))

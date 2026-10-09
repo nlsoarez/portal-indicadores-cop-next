@@ -52,7 +52,10 @@ def _as_frame(records: list[dict]) -> pd.DataFrame:
         "volume", "successes", "losses", "tma_sum", "tma_count",
         "tmr_sum", "tmr_count",
     ):
-        frame[col] = pd.to_numeric(frame[col], errors="coerce").fillna(0)
+        frame[col] = (
+            pd.to_numeric(frame[col], errors="coerce").fillna(0)
+            if col in frame.columns else 0
+        )
     return frame
 
 

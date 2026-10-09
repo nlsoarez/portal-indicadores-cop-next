@@ -92,6 +92,19 @@ class DashboardService:
             self.access.assert_segment_access(ctx, segment_id)
         return self.indicators.external_night_months(ids)
 
+    def external_night_coverage(
+        self, ctx: AccessContext, segment_ids: list[int], indicator_keys: list[str]
+    ) -> list[dict]:
+        """Month availability per indicator; only admin can inspect external data."""
+        if not ctx.is_admin:
+            raise PermissionError("Analistas externos disponíveis apenas ao administrador")
+        ids = sorted({int(value) for value in segment_ids})
+        for segment_id in ids:
+            self.access.assert_segment_access(ctx, segment_id)
+        return self.indicators.external_night_coverage(
+            ids, sorted(set(indicator_keys))
+        )
+
     def external_night_payload(
         self, ctx: AccessContext, segment_ids: list[int], month: str
     ) -> list[dict]:

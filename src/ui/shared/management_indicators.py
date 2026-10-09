@@ -293,6 +293,27 @@ def _render_source(
                 freshness_index=freshness_index,
             )
 
+    # A visão mensal de profissionais externos fica no FINAL da fonte:
+    # após o resumo, dados da equipe e todas as abas dos indicadores.
+    # Não confundir com a análise do horário dos próprios analistas.
+    if ctx.is_admin and source_label == "Indicadores Residencial":
+        from src.ui.admin.indicators.residential_overview import (
+            RESIDENTIAL_INDICATOR_ORDER,
+            _render_external_residential_night,
+        )
+
+        scope = segment_df[
+            segment_df["segment_slug"].eq("residencial")
+            & segment_df["indicator_key"].isin(RESIDENTIAL_INDICATOR_ORDER)
+        ] if {"segment_slug", "indicator_key", "segment_id"}.issubset(
+            segment_df.columns
+        ) else pd.DataFrame()
+        if not scope.empty:
+            st.divider()
+            _render_external_residential_night(
+                ctx, dashboard, int(scope.iloc[0]["segment_id"])
+            )
+
 
 def _render_indicator(
     indicator_key: str,

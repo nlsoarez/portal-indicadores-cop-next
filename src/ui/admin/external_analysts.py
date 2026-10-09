@@ -343,11 +343,18 @@ def render_external_monthly_by_indicator(
                 key=f"{widget_prefix}_month_{key}_v4",
             )
             if selected != newest_global_month:
-                st.info(
-                    f"{indicator_labels[key]} — dados da competência {selected}. "
-                    f"Não há dados dessa fonte em {newest_global_month}; "
-                    "os meses não são mesclados."
-                )
+                key_latest = months[0]
+                if key_latest != newest_global_month:
+                    st.info(
+                        f"{indicator_labels[key]} — dados da competência {selected}. "
+                        f"Não há dados externos dessa fonte em {newest_global_month}; "
+                        "as competências não são mescladas."
+                    )
+                else:
+                    st.caption(
+                        f"Consulta histórica de {selected}; a competência "
+                        f"mais recente de {indicator_labels[key]} é {key_latest}."
+                    )
             if selected not in loaded_months:
                 loaded_months[selected] = dashboard.external_night_payload(
                     ctx, [segment_id], selected

@@ -10,6 +10,7 @@ import pandas as pd
 import streamlit as st
 
 from src.application.dashboard_service import DashboardService
+from src.config.legacy_analyst_names import legacy_name_for_login
 from src.domain.entities import AccessContext, Segment
 
 NIGHT_HOURS = frozenset({22, 23, 0, 1, 2, 3, 4, 5})
@@ -160,6 +161,60 @@ def _monthly_external_people(frame: pd.DataFrame) -> pd.DataFrame:
     ).reset_index(drop=True)
 
 
+def _external_name(login: object, imported_name: object) -> str:
+    """Use source name, then the legacy portal's explicit login-to-name map.
+
+    Never assume that a login is a person's name. Unknown mappings remain
+    visibly unidentified instead of receiving invented names.
+    """
+    key = str(login or "").strip().upper()
+    name = str(imported_name or "").strip()
+    if name and name.upper() != key and name.lower() not in ("nan", "none"):
+        return name
+    return legacy_name_for_login(key) or "Nome não localizado no portal antigo"
+
+
+def _monthly_external_adherence_table(frame: pd.DataFrame) -> pd.DataFrame:
+    """One row per external login for the full indicator's selected month."""
+    if frame.empty:
+        return pd.DataFrame(columns=[
+            "Nome", "Login", "Volume no mês", "Aderentes",
+            "Não aderentes", "% aderente", "% não aderente",
+        ])
+    table = frame.groupby(["login"], as_index=False).agg(
+        volume=("volume", "sum"),
+        successes=("successes", "sum"),
+        losses=("losses", "sum"),
+    )
+    known_names = (
+        frame[["login", "analyst_name"]]
+        .drop_duplicates(subset=["login"])
+        .set_index("login")["analyst_name"]
+        .to_dict()
+    )
+    table["Nome"] = [
+        _external_name(login, known_names.get(login))
+        for login in table["login"]
+    ]
+    table["% aderente"] = [
+        _pct(success, total)
+        for success, total in zip(table["successes"], table["volume"])
+    ]
+    table["% não aderente"] = [
+        _pct(failure, total)
+        for failure, total in zip(table["losses"], table["volume"])
+    ]
+    return table.rename(columns={
+        "login": "Login", "volume": "Volume no mês",
+        "successes": "Aderentes", "losses": "Não aderentes",
+    })[
+        ["Nome", "Login", "Volume no mês", "Aderentes",
+         "Não aderentes", "% aderente", "% não aderente"]
+    ].sort_values(
+        ["Volume no mês", "Login"], ascending=[False, True]
+    ).reset_index(drop=True)
+
+
 def _people_summary(frame: pd.DataFrame) -> pd.DataFrame:
     if frame.empty:
         return pd.DataFrame()
@@ -251,164 +306,118 @@ def render_external_monthly_by_indicator(
     widget_prefix: str,
     title: str,
 ) -> None:
-    """Admin: all indicators visible, with INDEPENDENT month per indicator.
+    """Only monthly adherent/non-adherent percentages and external people.
 
-    Important: missing data in the current month is not a zero percent and must
-    never be replaced silently with the previous month's performance.
+    Each indicator has its own available months. Never present historic
+    September results as October, nor include an analyst from the admin team.
     """
     if not ctx.is_admin:
         raise PermissionError("Analistas externos disponíveis apenas ao administrador")
+
     st.markdown(f"### {title}")
     st.caption(
-        "Resultados de outras equipes, exclusivamente entre 22h00 e 05h59. "
-        "Cada indicador possui sua própria seleção de competência. "
-        "O desempenho é calculado sobre o VOLUME TOTAL do mês do indicador, "
-        "sem misturar dias ou indicadores."
+        "Analistas de outras equipes que atenderam entre 22h00 e 05h59. "
+        "Uma linha por login no mês, com aderentes, não aderentes e percentuais "
+        "calculados sobre o volume acumulado do indicador."
     )
     keys = list(indicator_labels)
     coverage = dashboard.external_night_coverage(ctx, [segment_id], keys)
     if not coverage:
-        st.info(
-            "Não há eventos externos com hora confirmada nesta fonte. "
-            "A ausência de registros não representa 0% de aderência."
-        )
+        st.info("Não há atendimentos externos com horário confirmado nesta fonte.")
         return
 
     by_key: dict[str, list[dict]] = {
         key: sorted(
-            (item for item in coverage if item["indicator_key"] == key),
-            key=lambda item: str(item["month"]),
+            (row for row in coverage if row["indicator_key"] == key),
+            key=lambda row: str(row["month"]),
             reverse=True,
         )
         for key in keys
     }
-    newest_global_month = max(str(item["month"]) for item in coverage)
-    display = []
-    for key in keys:
-        rows = by_key[key]
-        latest = rows[0] if rows else None
-        current = next(
-            (item for item in rows if str(item["month"]) == newest_global_month),
-            None,
-        )
-        display.append({
-            "Indicador": indicator_labels[key],
-            "Última competência com externos": (
-                str(latest["month"]) if latest else "Sem registros"
-            ),
-            f"Eventos em {newest_global_month}": (
-                int(current["volume"]) if current else 0
-            ),
-            "Volume da última competência": (
-                int(latest["volume"]) if latest else 0
-            ),
-            "Resultado da última competência": (
-                _pct(float(latest["successes"]), float(latest["volume"]))
-                if latest else "—"
-            ),
-        })
-    st.markdown("#### Cobertura mensal por indicador")
-    st.dataframe(
-        pd.DataFrame(display), use_container_width=True, hide_index=True
-    )
-    stale = [
-        indicator_labels[key] for key in keys
-        if by_key[key] and str(by_key[key][0]["month"]) != newest_global_month
-    ]
-    if stale:
-        st.warning(
-            f"Sem registros externos em {newest_global_month} para: "
-            + ", ".join(stale)
-            + ". O histórico anterior está disponível na aba de cada indicador "
-            "e NÃO será somado à competência atual."
-        )
+    newest_global_month = max(str(row["month"]) for row in coverage)
 
-    # All expected indicators appear, even when absent in the latest month.
-    # Each tab independently selects its latest available month.
     tabs = st.tabs([indicator_labels[key] for key in keys])
     loaded_months: dict[str, list[dict]] = {}
     for tab, key in zip(tabs, keys):
         with tab:
-            rows = by_key[key]
-            if not rows:
+            available = by_key[key]
+            if not available:
                 st.info(
-                    f"{indicator_labels[key]}: não há histórico de analistas externos "
-                    "com horários comprovados entre 22h00 e 05h59."
+                    "Não há histórico de analistas externos com hora confirmada "
+                    "para este indicador."
                 )
                 continue
-            months = [str(item["month"]) for item in rows]
-            selected = st.selectbox(
-                f"Competência — {indicator_labels[key]}",
+            months = [str(row["month"]) for row in available]
+            month = st.selectbox(
+                "Competência",
                 months,
-                key=f"{widget_prefix}_month_{key}_v4",
+                key=f"{widget_prefix}_month_{key}_v5",
             )
-            if selected != newest_global_month:
-                key_latest = months[0]
-                if key_latest != newest_global_month:
-                    st.info(
-                        f"{indicator_labels[key]} — dados da competência {selected}. "
-                        f"Não há dados externos dessa fonte em {newest_global_month}; "
-                        "as competências não são mescladas."
-                    )
-                else:
-                    st.caption(
-                        f"Consulta histórica de {selected}; a competência "
-                        f"mais recente de {indicator_labels[key]} é {key_latest}."
-                    )
-            if selected not in loaded_months:
-                loaded_months[selected] = dashboard.external_night_payload(
-                    ctx, [segment_id], selected
+            if months[0] < newest_global_month and month == months[0]:
+                st.caption(
+                    f"Última competência com dados externos deste indicador: {month}. "
+                    f"Não há registros externos em {newest_global_month}."
                 )
-            all_records = loaded_months[selected]
-            records = _partition_external_records(all_records)["confirmed"]
+            if month not in loaded_months:
+                loaded_months[month] = dashboard.external_night_payload(
+                    ctx, [segment_id], month
+                )
+            verified = _partition_external_records(
+                loaded_months[month]
+            )["confirmed"]
             data = _as_frame([
-                item for item in records
-                if item["indicator_key"] == key
+                row for row in verified
+                if row["indicator_key"] == key
             ])
             if data.empty:
-                st.warning(
-                    "A competência possui registros, mas nenhum horário "
-                    "estritamente confirmável para este indicador."
-                )
+                st.info("Nenhuma ocorrência externa confirmada nesta competência.")
                 continue
-            volume = int(data["volume"].sum())
-            successes = int(data["successes"].sum())
-            losses = int(data["losses"].sum())
-            is_assertiveness = key.startswith("res_assert_")
-            label = "Assertividade mensal" if is_assertiveness else "Aderência mensal"
-            cols = st.columns(5)
-            cols[0].metric(label, _pct(successes, volume))
-            cols[1].metric("Atendimentos no mês", volume)
-            cols[2].metric("Positivos", successes)
-            cols[3].metric("Negativos", losses)
-            cols[4].metric("Analistas externos", data["login"].nunique())
 
-            st.markdown(f"#### Consolidado mensal dos analistas — {selected}")
-            month_people = _monthly_external_people(data)
-            st.dataframe(
-                month_people, use_container_width=True, hide_index=True
-            )
+            volume = float(data["volume"].sum())
+            successes = float(data["successes"].sum())
+            losses = float(data["losses"].sum())
+            metrics = st.columns(2)
+            metrics[0].metric("% aderente — mês", _pct(successes, volume))
+            metrics[1].metric("% não aderente — mês", _pct(losses, volume))
+            st.markdown(f"#### Analistas externos · {indicator_labels[key]} · {month}")
+            monthly_people = _monthly_external_adherence_table(data)
+            st.dataframe(monthly_people, use_container_width=True, hide_index=True)
             st.download_button(
                 "Exportar consolidado mensal (CSV)",
-                data=month_people.to_csv(index=False).encode("utf-8-sig"),
-                file_name=f"externos_{key}_{selected}_mensal.csv",
+                monthly_people.to_csv(index=False).encode("utf-8-sig"),
+                file_name=f"externos_{key}_{month}_mensal.csv",
                 mime="text/csv",
-                key=f"{widget_prefix}_export_{key}_v4",
+                key=f"{widget_prefix}_monthly_export_{key}_v5",
             )
-            with st.expander("Detalhamento por dia e hora", expanded=False):
-                details = _detail_table(data)
-                st.dataframe(
-                    details, use_container_width=True, hide_index=True
+            unknown_names = monthly_people["Nome"].eq(
+                "Nome não localizado no portal antigo"
+            ).sum()
+            if unknown_names:
+                st.caption(
+                    f"{int(unknown_names)} login(s) sem nome confirmado no "
+                    "cadastro histórico do portal antigo; as matrículas "
+                    "permanecem visíveis, sem atribuições presumidas."
                 )
-            out_of_period = sum(
-                not str(row.get("day") or "").startswith(selected)
-                for row in records if row["indicator_key"] == key
-            )
-            if out_of_period:
+            if abs((successes + losses) - volume) > 0.00001:
                 st.warning(
-                    f"{out_of_period} registro(s) têm data do evento fora do "
-                    f"mês {selected}, embora a competência da carga seja {selected}. "
-                    "Confira os arquivos de origem; não houve reclassificação de datas."
+                    "A soma dos registros aderentes e não aderentes difere do "
+                    "volume total. Confira o analítico antes de avaliar o resultado."
+                )
+            with st.expander("Conferir registros por dia e horário"):
+                st.dataframe(
+                    _detail_table(data),
+                    use_container_width=True,
+                    hide_index=True,
+                )
+            inconsistent_month = sum(
+                not str(row.get("day") or "").startswith(month)
+                for row in verified if row["indicator_key"] == key
+            )
+            if inconsistent_month:
+                st.warning(
+                    f"{inconsistent_month} registro(s) desta competência têm "
+                    "data da ocorrência em outro mês. O consolidado utiliza "
+                    "a competência da fonte; a data pode ser conferida no detalhe."
                 )
 
 

@@ -7,10 +7,7 @@ import streamlit as st
 
 from src.application.dashboard_service import DashboardService
 from src.domain.entities import AccessContext
-from src.ui.admin.external_analysts import (
-    _as_frame, _partition_external_records, _monthly_indicator_summary,
-    _monthly_external_people, _detail_table,
-)
+from src.ui.admin.external_analysts import render_external_monthly_by_indicator
 
 
 RESIDENTIAL_INDICATOR_ORDER = (
@@ -169,114 +166,14 @@ def _render_external_residential_night(
     dashboard: DashboardService,
     residential_segment_id: int,
 ) -> None:
-    """Outras equipes atendendo no horário do administrador, nunca sua equipe."""
-    st.markdown("### 🌙 Outras equipes trabalhando na minha janela")
-    st.caption(
-        "Analistas que NÃO pertencem à equipe cadastrada no portal, "
-        "mas registraram demandas entre 22h00 e 05h59. "
-        "Esta visão não inclui os meus próprios analistas, "
-        "nem eventos diurnos. É independente da consulta 'fora da janela' da equipe."
-    )
-    months = dashboard.external_night_months(ctx, [residential_segment_id])
-    if not months:
-        st.info(
-            "Nenhum analista de fora da equipe identificado nas fontes "
-            "residenciais disponíveis."
-        )
-        return
-    month = st.selectbox(
-        "Competência — analistas de outras equipes",
-        months,
-        key="admin_residential_external_month_v2",
-    )
-    records = dashboard.external_night_payload(
-        ctx, [residential_segment_id], month
-    )
-    verified = _partition_external_records(records)["confirmed"]
-    # Restringir aos indicadores técnicos Residenciais. Chat/TOA são
-    # analisados na área administrativa própria, não nesta tabela técnica.
-    frame = _as_frame([
-        item for item in verified
-        if item["indicator_key"] in RESIDENTIAL_INDICATOR_ORDER
-    ])
-    if frame.empty:
-        st.warning(
-            "Sem atendimentos externos confirmados no período entre 22h00 "
-            "e 05h59 para ETIT e Assertividade Residencial."
-        )
-        return
-
-    metrics = st.columns(3)
-    metrics[0].metric("Analistas externos no mês", frame["login"].nunique())
-    metrics[1].metric("Atendimentos externos no mês", int(frame["volume"].sum()))
-    metrics[2].metric("Indicadores com atendimentos", frame["indicator_key"].nunique())
-
-    st.markdown(f"#### Resultado mensal por indicador — {month}")
-    st.caption(
-        "Consolidado do mês inteiro, exclusivamente entre 22h00 e 05h59. "
-        "Resultado mensal = total de positivos no mês ÷ total de eventos "
-        "do mesmo indicador. Não é a média simples dos percentuais diários."
-    )
-    summary = _monthly_indicator_summary(frame)
-    st.dataframe(summary, use_container_width=True, hide_index=True)
-
-    keys = [
-        key for key in RESIDENTIAL_INDICATOR_ORDER
-        if key in set(frame["indicator_key"])
-    ]
-    selection = st.selectbox(
-        "Indicador para detalhamento mensal dos analistas externos",
-        keys,
-        format_func=lambda key: INDICATOR_META[key]["title"],
-        key="admin_residential_external_indicator_monthly_v3",
-    )
-    scoped = frame[frame["indicator_key"] == selection]
-    volume = int(scoped["volume"].sum())
-    positives = int(scoped["successes"].sum())
-    negatives = int(scoped["losses"].sum())
-    monthly_result = positives * 100 / volume if volume else 0.0
-
-    st.markdown(
-        f"#### {INDICATOR_META[selection]['title']} — consolidado de {month}"
-    )
-    cards = st.columns(4)
-    cards[0].metric("Aderência/Assertividade no mês", f"{monthly_result:.1f}%".replace(".", ","))
-    cards[1].metric("Volume mensal", volume)
-    cards[2].metric("Positivos no mês", positives)
-    cards[3].metric("Negativos no mês", negatives)
-
-    monthly_people = _monthly_external_people(scoped)
-    st.markdown("##### Resultado mensal por analista externo")
-    st.dataframe(
-        monthly_people,
-        use_container_width=True,
-        hide_index=True,
-    )
-    st.download_button(
-        "Exportar consolidado mensal dos externos (CSV)",
-        data=monthly_people.to_csv(index=False).encode("utf-8-sig"),
-        file_name=f"externos_{selection}_{month}_mensal.csv",
-        mime="text/csv",
-        key="admin_residential_external_monthly_export_v3",
-    )
-    with st.expander("Consultar dias e horários que compõem o mês", expanded=False):
-        st.caption(
-            "Esta tabela contém o detalhamento diário usado no consolidado "
-            "acima. Os dias não são tratados como resultados mensais separados."
-        )
-        detail = _detail_table(scoped)
-        st.dataframe(detail, use_container_width=True, hide_index=True)
-        st.download_button(
-            "Exportar ocorrências por dia e hora (CSV)",
-            detail.to_csv(index=False).encode("utf-8-sig"),
-            file_name=f"externos_{selection}_{month}_ocorrencias.csv",
-            mime="text/csv",
-            key="admin_residential_external_detail_export_v3",
-        )
-    st.caption(
-        "Os atendimentos de outras equipes não entram nos indicadores da "
-        "minha equipe. Apenas horários confirmados entre 22h00 e 05h59 "
-        "compõem os totais mensais."
+    """Separate monthly, hour-verified KPIs for each external Residential feed."""
+    render_external_monthly_by_indicator(
+        ctx,
+        dashboard,
+        residential_segment_id,
+        {key: INDICATOR_META[key]["title"] for key in RESIDENTIAL_INDICATOR_ORDER},
+        widget_prefix="admin_residential_external",
+        title="🌙 Outras equipes trabalhando na minha janela",
     )
 
 

@@ -14,6 +14,8 @@ from src.ui.admin.external_analysts import (
     _indicator_summary,
     _partition_external_records,
     _people_summary,
+    _monthly_indicator_summary,
+    _monthly_external_people,
     _detail_table,
 )
 from tests.isolated_database import isolate_sqlite_database
@@ -200,6 +202,80 @@ class ExternalAnalystsNightTest(unittest.TestCase):
         self.assertEqual(10, table.iloc[0]["Volume"])
         detail = _detail_table(frame)
         self.assertEqual({"22:00–22:59", "23:00–23:59"}, set(detail["Hora"]))
+
+    def test_monthly_aggregation_is_weighted_by_volume_and_keeps_indicators_separate(self):
+        # Um resultado de 0/1 em um dia e 9/9 em outro = 90% no mês,
+        # não 50% (média incorreta das duas porcentagens diárias).
+        rows = [
+            {
+                "month": month, "segment_name": "Residencial",
+                "indicator_key": key, "name": name,
+                "login": login, "analyst_name": login,
+                "day": day, "hour_label": "22", "volume": volume,
+                "successes": ok, "losses": volume-ok,
+            }
+            for month, key, name, login, day, volume, ok in [
+                ("2026-10", "res_etit_fibra_hfc", "ETIT Fibra HFC",
+                 "OUT", "2026-10-01", 1, 0),
+                ("2026-10", "res_etit_fibra_hfc", "ETIT Fibra HFC",
+                 "OUT", "2026-10-02", 9, 9),
+                ("2026-10", "res_etit_fibra_hfc", "ETIT Fibra HFC",
+                 "SECOND", "2026-10-02", 2, 1),
+                ("2026-10", "res_assert_fibra_hfc", "Assertividade Fibra HFC",
+                 "OUT", "2026-10-03", 4, 2),
+                ("2026-09", "res_etit_fibra_hfc", "ETIT Fibra HFC",
+                 "OUT", "2026-09-01", 20, 1),
+            ]
+        ]
+        frame = _as_frame(rows)
+        summary = _monthly_indicator_summary(frame)
+        self.assertEqual(3, len(summary))
+        oct_etit = summary[
+            (summary["Competência"] == "2026-10")
+            & (summary["Indicador"] == "ETIT Fibra HFC")
+        ].iloc[0]
+        self.assertEqual(12, oct_etit["Volume no mês"])
+        self.assertEqual(10, oct_etit["Positivos no mês"])
+        self.assertEqual(2, oct_etit["Analistas externos"])
+        self.assertEqual("83,3%", oct_etit["Resultado mensal (%)"])
+
+        people = _monthly_external_people(frame)
+        self.assertEqual(4, len(people))
+        oct_out = people[
+            (people["Competência"] == "2026-10")
+            & (people["Indicador"] == "ETIT Fibra HFC")
+            & (people["Login"] == "OUT")
+        ].iloc[0]
+        self.assertEqual(10, oct_out["Volume no mês"])
+        self.assertEqual(9, oct_out["Positivos no mês"])
+        self.assertEqual("90,0%", oct_out["Resultado mensal (%)"])
+        # Não deve exibir uma linha por dia, nem mesclar ETIT e Assertividade.
+        self.assertNotIn("Dias com dados", people.columns)
+        assert_sep = people[
+            (people["Competência"] == "2026-10")
+            & (people["Indicador"] == "Assertividade Fibra HFC")
+            & (people["Login"] == "OUT")
+        ].iloc[0]
+        self.assertEqual("50,0%", assert_sep["Resultado mensal (%)"])
+
+    def test_monthly_summary_applies_night_window_before_adding_days(self):
+        self.add_rows(
+            self.emp, "emp_etit_event",
+            [
+                ("EXT", "2026-10-06", "21", 4, 4),
+                ("EXT", "2026-10-06", "22", 1, 0),
+                ("EXT", "2026-10-07", "5", 9, 9),
+                ("EXT", "2026-10-07", "6", 10, 0),
+            ],
+        )
+        rows = self.service.external_night_payload(
+            self.admin, [self.emp.id], "2026-10"
+        )
+        data = _as_frame(_partition_external_records(rows)["confirmed"])
+        month = _monthly_external_people(data)
+        self.assertEqual(1, len(month))
+        self.assertEqual(10, month.iloc[0]["Volume no mês"])
+        self.assertEqual("90,0%", month.iloc[0]["Resultado mensal (%)"])
 
     def test_only_integer_hour_labels_can_prove_night_window(self):
         self.assertEqual(8, len(NIGHT_HOURS))

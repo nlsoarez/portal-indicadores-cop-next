@@ -618,21 +618,26 @@ def _inject_styles() -> None:
             line-height: 1.1;
             margin-top: 8px;
         }
+        /* RAL/REC team averages: match the portal's dark KPI cards.
+           Explicit contrast avoids theme/global overrides causing dark text. */
         .cop-emp-average {
-            background: #ffffff;
-            border: 1px solid rgba(15, 23, 42, .08);
+            background: linear-gradient(145deg, #10243b 0%, #0b1b2e 100%) !important;
+            border: 1px solid rgba(148, 176, 204, .22) !important;
             border-radius: 14px;
             min-height: 102px;
             padding: 18px 18px 14px;
         }
-        .cop-emp-average-label {
-            color: #30343b;
+        .cop-emp-average .cop-emp-average-label {
+            color: #aec4d9 !important;
             font-size: .82rem;
+            font-weight: 650;
+            line-height: 1.4;
         }
-        .cop-emp-average-value {
-            color: #1f2937;
+        .cop-emp-average .cop-emp-average-value {
+            color: #f4f8fe !important;
             font-size: 1.75rem;
             font-weight: 800;
+            line-height: 1.15;
             margin-top: 10px;
         }
         .cop-emp-bestworst {

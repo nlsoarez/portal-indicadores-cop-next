@@ -163,6 +163,55 @@ class EnterpriseEtitAdminViewTest(unittest.TestCase):
         self.assertEqual("00:35:14", ral["TMR"])
         self.assertAlmostEqual(91.3, float(ral["Aderência %"]), places=1)
 
+    def test_ral_rec_team_average_cards_use_legible_dark_theme_colors(self):
+        from unittest.mock import patch
+
+        from src.ui.admin.indicators.etit_enterprise import _inject_styles
+
+        with patch("src.ui.admin.indicators.etit_enterprise.st.markdown") as markdown:
+            _inject_styles()
+
+        css = markdown.call_args.args[0]
+        self.assertIn("background: linear-gradient(145deg, #10243b", css)
+        self.assertIn(".cop-emp-average .cop-emp-average-label", css)
+        self.assertIn("color: #aec4d9 !important", css)
+        self.assertIn(".cop-emp-average .cop-emp-average-value", css)
+        self.assertIn("color: #f4f8fe !important", css)
+        self.assertNotIn(
+            ".cop-emp-average-label {\n            color: #30343b", css
+        )
+        self.assertNotIn(
+            ".cop-emp-average-value {\n            color: #1f2937", css
+        )
+
+    def test_ral_rec_average_card_values_remain_unchanged(self):
+        from contextlib import nullcontext
+        from unittest.mock import patch
+
+        from src.ui.admin.indicators.etit_enterprise import _render_average_cards
+
+        averages = {
+            "ral_adherents": 13.4,
+            "rec_adherents": 2.1,
+            "ral_non_adherents": 1.3,
+            "rec_non_adherents": 0.1,
+        }
+        with (
+            patch(
+                "src.ui.admin.indicators.etit_enterprise.st.columns",
+                return_value=[nullcontext() for _ in range(4)],
+            ),
+            patch("src.ui.admin.indicators.etit_enterprise.st.markdown") as markdown,
+        ):
+            _render_average_cards(averages)
+        cards = [call.args[0] for call in markdown.call_args_list]
+        self.assertEqual(4, len(cards))
+        self.assertIn("13.4", cards[0])
+        self.assertIn("2.1", cards[1])
+        self.assertIn("1.3", cards[2])
+        self.assertIn("0.1", cards[3])
+        self.assertTrue(all("cop-emp-average-value" in card for card in cards))
+
     def test_turn_sort_prioritizes_madrugada_then_manha(self):
         table = pd.DataFrame(
             {

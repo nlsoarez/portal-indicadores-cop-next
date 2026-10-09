@@ -12,7 +12,7 @@ from src.ui.admin.indicators.residential_overview import (
 
 
 class ResidentialOverviewTest(unittest.TestCase):
-    def test_main_overview_prioritizes_real_external_analysts_and_hides_team_offhours(self):
+    def test_residential_overview_shows_own_team_first(self):
         from contextlib import nullcontext
         from unittest.mock import Mock, patch
 
@@ -26,8 +26,6 @@ class ResidentialOverviewTest(unittest.TestCase):
             "value": 90.0,
             "volume": 10,
         }])
-        ctx = Mock()
-        dashboard = Mock()
         prefix = "src.ui.admin.indicators.residential_overview"
         with (
             patch(f"{prefix}._render_external_residential_night") as external,
@@ -39,21 +37,77 @@ class ResidentialOverviewTest(unittest.TestCase):
             patch(f"{prefix}.st.columns", side_effect=lambda amount: [
                 nullcontext() for _ in range(amount)
             ]),
-            patch(f"{prefix}.st.expander", return_value=nullcontext()) as hidden,
+            patch(f"{prefix}.st.expander", return_value=nullcontext()) as team,
         ):
             render_admin_residential_overview(
                 indicator_keys=("res_etit_gpon",),
-                ctx=ctx,
-                dashboard=dashboard,
+                ctx=Mock(),
+                dashboard=Mock(),
                 segment_df=segment,
                 analyst_df=pd.DataFrame(),
                 analyst_breakdowns_df=pd.DataFrame(),
                 breakdown_df=pd.DataFrame(),
             )
-        external.assert_called_once_with(ctx, dashboard, 1)
-        hidden.assert_called_once()
-        self.assertFalse(hidden.call_args.kwargs.get("expanded", True))
-        self.assertIn("minha própria equipe", hidden.call_args.args[0])
+        external.assert_not_called()
+        team.assert_called_once()
+        self.assertTrue(team.call_args.kwargs.get("expanded"))
+        self.assertIn("Atuação da minha equipe", team.call_args.args[0])
+
+    def test_external_section_is_after_all_own_team_indicator_tabs(self):
+        from contextlib import nullcontext
+        from types import SimpleNamespace
+        from unittest.mock import patch
+        from src.ui.shared.management_indicators import _render_source
+
+        team = pd.DataFrame([
+            {
+                "segment_id": 1, "segment_slug": "residencial",
+                "indicator_key": key, "name": label,
+            }
+            for key, label in [
+                ("res_etit_gpon", "ETIT GPON"),
+                ("res_assert_gpon", "Assertividade GPON"),
+            ]
+        ])
+        order = []
+        prefix = "src.ui.shared.management_indicators"
+        with (
+            patch(f"{prefix}.st.markdown"),
+            patch(f"{prefix}.st.divider"),
+            patch(f"{prefix}.st.tabs", return_value=[
+                nullcontext(), nullcontext()
+            ]),
+            patch(f"{prefix}.render_admin_residential_overview", create=True),
+            patch(f"{prefix}._render_indicator",
+                  side_effect=lambda *a, **k: order.append("meu_indicador")),
+            patch(
+                "src.ui.admin.indicators.residential_overview."
+                "render_admin_residential_overview",
+                side_effect=lambda *a, **k: order.append("minha_equipe")
+            ),
+            patch(
+                "src.ui.admin.indicators.residential_overview."
+                "_render_external_residential_night",
+                side_effect=lambda *a, **k: order.append("externos")
+            ),
+        ):
+            _render_source(
+                source_label="Indicadores Residencial",
+                indicator_keys=("res_etit_gpon", "res_assert_gpon"),
+                ctx=SimpleNamespace(is_admin=True),
+                dashboard=object(),
+                segment_df=team,
+                analyst_df=pd.DataFrame(),
+                analyst_metrics_df=pd.DataFrame(),
+                analyst_breakdowns_df=pd.DataFrame(),
+                daily_df=pd.DataFrame(),
+                breakdown_df=pd.DataFrame(),
+                external_df=pd.DataFrame(),
+                freshness_index={},
+            )
+        self.assertEqual([
+            "minha_equipe", "meu_indicador", "meu_indicador", "externos",
+        ], order)
 
     def test_indicator_summary_uses_overall_breakdown(self):
         segment = pd.DataFrame(

@@ -188,6 +188,111 @@ class AllSourceAdaptersTest(unittest.TestCase):
         self.assertEqual({"residencial","empresarial","preventiva"},{slug for slug,_ in results})
         self.assertTrue(all(r.indicator_key=="productivity_avg_daily" for _,r in results))
 
+    def test_productivity_merges_jefferson_alias_and_treatments_without_duplicates(self):
+        from src.application.upload_service import UploadProcessingService
+        from src.infrastructure.repositories import IndicatorRepository
+        from src.ui.admin.indicators.productivity import (
+            build_component_pivot, build_sector_detail, build_total_ranking,
+        )
+
+        # A mesma competência contém tarefas da matrícula oficial e
+        # tratativas RAL/REC da matrícula alternativa, inclusive no mesmo dia.
+        df = pd.DataFrame({
+            "USUARIO_LOGIN": [
+                "N6173055", "N6105010", "n6105010", "N0189105", "FORA",
+            ],
+            "DATA": ["2026-10-07"] * 5,
+            "ANOMES": [202610] * 5,
+            "VOL_TOTAL": [4, 7, 3, 10, 99],
+            "VOL_RAL": [0, 5, 1, 4, 50],
+            "VOL_REC": [0, 2, 2, 1, 40],
+            "VOL_TOA_PRIM_INT": [2, 0, 0, 3, 0],
+            "VOL_TOA_FORM": [2, 0, 0, 2, 0],
+        })
+        raw = self.xlsx(df, "Analítico Produtividade 2026", 10)
+        service = UploadProcessingService()
+
+        for _ in range(2):
+            outputs = service.process_global_source(
+                self.ctx,
+                "productivity",
+                "Produtividade COP Rede 2026 - Analítico.xlsx",
+                raw,
+            )
+            enterprise = next(
+                result for slug, result in outputs if slug == "empresarial"
+            )
+            self.assertEqual("productivity_avg_daily", enterprise.indicator_key)
+            self.assertEqual(2, enterprise.analyst_count)
+            self.assertEqual(2, enterprise.daily_points)
+
+            repo = IndicatorRepository()
+            jefferson = self.users.get_by_login("N6173055")
+            jefferson_results = [
+                row for row in repo.results_for_user(
+                    self.enterprise.id, jefferson.id
+                )
+                if row["indicator_key"] == "productivity_avg_daily"
+                and row["data_month"] == "2026-10"
+            ]
+            self.assertEqual(1, len(jefferson_results))
+            self.assertEqual(14.0, jefferson_results[0]["value"])
+            self.assertEqual(1, jefferson_results[0]["volume"])
+
+            payload = repo.dashboard_payload(self.enterprise.id, jefferson.id)
+            components = {
+                row["dimension_value"]: row["volume"]
+                for row in payload["breakdowns"]
+                if row["indicator_key"] == "productivity_avg_daily"
+                and row["dimension"] == "productivity_component"
+            }
+            self.assertEqual(6, components["Tratativa RAL"])
+            self.assertEqual(4, components["Tratativa REC"])
+            self.assertEqual(2, components["Primeira Interação TOA"])
+
+            dashboard = repo.management_payload([self.enterprise.id])
+            people = pd.DataFrame(dashboard["analyst_summary"])
+            breakdowns = pd.DataFrame(dashboard["analyst_breakdowns"])
+            people = people[
+                people["indicator_key"] == "productivity_avg_daily"
+            ]
+            breakdowns = breakdowns[
+                breakdowns["indicator_key"] == "productivity_avg_daily"
+            ]
+            ranking = build_total_ranking(people, breakdowns)
+            pivot = build_component_pivot(breakdowns)
+            detail = build_sector_detail(
+                ranking, sector="EMPRESARIAL",
+                component_pivot=pivot, dpa_map={},
+            )
+            row = detail[detail["Analista"] == "Jefferson"].iloc[0]
+            self.assertEqual(14, row["Vol. Total"])
+            self.assertEqual(6, row["Trat. RAL"])
+            self.assertEqual(4, row["Trat. REC"])
+            self.assertEqual(2, row["1ª Interação TOA"])
+            self.assertEqual(1, row["Dias"])
+
+    def test_productivity_legacy_alias_is_not_added_without_canonical_access(self):
+        from src.features.ingestion.productivity import parse_productivity
+
+        df = pd.DataFrame({
+            "USUARIO_LOGIN": ["N6105010", "N0189105"],
+            "DATA": ["2026-10-02"] * 2,
+            "ANOMES": [202610] * 2,
+            "VOL_TOTAL": [8, 3],
+            "VOL_RAL": [5, 2],
+            "VOL_REC": [3, 1],
+        })
+        batches = parse_productivity(
+            self.xlsx(df, "Analítico Produtividade 2026", 10),
+            {"N0189105"},
+        )
+        self.assertEqual(1, len(batches))
+        self.assertEqual({"N0189105"}, {r["login"] for r in batches[0].rows})
+        self.assertFalse(
+            any(b["login"] == "N6173055" for b in batches[0].breakdowns)
+        )
+
     def test_toa_upload_processes_validation_and_cancelled_in_one_file(self):
         from src.application.upload_service import UploadProcessingService
         df=pd.DataFrame({

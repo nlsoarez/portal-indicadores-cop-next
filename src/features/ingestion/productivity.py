@@ -2,6 +2,7 @@ from __future__ import annotations
 
 from collections import defaultdict
 
+from src.config.legacy_analyst_names import canonical_login
 from src.features.ingestion.breakdowns import add_ratio, materialize, new_bucket
 from src.features.ingestion.models import ParsedIndicatorBatch
 from src.features.ingestion.xlsx_stream import as_float, as_int, excel_date, iter_rows, normalize_login
@@ -46,7 +47,11 @@ def parse_productivity(raw_bytes: bytes, allowed_logins: set[str]) -> tuple[Pars
         required_headers=required,
         optional_headers=set(PRODUCTIVITY_COMPONENTS),
     ):
-        login = normalize_login(row.get("USUARIO_LOGIN"))
+        # O login N6105010 é a matrícula alternativa de Jefferson (N6173055).
+        # A identidade deve ser normalizada antes do filtro de equipe e das
+        # agregações de VOL_TOTAL, VOL_RAL e VOL_REC; assim as tratativas
+        # entram na mesma matrícula inclusive quando há dois logins no dia.
+        login = canonical_login(normalize_login(row.get("USUARIO_LOGIN")))
         if login not in allowed:
             continue
         anomes = as_int(row.get("ANOMES"))

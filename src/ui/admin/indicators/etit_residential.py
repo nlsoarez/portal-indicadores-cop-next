@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from html import escape
 import math
 
 import pandas as pd
@@ -122,9 +123,9 @@ def render_admin_residential_etit(
                 (
                     "<div class='cop-etit-bestworst'>"
                     f"<span class='cop-etit-best'>●</span> Melhor: "
-                    f"<b>{best['IN_GRUPO']}</b> ({best['Aderência %']:.1f}%) · "
+                    f"<b>{escape(str(best['IN_GRUPO']))}</b> ({best['Aderência %']:.1f}%) · "
                     "<span class='cop-etit-worst'>●</span> Pior: "
-                    f"<b>{worst['IN_GRUPO']}</b> ({worst['Aderência %']:.1f}%)"
+                    f"<b>{escape(str(worst['IN_GRUPO']))}</b> ({worst['Aderência %']:.1f}%)"
                     "</div>"
                 ),
                 unsafe_allow_html=True,

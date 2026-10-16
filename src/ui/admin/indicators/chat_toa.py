@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from html import escape
 import math
 
 import pandas as pd
@@ -474,7 +475,7 @@ def _render_extremes(
     st.markdown(
         (
             "<div class='cop-chat-extreme cop-chat-best'>"
-            f"🏅 <b>Melhor TMA: {best['Analista']}</b> — {float(best['TMA %']):.1f}%"
+            f"🏅 <b>Melhor TMA: {escape(str(best['Analista']))}</b> — {float(best['TMA %']):.1f}%"
             "</div>"
         ),
         unsafe_allow_html=True,
@@ -482,7 +483,7 @@ def _render_extremes(
     st.markdown(
         (
             "<div class='cop-chat-extreme cop-chat-worst'>"
-            f"⚠️ <b>Pior TMA: {worst['Analista']}</b> — {float(worst['TMA %']):.1f}%"
+            f"⚠️ <b>Pior TMA: {escape(str(worst['Analista']))}</b> — {float(worst['TMA %']):.1f}%"
             "</div>"
         ),
         unsafe_allow_html=True,

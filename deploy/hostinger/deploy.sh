@@ -3,6 +3,7 @@ set -Eeuo pipefail
 
 APP_DIR="${APP_DIR:-/opt/portal-indicadores-cop-next}"
 BRANCH="${1:-${DEPLOY_BRANCH:-feat/admin-etit-operational-view}}"
+EXPECTED_COMMIT="${2:-${DEPLOY_COMMIT:-}}"
 PUBLIC_URL="${PUBLIC_URL:-https://portal-indicadores.179-198-124-8.sslip.io}"
 PORTAL_PORT="${PORTAL_PORT:-8501}"
 EDGE_NETWORK="${EDGE_NETWORK:-evolution-hostinger_edge}"
@@ -24,14 +25,19 @@ fail() {
 [[ -d "${APP_DIR}/.git" ]] || fail "Repositório não encontrado em ${APP_DIR}"
 cd "${APP_DIR}"
 
+[[ "${EXPECTED_COMMIT}" =~ ^[0-9a-fA-F]{40}$ ]] \
+  || fail "Informe o SHA completo aprovado como segundo argumento ou DEPLOY_COMMIT."
+
 command -v git >/dev/null 2>&1 || fail "git não encontrado"
 command -v docker >/dev/null 2>&1 || fail "docker não encontrado"
 docker compose version >/dev/null 2>&1 || fail "docker compose não disponível"
 
 [[ -f "${ENV_FILE}" ]] || fail "Arquivo ${ENV_FILE} não existe"
-grep -Eq '^[[:space:]]*DATABASE_URL=.+' "${ENV_FILE}"   || fail "DATABASE_URL não configurada em ${ENV_FILE}"
+grep -Eq '^[[:space:]]*DATABASE_URL=.+' "${ENV_FILE}" \
+  || fail "DATABASE_URL não configurada em ${ENV_FILE}"
 
-docker network inspect "${EDGE_NETWORK}" >/dev/null 2>&1   || fail "Rede Docker externa ${EDGE_NETWORK} não existe"
+docker network inspect "${EDGE_NETWORK}" >/dev/null 2>&1 \
+  || fail "Rede Docker externa ${EDGE_NETWORK} não existe"
 
 if [[ -f "${LOCAL_OVERRIDE}" ]]; then
   HOST_OVERRIDE="${LOCAL_OVERRIDE}"
@@ -56,7 +62,12 @@ log "Buscando branch origin/${BRANCH}"
 git fetch --prune origin "${BRANCH}"
 
 TARGET_COMMIT="$(git rev-parse "origin/${BRANCH}")"
-log "Commit alvo: ${TARGET_COMMIT}"
+log "Commit alvo da branch: ${TARGET_COMMIT}"
+log "Commit aprovado: ${EXPECTED_COMMIT}"
+
+if [[ "${TARGET_COMMIT,,}" != "${EXPECTED_COMMIT,,}" ]]; then
+  fail "A branch mudou ou o SHA informado não corresponde ao HEAD remoto. Revise antes de publicar."
+fi
 
 log "Validando Docker Compose"
 "${COMPOSE[@]}" config --quiet
@@ -94,6 +105,21 @@ log "Construindo imagem"
 log "Validando sintaxe Python da imagem"
 "${COMPOSE[@]}" run --rm --no-deps portal python -m compileall -q /app
 
+log "Executando suíte de testes em SQLite isolado"
+"${COMPOSE[@]}" run --rm --no-deps \
+  -e DATABASE_URL= \
+  -e POSTGRES_URL= \
+  -e POSTGRES_URL_NON_POOLING= \
+  -e COP_DB_AUTO_MIGRATE=1 \
+  portal python -m unittest discover -s tests -p 'test_*.py'
+
+if grep -Eqi '^[[:space:]]*COP_DB_AUTO_MIGRATE=(0|false|no|off)[[:space:]]*$' "${ENV_FILE}"; then
+  grep -Eq '^[[:space:]]*DATABASE_ADMIN_URL=.+' "${ENV_FILE}" \
+    || fail "COP_DB_AUTO_MIGRATE está desabilitado, mas DATABASE_ADMIN_URL não foi configurada."
+  log "Executando migração de schema e seed com credencial administrativa separada"
+  "${COMPOSE[@]}" run --rm --no-deps portal python -m src.infrastructure.migrate
+fi
+
 log "Subindo container"
 "${COMPOSE[@]}" up -d --remove-orphans portal
 
@@ -104,7 +130,8 @@ deadline=$((SECONDS + HEALTH_TIMEOUT))
 healthy=0
 while (( SECONDS < deadline )); do
   container_status="$(docker inspect -f '{{if .State.Health}}{{.State.Health.Status}}{{else}}{{.State.Status}}{{end}}' portal-indicadores-cop 2>/dev/null || true)"
-  if [[ "${container_status}" == "healthy" ]]      && curl -fsS --max-time 5 "http://127.0.0.1:${PORTAL_PORT}${HEALTH_PATH}" >/dev/null; then
+  if [[ "${container_status}" == "healthy" ]] \
+      && curl -fsS --max-time 5 "http://127.0.0.1:${PORTAL_PORT}${HEALTH_PATH}" >/dev/null; then
     healthy=1
     break
   fi

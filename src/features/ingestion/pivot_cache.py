@@ -6,6 +6,7 @@ import xml.etree.ElementTree as ET
 from dataclasses import dataclass
 from zipfile import ZipFile
 
+from src.features.ingestion.archive_safety import validate_workbook_bytes
 from src.features.ingestion.excel import ImportValidationError
 
 NS = "{http://schemas.openxmlformats.org/spreadsheetml/2006/main}"
@@ -24,8 +25,7 @@ def iter_pivot_records(
     optional_fields: set[str] | None = None,
 ):
     optional_fields = optional_fields or set()
-    if not raw_bytes:
-        raise ImportValidationError("Arquivo vazio.")
+    validate_workbook_bytes(raw_bytes)
 
     with ZipFile(io.BytesIO(raw_bytes)) as archive:
         definition_path, record_path, fields = _select_cache(

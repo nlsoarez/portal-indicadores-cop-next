@@ -12,8 +12,9 @@ class ImportValidationError(ValueError):
 
 
 def read_excel(raw_bytes: bytes, sheet_candidates: tuple[str, ...], *, header: int = 0) -> pd.DataFrame:
-    if not raw_bytes:
-        raise ImportValidationError("Arquivo vazio.")
+    from src.features.ingestion.archive_safety import validate_workbook_bytes
+
+    validate_workbook_bytes(raw_bytes)
 
     last_error: Exception | None = None
     for engine in ("calamine", "openpyxl"):

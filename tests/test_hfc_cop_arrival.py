@@ -140,6 +140,10 @@ class HFCCopArrivalTest(unittest.TestCase):
         self.assertEqual("4h00min", table.iloc[0]["Tempo médio"])
         self.assertEqual("2h00min", table.iloc[1]["Tempo médio"])
         self.assertEqual(60.0, table.iloc[1]["Participação do tempo (%)"])
+        # Groups with no arrivals must be visible, not given a false 0-minute lag.
+        nordeste = table[table["Grupo"] == "NORDESTE"].iloc[0]
+        self.assertEqual(0, nordeste["Outages válidos"])
+        self.assertEqual("—", nordeste["Tempo médio"])
         self.assertEqual(
             "—", build_cop_arrival_lag_table(
                 pd.DataFrame([{

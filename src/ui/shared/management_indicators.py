@@ -238,6 +238,7 @@ def _render_source(
         _render_indicator(
             indicator_keys[0],
             ctx=ctx,
+            dashboard=dashboard,
             segment_df=segment_df,
             analyst_df=analyst_df,
             analyst_metrics_df=analyst_metrics_df,
@@ -307,6 +308,7 @@ def _render_source(
             _render_indicator(
                 key,
                 ctx=ctx,
+                dashboard=dashboard,
                 segment_df=segment_df,
                 analyst_df=analyst_df,
                 analyst_metrics_df=analyst_metrics_df,
@@ -351,6 +353,7 @@ def _render_indicator(
     breakdown_df: pd.DataFrame,
     external_df: pd.DataFrame,
     freshness_index: dict[str, dict],
+    dashboard: DashboardService | None = None,
 ) -> None:
     rows = _indicator_frame(segment_df, indicator_key)
     if rows.empty:
@@ -380,6 +383,13 @@ def _render_indicator(
     }:
         from src.ui.admin.indicators.etit_residential import render_admin_residential_etit
 
+        cop_arrival_rows = None
+        if indicator_key == "res_etit_fibra_hfc" and dashboard is not None:
+            cop_arrival_rows = pd.DataFrame(
+                dashboard.hfc_cop_arrival_by_group(
+                    ctx, int(first["segment_id"]), period
+                )
+            )
         render_admin_residential_etit(
             indicator_key=indicator_key,
             rows=rows,
@@ -389,6 +399,7 @@ def _render_indicator(
             details=details,
             period=period,
             data_through=fresh.get("data_through") or period or "—",
+            cop_arrival_rows=cop_arrival_rows,
         )
         return
 

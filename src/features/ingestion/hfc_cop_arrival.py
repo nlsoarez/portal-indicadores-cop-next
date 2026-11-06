@@ -133,7 +133,8 @@ class HFCCopArrival:
                     anomes=anomes,
                     scope="operational",
                     login=_SCOPE_LOGIN,
-                    period=record.received.date().isoformat(),
+                    # Monthly aggregate: do not store one bucket per day.
+                    period=f"{anomes // 100:04d}-{anomes % 100:02d}",
                     dimension=dimension,
                     dimension_value=value,
                     successes=1 if valid else 0,

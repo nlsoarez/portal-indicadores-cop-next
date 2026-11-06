@@ -10,8 +10,8 @@ from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
 from urllib.error import HTTPError, URLError
-from urllib.parse import quote
-from urllib.request import Request, urlopen
+from urllib.parse import quote, urlsplit
+from urllib.request import HTTPRedirectHandler, Request, build_opener
 
 from src.application.access_service import AccessService
 from src.application.upload_service import UploadProcessingService
@@ -22,6 +22,10 @@ GRAPH_ROOT = "https://graph.microsoft.com/v1.0"
 DEFAULT_STATE_DIR = Path(os.environ.get("M365_STATE_DIR", "data/m365"))
 DEFAULT_TOKEN_CACHE = DEFAULT_STATE_DIR / "token_cache.json"
 DEFAULT_SYNC_STATE = DEFAULT_STATE_DIR / "etit_sync_state.json"
+MAX_REMOTE_FILE_SIZE = 128 * 1024 * 1024
+MAX_GRAPH_JSON_BYTES = 16 * 1024 * 1024
+ALLOWED_GRAPH_HOSTS = {"graph.microsoft.com"}
+M365_TOKEN_CACHE_KEY_ENV = "M365_TOKEN_CACHE_KEY"
 
 PILOT_SOURCE_KEYS = (
     "residential_indicators",
@@ -175,10 +179,16 @@ class M365TokenProvider:
         tenant_id: str | None = None,
         client_id: str | None = None,
         cache_path: Path | None = None,
+        cache_key: str | None = None,
     ):
         self.tenant_id = (tenant_id or os.environ.get("M365_TENANT_ID", "")).strip()
         self.client_id = (client_id or os.environ.get("M365_CLIENT_ID", "")).strip()
         self.cache_path = cache_path or DEFAULT_TOKEN_CACHE
+        self.cache_key = (
+            cache_key
+            if cache_key is not None
+            else os.environ.get(M365_TOKEN_CACHE_KEY_ENV, "")
+        ).strip()
         scopes_raw = os.environ.get("M365_SCOPES", "Files.Read.All")
         self.scopes = tuple(
             scope.strip()
@@ -192,53 +202,91 @@ class M365TokenProvider:
             self.tenant_id
             and self.client_id
             and self.scopes
+            and self.cache_key
             and not _looks_like_placeholder(self.tenant_id)
             and not _looks_like_placeholder(self.client_id)
         )
 
+    def _cipher(self):
+        if not self.cache_key:
+            raise M365ConfigurationError(
+                f"Configure {M365_TOKEN_CACHE_KEY_ENV} para proteger o cache de token."
+            )
+        try:
+            from cryptography.fernet import Fernet
+            return Fernet(self.cache_key.encode("ascii"))
+        except (ImportError, ValueError, UnicodeEncodeError) as exc:
+            raise M365ConfigurationError(
+                f"{M365_TOKEN_CACHE_KEY_ENV} inválida ou suporte criptográfico indisponível."
+            ) from exc
+
     def _build_app(self):
-        if not self.configured:
-            if _looks_like_placeholder(self.tenant_id) or _looks_like_placeholder(self.client_id):
-                raise M365ConfigurationError(
-                    "M365_TENANT_ID/M365_CLIENT_ID ainda contêm valores de exemplo. "
-                    "Substitua pelos IDs reais da App Registration antes de autenticar."
-                )
+        if _looks_like_placeholder(self.tenant_id) or _looks_like_placeholder(self.client_id):
+            raise M365ConfigurationError(
+                "M365_TENANT_ID/M365_CLIENT_ID ainda contêm valores de exemplo. "
+                "Substitua pelos IDs reais da App Registration antes de autenticar."
+            )
+        if not self.tenant_id or not self.client_id:
             raise M365ConfigurationError(
                 "Configure M365_TENANT_ID e M365_CLIENT_ID antes de autenticar."
             )
+        cipher = self._cipher()
         try:
             import msal
+            from cryptography.fernet import InvalidToken
         except ImportError as exc:
             raise M365ConfigurationError(
-                "Pacote msal não instalado. Refaça o build da aplicação."
+                "Dependências MSAL/cryptography não instaladas. Refaça o build da aplicação."
             ) from exc
 
         cache = msal.SerializableTokenCache()
+        migrate_plaintext = False
         if self.cache_path.exists():
             try:
-                cache.deserialize(self.cache_path.read_text(encoding="utf-8"))
-            except OSError:
-                pass
+                raw = self.cache_path.read_bytes()
+                if raw.lstrip().startswith(b"{"):
+                    serialized = raw.decode("utf-8")
+                    migrate_plaintext = True
+                else:
+                    try:
+                        serialized = cipher.decrypt(raw).decode("utf-8")
+                    except InvalidToken as exc:
+                        raise M365ConfigurationError(
+                            "Não foi possível descriptografar o cache Microsoft 365. "
+                            "Verifique M365_TOKEN_CACHE_KEY ou refaça o login."
+                        ) from exc
+                cache.deserialize(serialized)
+            except OSError as exc:
+                raise M365ConfigurationError(
+                    "Não foi possível ler o cache Microsoft 365."
+                ) from exc
 
         app = msal.PublicClientApplication(
             self.client_id,
             authority=f"https://login.microsoftonline.com/{self.tenant_id}",
             token_cache=cache,
         )
-        return app, cache
+        return app, cache, cipher, migrate_plaintext
 
-    def _save_cache(self, cache) -> None:
-        if not cache.has_state_changed:
+    def _save_cache(self, cache, cipher, *, force: bool = False) -> None:
+        if not cache.has_state_changed and not force:
             return
         self.cache_path.parent.mkdir(parents=True, exist_ok=True)
-        self.cache_path.write_text(cache.serialize(), encoding="utf-8")
+        encrypted = cipher.encrypt(cache.serialize().encode("utf-8"))
+        temp = self.cache_path.with_suffix(self.cache_path.suffix + ".tmp")
+        temp.write_bytes(encrypted)
+        try:
+            temp.chmod(0o600)
+        except OSError:
+            pass
+        temp.replace(self.cache_path)
         try:
             self.cache_path.chmod(0o600)
         except OSError:
             pass
 
     def acquire_silent(self) -> str:
-        app, cache = self._build_app()
+        app, cache, cipher, migrate_plaintext = self._build_app()
         accounts = app.get_accounts()
         if not accounts:
             raise M365ConfigurationError(
@@ -246,7 +294,7 @@ class M365TokenProvider:
             )
 
         result = app.acquire_token_silent(list(self.scopes), account=accounts[0])
-        self._save_cache(cache)
+        self._save_cache(cache, cipher, force=migrate_plaintext)
         if not result or "access_token" not in result:
             detail = ""
             if isinstance(result, dict):
@@ -258,7 +306,7 @@ class M365TokenProvider:
         return str(result["access_token"])
 
     def device_login(self) -> dict[str, Any]:
-        app, cache = self._build_app()
+        app, cache, cipher, migrate_plaintext = self._build_app()
         flow = app.initiate_device_flow(scopes=list(self.scopes))
         if "user_code" not in flow:
             raise M365ConfigurationError(
@@ -268,7 +316,7 @@ class M365TokenProvider:
 
         print(flow.get("message") or "")
         result = app.acquire_token_by_device_flow(flow)
-        self._save_cache(cache)
+        self._save_cache(cache, cipher, force=migrate_plaintext)
         if "access_token" not in result:
             raise M365ConfigurationError(
                 "Falha na autenticação Microsoft 365: "
@@ -287,9 +335,34 @@ class M365TokenProvider:
         }
 
 
+class _SafeRedirectHandler(HTTPRedirectHandler):
+    """Do not forward the Graph bearer token to a different redirect host."""
+
+    def redirect_request(self, req, fp, code, msg, headers, newurl):
+        redirected = super().redirect_request(req, fp, code, msg, headers, newurl)
+        if redirected is None:
+            return None
+        source_host = (urlsplit(req.full_url).hostname or "").lower()
+        target_host = (urlsplit(newurl).hostname or "").lower()
+        if source_host != target_host:
+            redirected.remove_header("Authorization")
+        return redirected
+
+
 class GraphClient:
     def __init__(self, access_token: str):
         self.access_token = access_token
+        self._opener = build_opener(_SafeRedirectHandler())
+
+    @staticmethod
+    def _resolve_graph_url(url_or_path: str) -> str:
+        if not url_or_path.startswith("https://"):
+            return GRAPH_ROOT + url_or_path
+        parsed = urlsplit(url_or_path)
+        host = (parsed.hostname or "").lower()
+        if parsed.scheme != "https" or host not in ALLOWED_GRAPH_HOSTS:
+            raise GraphRequestError("URL absoluta fora do Microsoft Graph foi bloqueada.")
+        return url_or_path
 
     def _request(
         self,
@@ -298,11 +371,11 @@ class GraphClient:
         accept_json: bool,
         timeout: int = 90,
         retries: int = 3,
+        max_bytes: int | None = None,
     ) -> bytes:
-        url = (
-            url_or_path
-            if url_or_path.startswith("https://")
-            else GRAPH_ROOT + url_or_path
+        url = self._resolve_graph_url(url_or_path)
+        read_limit = max_bytes if max_bytes is not None else (
+            MAX_GRAPH_JSON_BYTES if accept_json else MAX_REMOTE_FILE_SIZE
         )
         headers = {
             "Authorization": f"Bearer {self.access_token}",
@@ -315,8 +388,14 @@ class GraphClient:
         for attempt in range(retries + 1):
             request = Request(url, headers=headers, method="GET")
             try:
-                with urlopen(request, timeout=timeout) as response:
-                    return response.read()
+                with self._opener.open(request, timeout=timeout) as response:
+                    content_length = response.headers.get("Content-Length")
+                    if content_length and content_length.isdigit() and int(content_length) > read_limit:
+                        raise GraphRequestError("Resposta remota maior que o limite permitido.")
+                    payload = response.read(read_limit + 1)
+                    if len(payload) > read_limit:
+                        raise GraphRequestError("Resposta remota excedeu o limite permitido.")
+                    return payload
             except HTTPError as exc:
                 body = exc.read().decode("utf-8", errors="replace")
                 if exc.code == 429 or 500 <= exc.code < 600:
@@ -361,7 +440,13 @@ class GraphClient:
 
     def download(self, drive_id: str, item_id: str) -> bytes:
         path = f"/drives/{quote(drive_id, safe='')}/items/{quote(item_id, safe='')}/content"
-        return self._request(path, accept_json=False, timeout=180, retries=3)
+        return self._request(
+            path,
+            accept_json=False,
+            timeout=180,
+            retries=3,
+            max_bytes=MAX_REMOTE_FILE_SIZE,
+        )
 
 
 def _resolved_drive_and_folder(item: dict[str, Any]) -> tuple[str, str]:
@@ -677,6 +762,10 @@ class EtitM365Pilot:
                     run["sources"][source.source_key] = source_state
                     continue
 
+                if latest.size <= 0 or latest.size > MAX_REMOTE_FILE_SIZE:
+                    raise GraphRequestError(
+                        f"{source.label}: arquivo remoto fora do limite de 128 MB."
+                    )
                 raw_bytes = client.download(latest.drive_id, latest.item_id)
                 results = processing.process_global_source(
                     ctx,

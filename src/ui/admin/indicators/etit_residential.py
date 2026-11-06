@@ -16,6 +16,7 @@ def render_admin_residential_etit(
     details: pd.DataFrame,
     period: str,
     data_through: str,
+    cop_arrival_rows: pd.DataFrame | None = None,
 ) -> None:
     """Visão operacional dedicada ao Admin para ETIT/Assertividade GPON e HFC."""
 
@@ -89,6 +90,12 @@ def render_admin_residential_etit(
 
         _render_metric_cards(numbers, labels)
 
+        # The outage-to-COP routing lag is independent of ETIT adherence.
+        # Source clock: DT_INICIO_CHEGOU_COP_FO (22:00–05:59), not
+        # DT_INICIO or first analyst action.
+        if indicator_key == "res_etit_fibra_hfc":
+            _render_cop_arrival_lag(cop_arrival_rows, period)
+
         st.markdown("#### 👥 Por Analista")
         analyst_table = analyst_table_for_etit(
             people,
@@ -154,6 +161,105 @@ def render_admin_residential_etit(
                 use_container_width=True,
                 hide_index=True,
             )
+
+
+def build_cop_arrival_lag_table(rows: pd.DataFrame) -> tuple[dict, pd.DataFrame]:
+    """Weighted mean by valid UNIQUE outage (never simple mean of group means)."""
+    empty = {
+        "arrivals": 0, "valid_pairs": 0, "excluded": 0,
+        "mean_seconds": None, "total_seconds": 0.0,
+    }
+    required = {"group_name", "arrivals", "valid_pairs", "excluded", "delay_seconds"}
+    if rows is None or rows.empty or not required.issubset(rows.columns):
+        return empty, pd.DataFrame()
+
+    frame = rows.copy()
+    for col in ("arrivals", "valid_pairs", "excluded", "delay_seconds"):
+        frame[col] = pd.to_numeric(frame[col], errors="coerce").fillna(0)
+    frame["group_name"] = frame["group_name"].fillna("SEM GRUPO").astype(str)
+
+    valid_count = int(frame["valid_pairs"].sum())
+    seconds = float(frame["delay_seconds"].sum())
+    totals = {
+        "arrivals": int(frame["arrivals"].sum()),
+        "valid_pairs": valid_count,
+        "excluded": int(frame["excluded"].sum()),
+        "mean_seconds": seconds / valid_count if valid_count else None,
+        "total_seconds": seconds,
+    }
+
+    frame["Tempo médio"] = frame.apply(
+        lambda row: _format_cop_delay(
+            row["delay_seconds"] / row["valid_pairs"]
+            if row["valid_pairs"] > 0 else None
+        ),
+        axis=1,
+    )
+    frame["Participação do tempo (%)"] = frame["delay_seconds"].apply(
+        lambda value: round(float(value) * 100 / seconds, 1)
+        if seconds > 0 else 0.0
+    )
+    frame["Tempo acumulado"] = frame["delay_seconds"].apply(_format_cop_delay)
+    frame = frame.sort_values(
+        ["delay_seconds", "valid_pairs", "group_name"],
+        ascending=[False, False, True],
+    )
+    table = frame.rename(columns={
+        "group_name": "Grupo",
+        "arrivals": "Chegaram no plantão",
+        "valid_pairs": "Outages válidos",
+        "excluded": "Sem tempo calculável",
+    })[
+        ["Grupo", "Outages válidos", "Tempo médio",
+         "Tempo acumulado", "Participação do tempo (%)",
+         "Chegaram no plantão", "Sem tempo calculável"]
+    ].reset_index(drop=True)
+    for col in ("Outages válidos", "Chegaram no plantão", "Sem tempo calculável"):
+        table[col] = table[col].astype(int)
+    return totals, table
+
+
+def _format_cop_delay(seconds: float | None) -> str:
+    if seconds is None or pd.isna(seconds):
+        return "—"
+    total = int(round(float(seconds)))
+    hours, rest = divmod(total, 3600)
+    mins, secs = divmod(rest, 60)
+    return f"{hours}h{mins:02d}min" if hours else (
+        f"{mins}min{secs:02d}s" if secs else f"{mins}min"
+    )
+
+
+def _render_cop_arrival_lag(rows: pd.DataFrame | None, month: str) -> None:
+    st.markdown("#### ⏱ Tempo entre início do outage e chegada ao COP")
+    st.caption(
+        f"ETIT FIBRA HFC · Regional Leste · {month or 'competência atual'} · "
+        "horário de CHEGADA ao COP entre 22h00 e 05h59. "
+        "Considera todos os outages identificados, inclusive de outras equipes. "
+        "Média = soma dos intervalos válidos ÷ quantidade de outages únicos válidos. "
+        "Não é média das médias dos grupos nem o tempo de tratamento do ETIT."
+    )
+    summary, group_table = build_cop_arrival_lag_table(rows)
+    if group_table.empty:
+        st.info(
+            "Ainda não há intervalos de chegada ao COP processados nesta competência. "
+            "Reimporte o Analítico Indicadores Residencial com as colunas "
+            "DT_INICIO_SISTEMA e DT_INICIO_CHEGOU_COP_FO."
+        )
+        return
+    cols = st.columns(3)
+    cols[0].metric("Tempo médio até o COP", _format_cop_delay(summary["mean_seconds"]))
+    cols[1].metric("Outages com intervalo válido", summary["valid_pairs"])
+    cols[2].metric("Excluídos do cálculo", summary["excluded"])
+
+    if summary["excluded"]:
+        st.warning(
+            f"{summary['excluded']} outage(s) chegaram na janela, mas não têm "
+            "par de horários confiável, possuem intervalo negativo, ID ausente "
+            "ou informação divergente. Não receberam tempo zero."
+        )
+    st.markdown("**Consolidado por grupo (IN_GRUPO)**")
+    st.dataframe(group_table, use_container_width=True, hide_index=True)
 
 
 def dimension_table(

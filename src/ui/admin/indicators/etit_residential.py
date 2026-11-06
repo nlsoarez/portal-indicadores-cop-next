@@ -178,6 +178,25 @@ def build_cop_arrival_lag_table(rows: pd.DataFrame) -> tuple[dict, pd.DataFrame]
         frame[col] = pd.to_numeric(frame[col], errors="coerce").fillna(0)
     frame["group_name"] = frame["group_name"].fillna("SEM GRUPO").astype(str)
 
+    # Keep established Leste groups visible even with zero COP arrivals.
+    # Zero cases means no average, not a routing time of zero.
+    established = (
+        "NORTE", "RIO E ES", "CENTRO-OESTE",
+        "MINAS GERAIS", "NORDESTE", "BAHIA/SERGIPE",
+    )
+    missing = set(established) - set(frame["group_name"].str.upper())
+    if missing:
+        frame = pd.concat([
+            frame,
+            pd.DataFrame([
+                {
+                    "group_name": group, "arrivals": 0,
+                    "valid_pairs": 0, "excluded": 0, "delay_seconds": 0.0,
+                }
+                for group in sorted(missing)
+            ]),
+        ], ignore_index=True)
+
     valid_count = int(frame["valid_pairs"].sum())
     seconds = float(frame["delay_seconds"].sum())
     totals = {

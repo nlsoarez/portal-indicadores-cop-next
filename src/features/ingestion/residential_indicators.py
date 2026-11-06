@@ -10,6 +10,7 @@ from src.features.ingestion.breakdowns import (
     new_bucket,
     turn_from_hour,
 )
+from src.features.ingestion.hfc_cop_arrival import HFCCopArrival
 from src.features.ingestion.models import ParsedIndicatorBatch
 from src.features.ingestion.xlsx_stream import as_float, as_int, excel_date, excel_hour, iter_rows, normalize_login
 
@@ -38,11 +39,13 @@ def parse_residential_indicators(raw_bytes: bytes, allowed_logins: set[str]) -> 
     aggregates: dict[tuple[int, str, str, str], list[float]] = defaultdict(lambda: [0.0, 0.0])
     breakdowns_by_indicator = {key: new_bucket() for key in INDICATORS.values()}
     latest_anomes = 0
+    hfc_cop_arrival = HFCCopArrival()
     optional = {
         COL_LOGIN_UNIFIED, COL_LOGIN_FO, COL_LOGIN_GPON,
         "IN_GRUPO", "IN_CIDADE_UF", "IN_UF", "TURNO", "TECNOLOGIA",
         "SERVICO", "NATUREZA", "SINTOMA", "FERRAMENTA_ABERTURA",
         "FECHAMENTO", "SOLUCAO", "IMPACTO", "TMA", "TMR", "ID_MOSTRA",
+        "DT_INICIO_SISTEMA", "DT_INICIO_CHEGOU_COP_FO",
     }
     required = {COL_INDICATOR, COL_VOLUME, COL_VALUE, COL_REGIONAL, COL_DATE, COL_ANOMES}
 
@@ -61,6 +64,16 @@ def parse_residential_indicators(raw_bytes: bytes, allowed_logins: set[str]) -> 
         region = str(row.get(COL_REGIONAL) or "").strip()
         if region.upper() != "LESTE":
             continue
+
+        # Operational COP arrival lag covers every eligible Leste outage,
+        # even if an external analyst handled it. This is independent from
+        # the team-only ETIT ranking and does not change its denominator.
+        if (
+            indicator == "ETIT FIBRA HFC"
+            and as_float(row.get(COL_VALUE), -1) in (0.0, 1.0)
+            and as_float(row.get(COL_VOLUME), 0) > 0
+        ):
+            hfc_cop_arrival.add(row)
 
         primary_login_col = COL_LOGIN_FO if indicator in HFC_INDICATORS else COL_LOGIN_GPON
         login = normalize_login(row.get(primary_login_col))
@@ -177,7 +190,13 @@ def parse_residential_indicators(raw_bytes: bytes, allowed_logins: set[str]) -> 
                     max(r["period"] for r in rows),
                     tuple(rows),
                     (data_month,),
-                    materialize(breakdowns_by_indicator[indicator_key], latest_anomes),
+                    (
+                        materialize(breakdowns_by_indicator[indicator_key], latest_anomes)
+                        + (
+                            hfc_cop_arrival.to_breakdowns(latest_anomes)
+                            if indicator_key == "res_etit_fibra_hfc" else ()
+                        )
+                    ),
                 )
             )
     return tuple(batches)

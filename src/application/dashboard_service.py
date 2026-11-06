@@ -83,6 +83,15 @@ class DashboardService:
     def _analyst_ids(self, segment_id: int) -> set[int]:
         return {user.id for user in UserRepository().list_for_segment(segment_id)}
 
+    def hfc_cop_arrival_by_group(
+        self, ctx: AccessContext, segment_id: int, month: str
+    ) -> list[dict]:
+        """Admin-only arrival lag; validated Regional Leste, 22:00–05:59."""
+        if not ctx.is_admin:
+            raise PermissionError("Tempo de chegada COP: exclusivo do administrador")
+        self.access.assert_segment_access(ctx, int(segment_id))
+        return self.indicators.hfc_cop_arrival_by_group(int(segment_id), month)
+
     def external_night_months(self, ctx: AccessContext, segment_ids: list[int]) -> list[str]:
         """Administrator-only view of persisted out-of-team source periods."""
         if not ctx.is_admin:

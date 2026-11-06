@@ -78,7 +78,7 @@ class UploadProcessingService:
                         and str(breakdown.get("login") or "").upper() in login_map
                     )
                     or (
-                        str(breakdown.get("scope") or "") == "external"
+                        str(breakdown.get("scope") or "") in ("external", "operational")
                         and target_index == 0
                     )
                 )

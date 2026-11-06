@@ -381,6 +381,39 @@ class IndicatorRepository:
             ).fetchall()
         return {(int(row["id"]), int(row["segment_id"])) for row in rows}
 
+    def hfc_cop_arrival_by_group(self, segment_id: int, month: str) -> list[dict]:
+        """Validated night-shift arrival lag, across ALL Leste HFC outages.
+
+        The special operational scope is separate from own-team ETIT KPIs
+        and external analyst rankings. Only the application admin service
+        may expose this method to the UI.
+        """
+        if not month or len(month) != 7 or month[4] != "-":
+            return []
+        with connection() as conn:
+            rows = conn.execute(
+                """
+                SELECT b.dimension_value AS group_name,
+                       SUM(b.volume) AS arrivals,
+                       SUM(b.successes) AS valid_pairs,
+                       SUM(b.losses) AS excluded,
+                       SUM(b.tma_seconds_sum) AS delay_seconds
+                FROM indicator_breakdowns b
+                JOIN indicator_definitions d ON d.id=b.indicator_definition_id
+                JOIN segments s ON s.id=b.segment_id
+                WHERE b.segment_id=? AND s.slug='residencial'
+                  AND d.indicator_key='res_etit_fibra_hfc'
+                  AND b.data_month=?
+                  AND b.scope='operational'
+                  AND b.login='__COP_HFC_ARRIVAL__'
+                  AND b.dimension='cop_arrival_group'
+                GROUP BY b.dimension_value
+                ORDER BY b.dimension_value
+                """,
+                (int(segment_id), month),
+            ).fetchall()
+        return [dict(row) for row in rows]
+
     def external_night_months(self, segment_ids: list[int]) -> list[str]:
         """Competências externas, independentes dos resultados da equipe."""
         if not segment_ids:

@@ -103,10 +103,69 @@ class HFCCopArrivalTest(unittest.TestCase):
         parsed = parse_source_datetime(str(serial))
         self.assertLess(abs((parsed - ts.to_pydatetime()).total_seconds()), 0.01)
         self.assertIsNone(parse_source_datetime("2026-11-03"))
+        midnight_serial = (
+            datetime(2026, 11, 3) - datetime(1899, 12, 30)
+        ).days
+        self.assertEqual(
+            datetime(2026, 11, 3), parse_source_datetime(midnight_serial)
+        )
         self.assertTrue(in_night_arrival(datetime(2026, 11, 2, 22, 0)))
         self.assertTrue(in_night_arrival(datetime(2026, 11, 3, 5, 59, 59)))
         self.assertFalse(in_night_arrival(datetime(2026, 11, 3, 6, 0)))
         self.assertFalse(in_night_arrival(datetime(2026, 11, 2, 21, 59)))
+
+    def test_group_display_uses_weighted_overall_and_flags_invalid_cases(self):
+        from src.ui.admin.indicators.etit_residential import (
+            build_cop_arrival_lag_table,
+        )
+
+        data = pd.DataFrame([
+            {
+                "group_name": "RIO E ES", "arrivals": 4,
+                "valid_pairs": 3, "excluded": 1,
+                "delay_seconds": 6 * 3600,
+            },
+            {
+                "group_name": "NORTE", "arrivals": 1,
+                "valid_pairs": 1, "excluded": 0,
+                "delay_seconds": 4 * 3600,
+            },
+        ])
+        summary, table = build_cop_arrival_lag_table(data)
+        self.assertEqual(5, summary["arrivals"])
+        self.assertEqual(4, summary["valid_pairs"])
+        self.assertEqual(1, summary["excluded"])
+        self.assertEqual(2.5 * 3600, summary["mean_seconds"])
+        self.assertEqual("NORTE", table.iloc[0]["Grupo"])
+        self.assertEqual("4h00min", table.iloc[0]["Tempo médio"])
+        self.assertEqual("2h00min", table.iloc[1]["Tempo médio"])
+        self.assertEqual(60.0, table.iloc[1]["Participação do tempo (%)"])
+        self.assertEqual(
+            "—", build_cop_arrival_lag_table(
+                pd.DataFrame([{
+                    "group_name": "RIO E ES", "arrivals": 1,
+                    "valid_pairs": 0, "excluded": 1, "delay_seconds": 0,
+                }])
+            )[1].iloc[0]["Tempo médio"],
+        )
+
+    def test_same_outage_with_conflicting_timestamps_is_not_double_counted(self):
+        first = self.base()
+        second = self.base()
+        second["DT_INICIO_SISTEMA"] = "2026-11-03 00:25:00"
+        batch = next(
+            b for b in parse_residential_indicators(
+                self.xlsx([first, second]), {"F104752"}
+            ) if b.indicator_key == "res_etit_fibra_hfc"
+        )
+        operational = [
+            b for b in batch.breakdowns
+            if b["dimension"] == "cop_arrival_overall"
+        ]
+        self.assertEqual(1, len(operational))
+        self.assertEqual(1, operational[0]["volume"])
+        self.assertEqual(0, operational[0]["tma_count"])
+        self.assertEqual(1, operational[0]["losses"])
 
     def test_admin_query_isolated_from_team_kpi_and_requires_admin(self):
         from src.application.upload_service import UploadProcessingService

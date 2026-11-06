@@ -58,7 +58,9 @@ def parse_source_datetime(value: object | None) -> datetime | None:
         serial = float(raw)
     except (ValueError, OverflowError):
         return None
-    if not 1000 < serial < 1000000 or abs(serial - round(serial)) < 1e-10:
+    # Excel stores a valid datetime at exactly 00:00 as an integer.
+    # These source columns are explicitly timestamps, so retain midnight.
+    if not 1000 < serial < 1000000:
         return None
     try:
         return datetime(1899, 12, 30) + timedelta(days=serial)

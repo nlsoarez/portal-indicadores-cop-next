@@ -200,8 +200,13 @@ def build_cop_arrival_lag_table(rows: pd.DataFrame) -> tuple[dict, pd.DataFrame]
         if seconds > 0 else 0.0
     )
     frame["Tempo acumulado"] = frame["delay_seconds"].apply(_format_cop_delay)
+    frame["_average_seconds"] = frame.apply(
+        lambda row: row["delay_seconds"] / row["valid_pairs"]
+        if row["valid_pairs"] > 0 else -1.0,
+        axis=1,
+    )
     frame = frame.sort_values(
-        ["delay_seconds", "valid_pairs", "group_name"],
+        ["_average_seconds", "valid_pairs", "group_name"],
         ascending=[False, False, True],
     )
     table = frame.rename(columns={
